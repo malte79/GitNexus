@@ -13,7 +13,7 @@
  * #3 (path traversal), #4 (relation allowlist), #25 (regex lastIndex),
  * #26 (rename first-occurrence-only)
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import kuzu from 'kuzu';
@@ -29,7 +29,13 @@ import {
   CYPHER_WRITE_RE,
   VALID_RELATION_TYPES,
   isWriteQuery,
+  LocalBackend,
 } from '../../src/mcp/local/local-backend.js';
+import { listRegisteredRepos } from '../../src/storage/repo-manager.js';
+
+vi.mock('../../src/storage/repo-manager.js', () => ({
+  listRegisteredRepos: vi.fn().mockResolvedValue([]),
+}));
 
 let tmpHandle: TestDBHandle;
 let dbPath: string;
@@ -250,5 +256,124 @@ describe('content queries', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].content).toContain('function login');
+  });
+});
+
+// ─── callTool dispatch with real DB ──────────────────────────────────
+
+describe('callTool dispatch with real DB', () => {
+  let backend: LocalBackend;
+
+  beforeAll(async () => {
+    // Close the existing pool connection first to release the DB lock
+    await closeKuzu(REPO_ID);
+
+    // Create FTS indexes using a writable connection (the pool opens read-only)
+    const ftsDb = new kuzu.Database(dbPath);
+    const ftsConn = new kuzu.Connection(ftsDb);
+    try {
+      await ftsConn.query('INSTALL fts');
+      await ftsConn.query('LOAD EXTENSION fts');
+      // Create FTS indexes on tables that have test data
+      await ftsConn.query(`CALL CREATE_FTS_INDEX('Function', 'function_fts', ['name', 'content', 'description'], stemmer := 'porter')`).catch(() => {});
+      await ftsConn.query(`CALL CREATE_FTS_INDEX('Class', 'class_fts', ['name', 'content', 'description'], stemmer := 'porter')`).catch(() => {});
+      await ftsConn.query(`CALL CREATE_FTS_INDEX('File', 'file_fts', ['name', 'content'], stemmer := 'porter')`).catch(() => {});
+    } finally {
+      ftsConn.close();
+      ftsDb.close();
+    }
+
+    // Mock listRegisteredRepos to return our test repo
+    vi.mocked(listRegisteredRepos).mockResolvedValue([
+      {
+        name: 'test-repo',
+        path: '/test/repo',
+        storagePath: tmpHandle.dbPath,
+        indexedAt: new Date().toISOString(),
+        lastCommit: 'abc123',
+        stats: { files: 2, nodes: 3, communities: 1, processes: 1 },
+      },
+    ]);
+
+    backend = new LocalBackend();
+    await backend.init();
+  }, 30000);
+
+  afterAll(async () => {
+    // Restore mock so it doesn't affect other tests
+    vi.mocked(listRegisteredRepos).mockResolvedValue([]);
+  });
+
+  it('cypher tool returns function names', async () => {
+    const result = await backend.callTool('cypher', {
+      query: 'MATCH (n:Function) RETURN n.name AS name ORDER BY n.name',
+    });
+    // cypher tool wraps results as markdown
+    expect(result).toHaveProperty('markdown');
+    expect(result).toHaveProperty('row_count');
+    expect(result.row_count).toBeGreaterThanOrEqual(3);
+    expect(result.markdown).toContain('login');
+    expect(result.markdown).toContain('validate');
+    expect(result.markdown).toContain('hash');
+  });
+
+  it('cypher tool blocks write queries', async () => {
+    const result = await backend.callTool('cypher', {
+      query: "CREATE (n:Function {id: 'x', name: 'x', filePath: '', startLine: 0, endLine: 0, isExported: false, content: '', description: ''})",
+    });
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/write operations/i);
+  });
+
+  it('context tool returns symbol info with callers and callees', async () => {
+    const result = await backend.callTool('context', { name: 'login' });
+    expect(result).not.toHaveProperty('error');
+    expect(result.status).toBe('found');
+    // Should have the symbol identity
+    expect(result.symbol).toBeDefined();
+    expect(result.symbol.name).toBe('login');
+    expect(result.symbol.filePath).toBe('src/auth.ts');
+    // login calls validate and hash — should appear in outgoing.calls
+    expect(result.outgoing).toBeDefined();
+    expect(result.outgoing.calls).toBeDefined();
+    expect(result.outgoing.calls.length).toBeGreaterThanOrEqual(2);
+    const calleeNames = result.outgoing.calls.map((c: any) => c.name);
+    expect(calleeNames).toContain('validate');
+    expect(calleeNames).toContain('hash');
+  });
+
+  it('impact tool returns upstream dependents', async () => {
+    const result = await backend.callTool('impact', {
+      target: 'validate',
+      direction: 'upstream',
+    });
+    expect(result).not.toHaveProperty('error');
+    // validate is called by login, so login should appear at depth 1
+    expect(result.impactedCount).toBeGreaterThanOrEqual(1);
+    expect(result.byDepth).toBeDefined();
+    const directDeps = result.byDepth[1] || result.byDepth['1'] || [];
+    expect(directDeps.length).toBeGreaterThanOrEqual(1);
+    const depNames = directDeps.map((d: any) => d.name);
+    expect(depNames).toContain('login');
+  });
+
+  it('query tool returns results for keyword search', async () => {
+    const result = await backend.callTool('query', { query: 'login' });
+    expect(result).not.toHaveProperty('error');
+    // Should have some combination of processes, process_symbols, or definitions
+    expect(result).toHaveProperty('processes');
+    expect(result).toHaveProperty('definitions');
+    // The search should find something (FTS or graph-based)
+    const totalResults =
+      (result.processes?.length || 0) +
+      (result.process_symbols?.length || 0) +
+      (result.definitions?.length || 0);
+    expect(totalResults).toBeGreaterThanOrEqual(1);
+  });
+
+  it('unknown tool throws', async () => {
+    await expect(
+      backend.callTool('nonexistent_tool', {}),
+    ).rejects.toThrow(/unknown tool/i);
   });
 });

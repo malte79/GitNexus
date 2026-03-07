@@ -7,6 +7,7 @@ export default defineConfig({
     pool: 'forks',
     singleFork: true,      // run all tests in a single fork to avoid KuzuDB native cleanup crashes
     globals: true,
+    setupFiles: ['test/setup.ts'],
     teardownTimeout: 1000,
     dangerouslyIgnoreUnhandledErrors: true, // KuzuDB native destructor segfaults on fork exit — not a test failure
     coverage: {

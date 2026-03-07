@@ -592,6 +592,20 @@ export const closeKuzu = async (): Promise<void> => {
 export const isKuzuReady = (): boolean => conn !== null && db !== null;
 
 /**
+ * Detach native KuzuDB references WITHOUT calling .close().
+ *
+ * Used in test teardown to prevent Node.js GC from running native C++
+ * destructors during forked process exit, which causes segfaults.
+ * The native handles leak intentionally — the OS reclaims them on exit.
+ */
+export const detachKuzu = (): void => {
+  conn = null;
+  db = null;
+  currentDbPath = null;
+  ftsLoaded = false;
+};
+
+/**
  * Delete all nodes (and their relationships) for a specific file from KuzuDB
  * @param filePath - The file path to delete nodes for
  * @param dbPath - Optional path to KuzuDB for per-query connection
@@ -746,8 +760,8 @@ export const queryFTS = async (
     throw new Error('KuzuDB not initialized. Call initKuzu first.');
   }
   
-  // Escape single quotes in query
-  const escapedQuery = query.replace(/'/g, "''");
+  // Escape backslashes and single quotes to prevent Cypher injection
+  const escapedQuery = query.replace(/\\/g, '\\\\').replace(/'/g, "''");
   
   const cypher = `
     CALL QUERY_FTS_INDEX('${tableName}', '${indexName}', '${escapedQuery}', conjunctive := ${conjunctive})
