@@ -12,7 +12,7 @@
  *   - Non-matching pattern returns empty string
  *   - Pattern shorter than 3 chars returns empty string
  */
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   enrichClusters,
   enrichClustersBatch,
@@ -20,13 +20,49 @@ import {
   type ClusterMemberInfo,
 } from '../../src/core/ingestion/cluster-enricher.js';
 import type { CommunityNode } from '../../src/core/ingestion/community-processor.js';
-import {
-  createTestKuzuDB,
-  seedTestData,
-  type IndexedDBHandle,
-} from '../helpers/test-indexed-db.js';
-import { initKuzu, createFTSIndex, loadFTSExtension } from '../../src/core/kuzu/kuzu-adapter.js';
-import { initKuzu as poolInitKuzu } from '../../src/mcp/core/kuzu-adapter.js';
+import { withTestKuzuDB } from '../helpers/test-indexed-db.js';
+
+// ─── Shared seed data & FTS indexes for Part 2 (augmentation) ────────
+
+const AUGMENT_SEED_DATA = [
+  // File nodes
+  `CREATE (n:File {id: 'file:auth.ts', name: 'auth.ts', filePath: 'src/auth.ts', content: 'authentication module for user login'})`,
+  `CREATE (n:File {id: 'file:utils.ts', name: 'utils.ts', filePath: 'src/utils.ts', content: 'utility functions for hashing'})`,
+
+  // Function nodes
+  `CREATE (n:Function {id: 'func:login', name: 'login', filePath: 'src/auth.ts', startLine: 1, endLine: 15, isExported: true, content: 'function login authenticates user credentials', description: 'user login'})`,
+  `CREATE (n:Function {id: 'func:validate', name: 'validate', filePath: 'src/auth.ts', startLine: 17, endLine: 25, isExported: true, content: 'function validate checks user input', description: 'input validation'})`,
+  `CREATE (n:Function {id: 'func:hash', name: 'hash', filePath: 'src/utils.ts', startLine: 1, endLine: 8, isExported: true, content: 'function hash computes bcrypt hash', description: 'password hashing'})`,
+
+  // Class / Method / Interface nodes
+  `CREATE (n:Class {id: 'class:AuthService', name: 'AuthService', filePath: 'src/auth.ts', startLine: 30, endLine: 60, isExported: true, content: 'class AuthService handles authentication', description: 'auth service'})`,
+  `CREATE (n:Method {id: 'method:AuthService.login', name: 'loginMethod', filePath: 'src/auth.ts', startLine: 35, endLine: 50, isExported: false, content: 'method login in AuthService', description: 'login method'})`,
+  `CREATE (n:Interface {id: 'iface:Creds', name: 'Credentials', filePath: 'src/auth.ts', startLine: 1, endLine: 5, isExported: true, content: 'interface Credentials for login authentication', description: 'credentials type'})`,
+
+  // Community & Process nodes
+  `CREATE (n:Community {id: 'comm:auth', label: 'Auth', heuristicLabel: 'Authentication', keywords: ['auth'], description: 'Auth cluster', enrichedBy: 'heuristic', cohesion: 0.8, symbolCount: 3})`,
+  `CREATE (n:Process {id: 'proc:login-flow', label: 'LoginFlow', heuristicLabel: 'User Login', processType: 'intra_community', stepCount: 2, communities: ['auth'], entryPointId: 'func:login', terminalId: 'func:validate'})`,
+
+  // Relationships
+  `MATCH (a:Function), (b:Function) WHERE a.id = 'func:login' AND b.id = 'func:validate'
+   CREATE (a)-[:CodeRelation {type: 'CALLS', confidence: 1.0, reason: 'direct', step: 0}]->(b)`,
+  `MATCH (a:Function), (b:Function) WHERE a.id = 'func:login' AND b.id = 'func:hash'
+   CREATE (a)-[:CodeRelation {type: 'CALLS', confidence: 0.9, reason: 'import-resolved', step: 0}]->(b)`,
+  `MATCH (a:Function), (c:Community) WHERE a.id = 'func:login' AND c.id = 'comm:auth'
+   CREATE (a)-[:CodeRelation {type: 'MEMBER_OF', confidence: 1.0, reason: '', step: 0}]->(c)`,
+  `MATCH (a:Function), (p:Process) WHERE a.id = 'func:login' AND p.id = 'proc:login-flow'
+   CREATE (a)-[:CodeRelation {type: 'STEP_IN_PROCESS', confidence: 1.0, reason: '', step: 1}]->(p)`,
+  `MATCH (a:Function), (p:Process) WHERE a.id = 'func:validate' AND p.id = 'proc:login-flow'
+   CREATE (a)-[:CodeRelation {type: 'STEP_IN_PROCESS', confidence: 1.0, reason: '', step: 2}]->(p)`,
+];
+
+const AUGMENT_FTS_INDEXES = [
+  { table: 'File', indexName: 'file_fts', columns: ['name', 'content'] },
+  { table: 'Function', indexName: 'function_fts', columns: ['name', 'content', 'description'] },
+  { table: 'Class', indexName: 'class_fts', columns: ['name', 'content', 'description'] },
+  { table: 'Method', indexName: 'method_fts', columns: ['name', 'content', 'description'] },
+  { table: 'Interface', indexName: 'interface_fts', columns: ['name', 'content', 'description'] },
+];
 
 // ═════════════════════════════════════════════════════════════════════
 // Part 1: Cluster Enricher
@@ -223,79 +259,45 @@ vi.mock('../../src/storage/repo-manager.js', () => ({
   listRegisteredRepos: vi.fn(),
 }));
 
-describe('augment()', () => {
-  let handle: IndexedDBHandle;
-  let augment: (pattern: string, cwd?: string) => Promise<string>;
+let augment: (pattern: string, cwd?: string) => Promise<string>;
 
-  beforeAll(async () => {
-    handle = await createTestKuzuDB('augment');
+withTestKuzuDB('augment', (handle) => {
+  describe('augment()', () => {
+    it('returns non-empty string with relationship info for a matching pattern', async () => {
+      const result = await augment('login', handle.dbPath);
 
-    // Seed data: functions with CALLS relationships
-    await seedTestData(handle.dbPath, [
-      // Files
-      `CREATE (n:File {id: 'file:auth.ts', name: 'auth.ts', filePath: 'src/auth.ts', content: 'authentication module for user login'})`,
-      `CREATE (n:File {id: 'file:utils.ts', name: 'utils.ts', filePath: 'src/utils.ts', content: 'utility functions for hashing'})`,
+      expect(result.length).toBeGreaterThan(0);
+      expect(result).toContain('[GitNexus]');
+      expect(result).toContain('login');
+    });
 
-      // Functions
-      `CREATE (n:Function {id: 'func:login', name: 'login', filePath: 'src/auth.ts', startLine: 1, endLine: 15, isExported: true, content: 'function login authenticates user credentials', description: 'user login'})`,
-      `CREATE (n:Function {id: 'func:validate', name: 'validate', filePath: 'src/auth.ts', startLine: 17, endLine: 25, isExported: true, content: 'function validate checks user input', description: 'input validation'})`,
-      `CREATE (n:Function {id: 'func:hash', name: 'hash', filePath: 'src/utils.ts', startLine: 1, endLine: 8, isExported: true, content: 'function hash computes bcrypt hash', description: 'password hashing'})`,
+    it('returns empty string for a non-matching pattern', async () => {
+      const result = await augment('nonexistent_xyz', handle.dbPath);
+      expect(result).toBe('');
+    });
 
-      // Classes
-      `CREATE (n:Class {id: 'class:AuthService', name: 'AuthService', filePath: 'src/auth.ts', startLine: 30, endLine: 60, isExported: true, content: 'class AuthService handles authentication', description: 'auth service'})`,
+    it('returns empty string for patterns shorter than 3 characters', async () => {
+      const result = await augment('ab', handle.dbPath);
+      expect(result).toBe('');
+    });
 
-      // Methods
-      `CREATE (n:Method {id: 'method:AuthService.login', name: 'loginMethod', filePath: 'src/auth.ts', startLine: 35, endLine: 50, isExported: false, content: 'method login in AuthService', description: 'login method'})`,
-
-      // Interfaces
-      `CREATE (n:Interface {id: 'iface:Creds', name: 'Credentials', filePath: 'src/auth.ts', startLine: 1, endLine: 5, isExported: true, content: 'interface Credentials for login authentication', description: 'credentials type'})`,
-
-      // Community
-      `CREATE (n:Community {id: 'comm:auth', label: 'Auth', heuristicLabel: 'Authentication', keywords: ['auth'], description: 'Auth cluster', enrichedBy: 'heuristic', cohesion: 0.8, symbolCount: 3})`,
-
-      // Process
-      `CREATE (n:Process {id: 'proc:login-flow', label: 'LoginFlow', heuristicLabel: 'User Login', processType: 'intra_community', stepCount: 2, communities: ['auth'], entryPointId: 'func:login', terminalId: 'func:validate'})`,
-
-      // CALLS relationships
-      `MATCH (a:Function), (b:Function) WHERE a.id = 'func:login' AND b.id = 'func:validate'
-       CREATE (a)-[:CodeRelation {type: 'CALLS', confidence: 1.0, reason: 'direct', step: 0}]->(b)`,
-      `MATCH (a:Function), (b:Function) WHERE a.id = 'func:login' AND b.id = 'func:hash'
-       CREATE (a)-[:CodeRelation {type: 'CALLS', confidence: 0.9, reason: 'import-resolved', step: 0}]->(b)`,
-
-      // MEMBER_OF
-      `MATCH (a:Function), (c:Community) WHERE a.id = 'func:login' AND c.id = 'comm:auth'
-       CREATE (a)-[:CodeRelation {type: 'MEMBER_OF', confidence: 1.0, reason: '', step: 0}]->(c)`,
-
-      // STEP_IN_PROCESS
-      `MATCH (a:Function), (p:Process) WHERE a.id = 'func:login' AND p.id = 'proc:login-flow'
-       CREATE (a)-[:CodeRelation {type: 'STEP_IN_PROCESS', confidence: 1.0, reason: '', step: 1}]->(p)`,
-      `MATCH (a:Function), (p:Process) WHERE a.id = 'func:validate' AND p.id = 'proc:login-flow'
-       CREATE (a)-[:CodeRelation {type: 'STEP_IN_PROCESS', confidence: 1.0, reason: '', step: 2}]->(p)`,
-    ]);
-
-    // Initialize core adapter (writable) to create FTS indexes
-    await initKuzu(handle.dbPath);
-    await loadFTSExtension();
-    await createFTSIndex('File', 'file_fts', ['name', 'content']);
-    await createFTSIndex('Function', 'function_fts', ['name', 'content', 'description']);
-    await createFTSIndex('Class', 'class_fts', ['name', 'content', 'description']);
-    await createFTSIndex('Method', 'method_fts', ['name', 'content', 'description']);
-    await createFTSIndex('Interface', 'interface_fts', ['name', 'content', 'description']);
-
-    // Close core adapter so the pool can open read-only
-    const { closeKuzu: closeCoreKuzu } = await import('../../src/core/kuzu/kuzu-adapter.js');
-    await closeCoreKuzu();
-
-    // Initialize MCP pool adapter (read-only) for augment() to use
-    await poolInitKuzu(handle.repoId, handle.dbPath);
-
-    // Configure mock listRegisteredRepos to return our test DB
+    it('returns empty string for empty pattern', async () => {
+      const result = await augment('', handle.dbPath);
+      expect(result).toBe('');
+    });
+  });
+}, {
+  seed: AUGMENT_SEED_DATA,
+  ftsIndexes: AUGMENT_FTS_INDEXES,
+  poolAdapter: true,
+  afterSetup: async (handle) => {
+    // Configure mock to return our test DB so augment() can find it
     const { listRegisteredRepos } = await import('../../src/storage/repo-manager.js');
     (listRegisteredRepos as ReturnType<typeof vi.fn>).mockResolvedValue([
       {
         name: handle.repoId,
-        path: handle.dbPath, // augment uses path.resolve(entry.path) for cwd matching
-        storagePath: handle.tmpHandle.dbPath, // parent of 'kuzu' dir
+        path: handle.dbPath,
+        storagePath: handle.tmpHandle.dbPath,
         indexedAt: new Date().toISOString(),
         lastCommit: 'abc123',
       },
@@ -304,33 +306,5 @@ describe('augment()', () => {
     // Dynamically import augment after mocks are in place
     const engine = await import('../../src/core/augmentation/engine.js');
     augment = engine.augment;
-  }, 30000);
-
-  afterAll(async () => {
-    await handle.cleanup();
-  });
-
-  it('returns non-empty string with relationship info for a matching pattern', async () => {
-    // Use handle.dbPath as cwd so findRepoForCwd matches our test entry
-    const result = await augment('login', handle.dbPath);
-
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain('[GitNexus]');
-    expect(result).toContain('login');
-  });
-
-  it('returns empty string for a non-matching pattern', async () => {
-    const result = await augment('nonexistent_xyz', handle.dbPath);
-    expect(result).toBe('');
-  });
-
-  it('returns empty string for patterns shorter than 3 characters', async () => {
-    const result = await augment('ab', handle.dbPath);
-    expect(result).toBe('');
-  });
-
-  it('returns empty string for empty pattern', async () => {
-    const result = await augment('', handle.dbPath);
-    expect(result).toBe('');
-  });
+  },
 });

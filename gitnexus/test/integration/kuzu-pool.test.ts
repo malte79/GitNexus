@@ -18,6 +18,7 @@ import {
   isKuzuReady,
 } from '../../src/mcp/core/kuzu-adapter.js';
 import { NODE_SCHEMA_QUERIES, REL_SCHEMA_QUERIES } from '../../src/core/kuzu/schema.js';
+import { withTestKuzuDB } from '../helpers/test-indexed-db.js';
 
 let tmpHandle: TestDBHandle;
 let dbPath: string;
@@ -189,67 +190,56 @@ describe('relationship queries', () => {
  * coreInitKuzu with a different path would close the previous native DB
  * handle, which segfaults in forked processes. Sharing a single handle
  * avoids this entirely.
- *
- * No afterAll cleanup — calling db.close() on native KuzuDB objects
- * causes segfaults. The global setup.ts force-exits cleanly.
  */
-describe('core adapter', () => {
-  let coreHandle: import('../helpers/test-indexed-db.js').IndexedDBHandle;
+withTestKuzuDB('core-adapter', (handle) => {
+  describe('core adapter', () => {
+    it('loadGraphToKuzu: loads a minimal graph and node counts match', async () => {
+      const { executeQuery: coreExecuteQuery } = await import('../../src/core/kuzu/kuzu-adapter.js');
 
-  beforeAll(async () => {
-    const { createTestKuzuDB } = await import('../helpers/test-indexed-db.js');
-    coreHandle = await createTestKuzuDB('core-adapter');
+      // createMinimalTestGraph has 2 File, 2 Function, 1 Class, 1 Folder = 6 nodes
+      const fileRows = await coreExecuteQuery('MATCH (n:File) RETURN n.id AS id');
+      expect(fileRows).toHaveLength(2);
 
-    // Initialize core adapter ONCE — all tests below use this connection
-    const { initKuzu: coreInitKuzu, loadGraphToKuzu } = await import('../../src/core/kuzu/kuzu-adapter.js');
+      const funcRows = await coreExecuteQuery('MATCH (n:Function) RETURN n.id AS id');
+      expect(funcRows).toHaveLength(2);
+
+      const classRows = await coreExecuteQuery('MATCH (n:Class) RETURN n.id AS id');
+      expect(classRows).toHaveLength(1);
+
+      const folderRows = await coreExecuteQuery('MATCH (n:Folder) RETURN n.id AS id');
+      expect(folderRows).toHaveLength(1);
+    });
+
+    it('createFTSIndex: creates FTS index on Function table without error', async () => {
+      const { createFTSIndex } = await import('../../src/core/kuzu/kuzu-adapter.js');
+
+      await expect(
+        createFTSIndex('Function', 'function_fts', ['name', 'content']),
+      ).resolves.toBeUndefined();
+    });
+
+    it('getKuzuStats: returns correct node and edge counts for seeded data', async () => {
+      const { getKuzuStats } = await import('../../src/core/kuzu/kuzu-adapter.js');
+
+      const stats = await getKuzuStats();
+
+      // createMinimalTestGraph: 6 nodes (2 File, 2 Function, 1 Class, 1 Folder)
+      expect(stats.nodes).toBe(6);
+
+      // 4 relationships (2 CALLS, 2 CONTAINS)
+      expect(stats.edges).toBe(4);
+    });
+  });
+}, {
+  afterSetup: async (handle) => {
+    // Load a minimal graph via CSV round-trip (core adapter is already initialized by wrapper)
+    const { loadGraphToKuzu } = await import('../../src/core/kuzu/kuzu-adapter.js');
     const { createMinimalTestGraph } = await import('../helpers/test-graph.js');
 
     const graph = createMinimalTestGraph();
-    const storagePath = path.join(coreHandle.tmpHandle.dbPath, 'storage');
+    const storagePath = path.join(handle.tmpHandle.dbPath, 'storage');
     await fs.mkdir(storagePath, { recursive: true });
 
-    await coreInitKuzu(coreHandle.dbPath);
     await loadGraphToKuzu(graph, '/test/repo', storagePath);
-  }, 30000);
-
-  // NOTE: No afterAll cleanup — native db.close() segfaults in forked
-  // processes. The global setup.ts force-exits to prevent this.
-
-  it('loadGraphToKuzu: loads a minimal graph and node counts match', async () => {
-    const { executeQuery: coreExecuteQuery } = await import('../../src/core/kuzu/kuzu-adapter.js');
-
-    // createMinimalTestGraph has 2 File, 2 Function, 1 Class, 1 Folder = 6 nodes
-    const fileRows = await coreExecuteQuery('MATCH (n:File) RETURN n.id AS id');
-    expect(fileRows).toHaveLength(2);
-
-    const funcRows = await coreExecuteQuery('MATCH (n:Function) RETURN n.id AS id');
-    expect(funcRows).toHaveLength(2);
-
-    const classRows = await coreExecuteQuery('MATCH (n:Class) RETURN n.id AS id');
-    expect(classRows).toHaveLength(1);
-
-    const folderRows = await coreExecuteQuery('MATCH (n:Folder) RETURN n.id AS id');
-    expect(folderRows).toHaveLength(1);
-  });
-
-  it('createFTSIndex: creates FTS index on Function table without error', async () => {
-    const { createFTSIndex } = await import('../../src/core/kuzu/kuzu-adapter.js');
-
-    // Should not throw — FTS extension loads and index is created
-    await expect(
-      createFTSIndex('Function', 'function_fts', ['name', 'content']),
-    ).resolves.toBeUndefined();
-  });
-
-  it('getKuzuStats: returns correct node and edge counts for seeded data', async () => {
-    const { getKuzuStats } = await import('../../src/core/kuzu/kuzu-adapter.js');
-
-    const stats = await getKuzuStats();
-
-    // createMinimalTestGraph: 6 nodes (2 File, 2 Function, 1 Class, 1 Folder)
-    expect(stats.nodes).toBe(6);
-
-    // 4 relationships (2 CALLS, 2 CONTAINS)
-    expect(stats.edges).toBe(4);
-  });
+  },
 });

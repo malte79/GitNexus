@@ -29,8 +29,8 @@ describe('pipeline end-to-end', () => {
     expect(result.graph.nodeCount).toBeGreaterThan(0);
     expect(result.graph.relationshipCount).toBeGreaterThan(0);
 
-    // --- Should find the 5 TypeScript files ---
-    expect(result.totalFileCount).toBe(5);
+    // --- Should find the 7 TypeScript files ---
+    expect(result.totalFileCount).toBe(7);
 
     // --- Verify File nodes exist for each source file ---
     const fileNodes: string[] = [];
@@ -42,6 +42,8 @@ describe('pipeline end-to-end', () => {
     expect(fileNodes).toContain('src/db.ts');
     expect(fileNodes).toContain('src/formatter.ts');
     expect(fileNodes).toContain('src/index.ts');
+    expect(fileNodes).toContain('src/logger.ts');
+    expect(fileNodes).toContain('src/middleware.ts');
 
     // --- Verify symbol nodes were created (functions, classes) ---
     const symbolNames: string[] = [];
@@ -55,6 +57,8 @@ describe('pipeline end-to-end', () => {
     expect(symbolNames).toContain('saveToDb');
     expect(symbolNames).toContain('formatResponse');
     expect(symbolNames).toContain('RequestHandler');
+    expect(symbolNames).toContain('processRequest');
+    expect(symbolNames).toContain('createLogEntry');
 
     // --- Verify relationships exist ---
     const relTypes = new Set<string>();
@@ -116,11 +120,7 @@ describe('pipeline end-to-end', () => {
 
   it('detects execution flows (processes)', () => {
     expect(result.processResult).toBeDefined();
-
-    // Process detection depends on call graph density — worker fallback
-    // to sequential parsing may produce fewer CALLS edges, so 0 processes
-    // is valid when parse-worker.js is not found (vitest runs from src/)
-    if (result.processResult.stats.totalProcesses === 0) return;
+    expect(result.processResult.stats.totalProcesses).toBeGreaterThan(0);
 
     const proc = result.processResult.processes[0];
 
@@ -137,15 +137,17 @@ describe('pipeline end-to-end', () => {
     expect(processNode).toBeDefined();
     expect(processNode!.label).toBe('Process');
 
-    // STEP_IN_PROCESS relationships should exist
-    let stepCount = 0;
+    // STEP_IN_PROCESS relationships should exist with sequential ordering
+    const steps: number[] = [];
     for (const rel of result.graph.iterRelationships()) {
       if (rel.type === 'STEP_IN_PROCESS' && rel.targetId === proc.id) {
-        stepCount++;
-        expect(rel.step).toBeGreaterThanOrEqual(1);
+        steps.push(rel.step);
       }
     }
-    expect(stepCount).toBe(proc.stepCount);
+    expect(steps.length).toBe(proc.stepCount);
+    // Steps should be sequential 1, 2, 3, ...
+    const sorted = [...steps].sort((a, b) => a - b);
+    sorted.forEach((s, i) => expect(s).toBe(i + 1));
   });
 
   it('reports progress through all 6 phases', () => {
