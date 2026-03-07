@@ -45,6 +45,7 @@ function ensureHeap(): boolean {
 export interface AnalyzeOptions {
   force?: boolean;
   embeddings?: boolean;
+  indexOnly?: boolean;
 }
 
 /** Threshold: auto-skip embeddings for repos with more nodes than this */
@@ -298,27 +299,30 @@ export const analyzeCommand = async (
   };
   await saveMeta(storagePath, meta);
   await registerRepo(repoPath, meta);
-  await addToGitignore(repoPath);
+  let aiContext: { files: string[] } = { files: [] };
+  if (!options?.indexOnly) {
+    await addToGitignore(repoPath);
 
-  const projectName = path.basename(repoPath);
-  let aggregatedClusterCount = 0;
-  if (pipelineResult.communityResult?.communities) {
-    const groups = new Map<string, number>();
-    for (const c of pipelineResult.communityResult.communities) {
-      const label = c.heuristicLabel || c.label || 'Unknown';
-      groups.set(label, (groups.get(label) || 0) + c.symbolCount);
+    const projectName = path.basename(repoPath);
+    let aggregatedClusterCount = 0;
+    if (pipelineResult.communityResult?.communities) {
+      const groups = new Map<string, number>();
+      for (const c of pipelineResult.communityResult.communities) {
+        const label = c.heuristicLabel || c.label || 'Unknown';
+        groups.set(label, (groups.get(label) || 0) + c.symbolCount);
+      }
+      aggregatedClusterCount = Array.from(groups.values()).filter(count => count >= 5).length;
     }
-    aggregatedClusterCount = Array.from(groups.values()).filter(count => count >= 5).length;
-  }
 
-  const aiContext = await generateAIContextFiles(repoPath, storagePath, projectName, {
-    files: pipelineResult.totalFileCount,
-    nodes: stats.nodes,
-    edges: stats.edges,
-    communities: pipelineResult.communityResult?.stats.totalCommunities,
-    clusters: aggregatedClusterCount,
-    processes: pipelineResult.processResult?.stats.totalProcesses,
-  });
+    aiContext = await generateAIContextFiles(repoPath, storagePath, projectName, {
+      files: pipelineResult.totalFileCount,
+      nodes: stats.nodes,
+      edges: stats.edges,
+      communities: pipelineResult.communityResult?.stats.totalCommunities,
+      clusters: aggregatedClusterCount,
+      processes: pipelineResult.processResult?.stats.totalProcesses,
+    });
+  }
 
   await closeKuzu();
   // Note: we intentionally do NOT call disposeEmbedder() here.
@@ -346,6 +350,8 @@ export const analyzeCommand = async (
 
   if (aiContext.files.length > 0) {
     console.log(`  Context: ${aiContext.files.join(', ')}`);
+  } else if (options?.indexOnly) {
+    console.log('  Context generation skipped (--index-only)');
   }
 
   // Show a quiet summary if some edge types needed fallback insertion
