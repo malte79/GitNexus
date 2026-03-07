@@ -12,8 +12,8 @@ import path from 'path';
 import kuzu from 'kuzu';
 import { createTempDir, type TestDBHandle } from './test-db.js';
 import { NODE_SCHEMA_QUERIES, REL_SCHEMA_QUERIES } from '../../src/core/kuzu/schema.js';
-import { closeKuzu as closeCoreKuzu } from '../../src/core/kuzu/kuzu-adapter.js';
-import { closeKuzu as closePoolKuzu } from '../../src/mcp/core/kuzu-adapter.js';
+import { detachKuzu as detachCoreKuzu } from '../../src/core/kuzu/kuzu-adapter.js';
+import { detachKuzu as detachPoolKuzu } from '../../src/mcp/core/kuzu-adapter.js';
 
 export interface IndexedDBHandle {
   /** Path to the KuzuDB database file */
@@ -57,11 +57,12 @@ export async function createTestKuzuDB(prefix: string): Promise<IndexedDBHandle>
   db.close();
 
   const cleanup = async () => {
-    // 1. Close core adapter module-level state (db, conn, currentDbPath, ftsLoaded)
-    try { await closeCoreKuzu(); } catch { /* best-effort */ }
-    // 2. Close MCP pool adapter entry for this repoId
-    try { await closePoolKuzu(repoId); } catch { /* best-effort */ }
-    // 3. Remove temp directory
+    // 1. Detach (null out) core adapter refs — do NOT call .close() which
+    //    triggers C++ destructors that hang/segfault in forked workers
+    try { detachCoreKuzu(); } catch { /* best-effort */ }
+    // 2. Detach MCP pool adapter refs for this repoId
+    try { detachPoolKuzu(); } catch { /* best-effort */ }
+    // 3. Remove temp directory (best-effort — DB files may still be locked)
     try { await tmpHandle.cleanup(); } catch { /* best-effort */ }
   };
 
