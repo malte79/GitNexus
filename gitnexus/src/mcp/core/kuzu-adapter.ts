@@ -326,6 +326,20 @@ export const closeKuzu = async (repoId?: string): Promise<void> => {
 };
 
 /**
+ * Detach all native KuzuDB references WITHOUT calling .close().
+ *
+ * Used in test teardown to prevent Node.js GC from running native C++
+ * destructors during forked process exit, which causes segfaults.
+ */
+export const detachKuzu = (): void => {
+  pool.clear();
+  if (idleTimer) {
+    clearInterval(idleTimer);
+    idleTimer = null;
+  }
+};
+
+/**
  * Check if a specific repo's pool is active
  */
 export const isKuzuReady = (repoId: string): boolean => pool.has(repoId);

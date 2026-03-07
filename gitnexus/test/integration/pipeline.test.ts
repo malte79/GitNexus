@@ -1,17 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
+/**
+ * P1 Integration Tests: Pipeline End-to-End
+ *
+ * Runs the full ingestion pipeline once on a mini-repo fixture and
+ * validates the resulting knowledge graph: file/symbol nodes, CALLS
+ * edges, IMPORTS edges, community detection, and process detection.
+ *
+ * Pipeline runs once in beforeAll; each it() asserts against the cached result.
+ */
+import { describe, it, expect, beforeAll } from 'vitest';
 import path from 'path';
 import { runPipelineFromRepo } from '../../src/core/ingestion/pipeline.js';
 import type { PipelineProgress } from '../../src/types/pipeline.js';
+import type { PipelineResult } from '../../src/types/pipeline.js';
 
 const MINI_REPO = path.resolve(__dirname, '..', 'fixtures', 'mini-repo');
 
 describe('pipeline end-to-end', () => {
-  it('indexes a mini repo and produces a valid graph', async () => {
-    const progressCalls: PipelineProgress[] = [];
-    const onProgress = (p: PipelineProgress) => progressCalls.push(p);
+  let result: PipelineResult;
+  const phases = new Set<string>();
 
-    const result = await runPipelineFromRepo(MINI_REPO, onProgress);
+  // Run pipeline ONCE in beforeAll — each it() asserts against the cached result
+  beforeAll(async () => {
+    result = await runPipelineFromRepo(MINI_REPO, (p: PipelineProgress) => phases.add(p.phase));
+  }, 60000);
 
+  it('indexes a mini repo and produces a valid graph', () => {
     // --- Graph should have nodes ---
     expect(result.graph.nodeCount).toBeGreaterThan(0);
     expect(result.graph.relationshipCount).toBeGreaterThan(0);
@@ -82,9 +95,7 @@ describe('pipeline end-to-end', () => {
     expect(importsCount).toBeGreaterThan(0);
   });
 
-  it('detects communities', async () => {
-    const result = await runPipelineFromRepo(MINI_REPO, () => {});
-
+  it('detects communities', () => {
     expect(result.communityResult).toBeDefined();
     expect(result.communityResult.stats.totalCommunities).toBeGreaterThan(0);
 
@@ -103,47 +114,41 @@ describe('pipeline end-to-end', () => {
     expect(memberOfCount).toBeGreaterThan(0);
   });
 
-  it('detects execution flows (processes)', async () => {
-    const result = await runPipelineFromRepo(MINI_REPO, () => {});
-
+  it('detects execution flows (processes)', () => {
     expect(result.processResult).toBeDefined();
 
-    // With a 4-function call chain (handler -> validator -> db -> formatter),
-    // there should be at least one process detected
-    if (result.processResult.stats.totalProcesses > 0) {
-      const process = result.processResult.processes[0];
+    // Process detection depends on call graph density — worker fallback
+    // to sequential parsing may produce fewer CALLS edges, so 0 processes
+    // is valid when parse-worker.js is not found (vitest runs from src/)
+    if (result.processResult.stats.totalProcesses === 0) return;
 
-      // Each process should have valid structure
-      expect(process.id).toBeTruthy();
-      expect(process.stepCount).toBeGreaterThanOrEqual(3); // minSteps default
-      expect(process.trace.length).toBe(process.stepCount);
-      expect(process.entryPointId).toBeTruthy();
-      expect(process.terminalId).toBeTruthy();
-      expect(process.processType).toMatch(/^(intra_community|cross_community)$/);
+    const proc = result.processResult.processes[0];
 
-      // Process nodes should be in the graph
-      const processNode = result.graph.getNode(process.id);
-      expect(processNode).toBeDefined();
-      expect(processNode!.label).toBe('Process');
+    // Each process should have valid structure
+    expect(proc.id).toBeTruthy();
+    expect(proc.stepCount).toBeGreaterThanOrEqual(3); // minSteps default
+    expect(proc.trace.length).toBe(proc.stepCount);
+    expect(proc.entryPointId).toBeTruthy();
+    expect(proc.terminalId).toBeTruthy();
+    expect(proc.processType).toMatch(/^(intra_community|cross_community)$/);
 
-      // STEP_IN_PROCESS relationships should exist
-      let stepCount = 0;
-      for (const rel of result.graph.iterRelationships()) {
-        if (rel.type === 'STEP_IN_PROCESS' && rel.targetId === process.id) {
-          stepCount++;
-          expect(rel.step).toBeGreaterThanOrEqual(1);
-        }
+    // Process nodes should be in the graph
+    const processNode = result.graph.getNode(proc.id);
+    expect(processNode).toBeDefined();
+    expect(processNode!.label).toBe('Process');
+
+    // STEP_IN_PROCESS relationships should exist
+    let stepCount = 0;
+    for (const rel of result.graph.iterRelationships()) {
+      if (rel.type === 'STEP_IN_PROCESS' && rel.targetId === proc.id) {
+        stepCount++;
+        expect(rel.step).toBeGreaterThanOrEqual(1);
       }
-      expect(stepCount).toBe(process.stepCount);
     }
+    expect(stepCount).toBe(proc.stepCount);
   });
 
-  it('reports progress through all 6 phases', async () => {
-    const phases = new Set<string>();
-    const onProgress = (p: PipelineProgress) => phases.add(p.phase);
-
-    await runPipelineFromRepo(MINI_REPO, onProgress);
-
+  it('reports progress through all 6 phases', () => {
     expect(phases).toContain('extracting');
     expect(phases).toContain('structure');
     expect(phases).toContain('parsing');
@@ -152,8 +157,7 @@ describe('pipeline end-to-end', () => {
     expect(phases).toContain('complete');
   });
 
-  it('returns correct repoPath in result', async () => {
-    const result = await runPipelineFromRepo(MINI_REPO, () => {});
+  it('returns correct repoPath in result', () => {
     expect(result.repoPath).toBe(MINI_REPO);
   });
 });
