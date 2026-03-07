@@ -5,7 +5,8 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     testTimeout: 30000,
     pool: 'forks',
-    fileParallelism: false, // run test files sequentially in one fork to avoid KuzuDB native cleanup crashes
+    fileParallelism: false, // sequential execution — avoids concurrent KuzuDB native cleanup crashes
+    maxWorkers: 1,          // single fork — avoids re-loading kuzu native addon per file (~40s on Ubuntu CI)
     globals: true,
     setupFiles: ['test/setup.ts'],
     teardownTimeout: 1000,
