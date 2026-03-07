@@ -125,10 +125,9 @@ describe('worker pool integration', () => {
 
   it('fails gracefully with invalid worker path', () => {
     const badUrl = pathToFileURL('/nonexistent/worker.js') as URL;
-    // createWorkerPool creates workers eagerly — the Worker constructor
-    // may throw or the worker may exit with an error
+    // createWorkerPool validates the worker script exists before spawning
     expect(() => {
       pool = createWorkerPool(badUrl, 1);
-    }).not.toThrow(); // Workers fail asynchronously, not in constructor
+    }).toThrow(/Worker script not found/);
   });
 });
