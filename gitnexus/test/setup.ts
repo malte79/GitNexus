@@ -1,28 +1,32 @@
 /**
  * Vitest global setup file.
  *
- * KuzuDB's C++ destructors can segfault or hang when Node.js
- * garbage-collects native Database/Connection objects during
- * forked process exit.
+ * KuzuDB's C++ destructors hang when Node.js garbage-collects
+ * native Database/Connection objects during forked process exit.
  *
- * Strategy: first try closeKuzu() to properly close native handles
- * during active execution (destructor becomes a no-op on GC).
- * Then detachKuzu() as safety net to null out any remaining refs.
+ * Problem chain:
+ *   test completes → fork exits → GC finds orphaned native objects
+ *   → C++ destructors fire on torn-down runtime → hang (Ubuntu)
+ *   or segfault (Windows).
+ *
+ * Fix: force process.exit(0) on `beforeExit` — this fires when
+ * the event loop has drained (all test results already sent via IPC)
+ * and BEFORE GC runs finalizers.  The OS reclaims all native
+ * resources on process exit, so no cleanup is needed.
  */
 import { afterAll } from 'vitest';
 
-afterAll(async () => {
-  // --- Core adapter (single db/conn) ---
-  try {
-    const core = await import('../src/core/kuzu/kuzu-adapter.js');
-    try { await core.closeKuzu(); } catch { /* close failed — fall through to detach */ }
-    core.detachKuzu();
-  } catch { /* never opened */ }
+// ── Prevent GC-triggered C++ destructor hangs ────────────────────────
+// `beforeExit` fires when the event loop is empty (tests done, results
+// sent to parent).  Calling process.exit(0) skips the GC phase that
+// would otherwise trigger native KuzuDB destructors.
+process.on('beforeExit', () => process.exit(0));
 
-  // --- MCP pool adapter (per-repo connection pool) ---
-  try {
-    const pool = await import('../src/mcp/core/kuzu-adapter.js');
-    try { await pool.closeKuzu(); } catch { /* close failed — fall through to detach */ }
-    pool.detachKuzu();
-  } catch { /* never opened */ }
+afterAll(async () => {
+  // Detach (null out) all native refs.  This prevents any JS-level
+  // use after teardown.  We intentionally do NOT call closeKuzu()
+  // here — the `beforeExit` handler above guarantees the process
+  // exits before GC can trigger C++ destructors on these objects.
+  try { (await import('../src/core/kuzu/kuzu-adapter.js')).detachKuzu(); } catch {}
+  try { (await import('../src/mcp/core/kuzu-adapter.js')).detachKuzu(); } catch {}
 });
