@@ -5,7 +5,7 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     testTimeout: 30000,
     pool: 'forks',
-    singleFork: true,      // run all tests in a single fork to avoid KuzuDB native cleanup crashes
+    fileParallelism: false, // run test files sequentially in one fork to avoid KuzuDB native cleanup crashes
     globals: true,
     setupFiles: ['test/setup.ts'],
     teardownTimeout: 1000,
