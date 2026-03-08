@@ -1,0 +1,35 @@
+version = 1
+
+[governed]
+include = [
+  "docs/**/*.md",
+  "planning/master-intent.md",
+  "planning/epics-todo.md",
+  "planning/epics/**/*.md",
+]
+exclude = []
+
+[contracts]
+require_docs_when_changed = [
+  "AGENTS.md",
+  ".codex/skills/codereview/SKILL.md",
+  ".codex/skills/cr/SKILL.md",
+  ".codex/skills/mech/SKILL.md",
+  ".codex/skills/prep/SKILL.md",
+  ".codex/skills/merge/SKILL.md",
+  "gitnexus/package.json",
+  "gitnexus/scripts/check-docs-contracts.mjs",
+  "gitnexus/scripts/docs-manifest.mjs",
+  "gitnexus/scripts/lint-docs.mjs",
+  "gitnexus/src/cli/**/*.ts",
+  "gitnexus/src/mcp/**/*.ts",
+  "gitnexus/src/server/**/*.ts",
+  "gitnexus/src/storage/**/*.ts",
+]
+
+allow_no_docs_when_only_changed = [
+  "gitnexus/test/**/*",
+  "planning/master-intent.md",
+  "planning/epics-todo.md",
+  "planning/epics/**/*.md",
+]
