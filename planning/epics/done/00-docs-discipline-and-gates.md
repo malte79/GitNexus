@@ -1,7 +1,7 @@
 Title: Docs Discipline And Gates
 Assigned to: Agent 1
 Lane: Workflow
-Status: doing
+Status: done
 Objective: Establish a CodeNexus documentation system that documents every new contract and behavior we introduce, enforces markdown and repo-specific doc quality checks, and makes docs validation a required merge gate.
 In scope: documentation policy for CodeNexus-owned changes; initial `docs/` information architecture; rules for what must be documented versus explicitly deferred; markdown lint setup; custom doc-contract lint setup; required local merge/prep gates for docs; workflow and epic integration so docs are required for future changes.
 Out of scope: documenting the inherited upstream system wholesale; retroactively writing complete docs for existing GitNexus behavior; embeddings docs; Luau/Roblox feature docs before those features exist; CI/provider-specific automation outside the local workflow; general prose cleanup unrelated to the new documentation contract.
