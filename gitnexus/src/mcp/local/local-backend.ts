@@ -9,16 +9,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { initKuzu, executeQuery, executeParameterized, closeKuzu, isKuzuReady } from '../core/kuzu-adapter.js';
-// Embedding imports are lazy (dynamic import) to avoid loading onnxruntime-node
-// at MCP server startup — crashes on unsupported Node ABI versions (#89)
-// git utilities available if needed
-// import { isGitRepo, getCurrentCommit, getGitRoot } from '../../storage/git.js';
 import {
   listRegisteredRepos,
   type RegistryEntry,
 } from '../../storage/repo-manager.js';
-// AI context generation is CLI-only (gitnexus analyze)
-// import { generateAIContextFiles } from '../../cli/ai-context.js';
 
 /**
  * Quick test-file detection for filtering impact results.
@@ -326,10 +320,10 @@ export class LocalBackend {
   /**
    * Query tool — process-grouped search.
    * 
-   * 1. Hybrid search (BM25 + semantic) to find matching symbols
+ * 1. BM25 search to find matching symbols
    * 2. Trace each match to its process(es) via STEP_IN_PROCESS
    * 3. Group by process, rank by aggregate relevance + internal cluster cohesion
-   * 4. Return: { processes, process_symbols, definitions }
+ * 4. Return: { processes, process_symbols, definitions }
    */
   private async query(repo: RepoHandle, params: {
     query: string;
@@ -350,30 +344,15 @@ export class LocalBackend {
     const includeContent = params.include_content ?? false;
     const searchQuery = params.query.trim();
     
-    // Step 1: Run hybrid search to get matching symbols
+    // Step 1: Run BM25 search to get matching symbols
     const searchLimit = processLimit * maxSymbolsPerProcess; // fetch enough raw results
-    const [bm25Results, semanticResults] = await Promise.all([
-      this.bm25Search(repo, searchQuery, searchLimit),
-      this.semanticSearch(repo, searchQuery, searchLimit),
-    ]);
+    const bm25Results = await this.bm25Search(repo, searchQuery, searchLimit);
     
     // Merge via reciprocal rank fusion
     const scoreMap = new Map<string, { score: number; data: any }>();
     
     for (let i = 0; i < bm25Results.length; i++) {
       const result = bm25Results[i];
-      const key = result.nodeId || result.filePath;
-      const rrfScore = 1 / (60 + i);
-      const existing = scoreMap.get(key);
-      if (existing) {
-        existing.score += rrfScore;
-      } else {
-        scoreMap.set(key, { score: rrfScore, data: result });
-      }
-    }
-    
-    for (let i = 0; i < semanticResults.length; i++) {
-      const result = semanticResults[i];
       const key = result.nodeId || result.filePath;
       const rrfScore = 1 / (60 + i);
       const existing = scoreMap.get(key);
@@ -590,74 +569,6 @@ export class LocalBackend {
     }
     
     return results;
-  }
-
-  /**
-   * Semantic vector search helper
-   */
-  private async semanticSearch(repo: RepoHandle, query: string, limit: number): Promise<any[]> {
-    try {
-      // Check if embedding table exists before loading the model (avoids heavy model init when embeddings are off)
-      const tableCheck = await executeQuery(repo.id, `MATCH (e:CodeEmbedding) RETURN COUNT(*) AS cnt LIMIT 1`);
-      if (!tableCheck.length || (tableCheck[0].cnt ?? tableCheck[0][0]) === 0) return [];
-
-      const { embedQuery, getEmbeddingDims } = await import('../core/embedder.js');
-      const queryVec = await embedQuery(query);
-      const dims = getEmbeddingDims();
-      const queryVecStr = `[${queryVec.join(',')}]`;
-      
-      const vectorQuery = `
-        CALL QUERY_VECTOR_INDEX('CodeEmbedding', 'code_embedding_idx', 
-          CAST(${queryVecStr} AS FLOAT[${dims}]), ${limit})
-        YIELD node AS emb, distance
-        WITH emb, distance
-        WHERE distance < 0.6
-        RETURN emb.nodeId AS nodeId, distance
-        ORDER BY distance
-      `;
-      
-      const embResults = await executeQuery(repo.id, vectorQuery);
-      
-      if (embResults.length === 0) return [];
-      
-      const results: any[] = [];
-      
-      for (const embRow of embResults) {
-        const nodeId = embRow.nodeId ?? embRow[0];
-        const distance = embRow.distance ?? embRow[1];
-        
-        const labelEndIdx = nodeId.indexOf(':');
-        const label = labelEndIdx > 0 ? nodeId.substring(0, labelEndIdx) : 'Unknown';
-        
-        // Validate label against known node types to prevent Cypher injection
-        if (!VALID_NODE_LABELS.has(label)) continue;
-        
-        try {
-          const nodeQuery = label === 'File'
-            ? `MATCH (n:File {id: $nodeId}) RETURN n.name AS name, n.filePath AS filePath`
-            : `MATCH (n:\`${label}\` {id: $nodeId}) RETURN n.name AS name, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine`;
-
-          const nodeRows = await executeParameterized(repo.id, nodeQuery, { nodeId });
-          if (nodeRows.length > 0) {
-            const nodeRow = nodeRows[0];
-            results.push({
-              nodeId,
-              name: nodeRow.name ?? nodeRow[0] ?? '',
-              type: label,
-              filePath: nodeRow.filePath ?? nodeRow[1] ?? '',
-              distance,
-              startLine: label !== 'File' ? (nodeRow.startLine ?? nodeRow[2]) : undefined,
-              endLine: label !== 'File' ? (nodeRow.endLine ?? nodeRow[3]) : undefined,
-            });
-          }
-        } catch {}
-      }
-      
-      return results;
-    } catch {
-      // Expected when embeddings are disabled — silently fall back to BM25-only
-      return [];
-    }
   }
 
   async executeCypher(repoName: string, query: string): Promise<any> {

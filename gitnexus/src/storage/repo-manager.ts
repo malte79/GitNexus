@@ -20,7 +20,6 @@ export interface RepoMeta {
     edges?: number;
     communities?: number;
     processes?: number;
-    embeddings?: number;
   };
 }
 

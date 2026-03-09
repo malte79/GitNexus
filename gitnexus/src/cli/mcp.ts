@@ -1,9 +1,9 @@
 /**
  * MCP Command
- * 
- * Starts the MCP server in standalone mode.
- * Loads all indexed repos from the global registry.
- * No longer depends on cwd — works from any directory.
+ *
+ * Starts the current standalone MCP server.
+ * This remains the temporary transport seam until the repo-local
+ * HTTP runtime replaces it in later epics.
  */
 
 import { startMCPServer } from '../mcp/server.js';
@@ -22,9 +22,7 @@ export const mcpCommand = async () => {
     console.error(`GitNexus MCP: unhandled rejection — ${msg}`);
   });
 
-  // Initialize multi-repo backend from registry.
-  // The server starts even with 0 repos — tools call refreshRepos() lazily,
-  // so repos indexed after the server starts are discovered automatically.
+  // Initialize the current registry-backed backend.
   const backend = new LocalBackend();
   await backend.init();
 
@@ -35,6 +33,6 @@ export const mcpCommand = async () => {
     console.error(`GitNexus: MCP server starting with ${repos.length} repo(s): ${repos.map(r => r.name).join(', ')}`);
   }
 
-  // Start MCP server (serves all repos, discovers new ones lazily)
+  // Start the current stdio MCP server.
   await startMCPServer(backend);
 };

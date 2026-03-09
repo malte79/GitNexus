@@ -6,7 +6,6 @@
  * - Tool handler wraps backend.callTool and appends hints
  * - Tool handler catches errors and returns isError: true
  * - Resource handlers delegate to resources.ts functions
- * - Prompt handlers return expected prompts
  * - Next-step hints cover all tool names
  *
  * NOTE: We test the server handler logic by calling the request handlers
@@ -84,17 +83,6 @@ describe('server error handling', () => {
     const backend = createMockBackend();
     const server = createMCPServer(backend);
     // Server was created with version from package.json — no crash
-    expect(server).toBeDefined();
-  });
-});
-
-// ─── Prompt definitions ───────────────────────────────────────────────
-
-describe('prompt registration', () => {
-  it('server registers detect_impact and generate_map prompts', () => {
-    const backend = createMockBackend();
-    // Creating the server registers all handlers including prompts
-    const server = createMCPServer(backend);
     expect(server).toBeDefined();
   });
 });

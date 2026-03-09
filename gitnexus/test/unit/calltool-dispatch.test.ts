@@ -22,14 +22,9 @@ vi.mock('../../src/storage/repo-manager.js', () => ({
   listRegisteredRepos: vi.fn().mockResolvedValue([]),
 }));
 
-// Also mock the search modules to avoid loading onnxruntime
+// Mock the search module used by LocalBackend query()
 vi.mock('../../src/core/search/bm25-index.js', () => ({
   searchFTSFromKuzu: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock('../../src/mcp/core/embedder.js', () => ({
-  embedQuery: vi.fn().mockResolvedValue([]),
-  getEmbeddingDims: vi.fn().mockReturnValue(384),
 }));
 
 import { LocalBackend, isWriteQuery, CYPHER_WRITE_RE } from '../../src/mcp/local/local-backend.js';

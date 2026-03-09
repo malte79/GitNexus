@@ -30,11 +30,6 @@ export const REL_TYPES = ['CONTAINS', 'DEFINES', 'IMPORTS', 'CALLS', 'EXTENDS', 
 export type RelType = typeof REL_TYPES[number];
 
 // ============================================================================
-// EMBEDDING TABLE
-// ============================================================================
-export const EMBEDDING_TABLE_NAME = 'CodeEmbedding';
-
-// ============================================================================
 // NODE TABLE SCHEMAS
 // ============================================================================
 
@@ -379,26 +374,6 @@ CREATE REL TABLE ${REL_TABLE_NAME} (
 )`;
 
 // ============================================================================
-// EMBEDDING TABLE SCHEMA
-// Separate table for vector storage to avoid copy-on-write overhead
-// ============================================================================
-
-export const EMBEDDING_SCHEMA = `
-CREATE NODE TABLE ${EMBEDDING_TABLE_NAME} (
-  nodeId STRING,
-  embedding FLOAT[384],
-  PRIMARY KEY (nodeId)
-)`;
-
-/**
- * Create vector index for semantic search
- * Uses HNSW (Hierarchical Navigable Small World) algorithm with cosine similarity
- */
-export const CREATE_VECTOR_INDEX_QUERY = `
-CALL CREATE_VECTOR_INDEX('${EMBEDDING_TABLE_NAME}', 'code_embedding_idx', 'embedding', metric := 'cosine')
-`;
-
-// ============================================================================
 // ALL SCHEMA QUERIES IN ORDER
 // Node tables must be created before relationship tables that reference them
 // ============================================================================
@@ -441,5 +416,4 @@ export const REL_SCHEMA_QUERIES = [
 export const SCHEMA_QUERIES = [
   ...NODE_SCHEMA_QUERIES,
   ...REL_SCHEMA_QUERIES,
-  EMBEDDING_SCHEMA,
 ];

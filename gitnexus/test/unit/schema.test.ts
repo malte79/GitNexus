@@ -3,7 +3,6 @@ import {
   NODE_TABLES,
   REL_TABLE_NAME,
   REL_TYPES,
-  EMBEDDING_TABLE_NAME,
   NODE_SCHEMA_QUERIES,
   REL_SCHEMA_QUERIES,
   SCHEMA_QUERIES,
@@ -17,8 +16,6 @@ import {
   COMMUNITY_SCHEMA,
   PROCESS_SCHEMA,
   RELATION_SCHEMA,
-  EMBEDDING_SCHEMA,
-  CREATE_VECTOR_INDEX_QUERY,
 } from '../../src/core/kuzu/schema.js';
 
 describe('KuzuDB Schema', () => {
@@ -121,18 +118,6 @@ describe('KuzuDB Schema', () => {
     });
   });
 
-  describe('embedding schema', () => {
-    it('creates CodeEmbedding table', () => {
-      expect(EMBEDDING_SCHEMA).toContain(`CREATE NODE TABLE ${EMBEDDING_TABLE_NAME}`);
-      expect(EMBEDDING_SCHEMA).toContain('embedding FLOAT[384]');
-    });
-
-    it('has vector index query', () => {
-      expect(CREATE_VECTOR_INDEX_QUERY).toContain('CREATE_VECTOR_INDEX');
-      expect(CREATE_VECTOR_INDEX_QUERY).toContain('cosine');
-    });
-  });
-
   describe('schema query ordering', () => {
     it('NODE_SCHEMA_QUERIES has correct count', () => {
       expect(NODE_SCHEMA_QUERIES).toHaveLength(27);
@@ -142,9 +127,9 @@ describe('KuzuDB Schema', () => {
       expect(REL_SCHEMA_QUERIES).toHaveLength(1);
     });
 
-    it('SCHEMA_QUERIES includes all node + rel + embedding schemas', () => {
-      // 27 node + 1 rel + 1 embedding = 29
-      expect(SCHEMA_QUERIES).toHaveLength(29);
+    it('SCHEMA_QUERIES includes all node and relation schemas', () => {
+      // 27 node + 1 relation = 28
+      expect(SCHEMA_QUERIES).toHaveLength(28);
     });
 
     it('node schemas come before relation schemas in SCHEMA_QUERIES', () => {

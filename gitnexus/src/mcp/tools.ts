@@ -1,8 +1,9 @@
 /**
  * MCP Tool Definitions
- * 
- * Defines the tools that GitNexus exposes to external AI agents.
- * All tools support an optional `repo` parameter for multi-repo setups.
+ *
+ * Defines the current agent-facing tool surface.
+ * The optional `repo` parameter remains until the single-repo runtime
+ * rewrite lands in later epics.
  */
 
 export interface ToolDefinition {
@@ -52,7 +53,7 @@ Returns results grouped by process (execution flow):
 - process_symbols: all symbols in those flows with file locations and module (functional area)
 - definitions: standalone types/interfaces not in any process
 
-Hybrid ranking: BM25 keyword + semantic vector search, ranked by Reciprocal Rank Fusion.`,
+Results are ranked using lexical retrieval plus graph-aware grouping.`,
     inputSchema: {
       type: 'object',
       properties: {

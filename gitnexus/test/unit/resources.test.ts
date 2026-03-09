@@ -37,9 +37,9 @@ function createMockBackend(overrides: Partial<Record<string, any>> = {}): any {
 // ─── Static definitions ─────────────────────────────────────────────
 
 describe('getResourceDefinitions', () => {
-  it('returns 2 static resources', () => {
+  it('returns 1 static resource', () => {
     const defs = getResourceDefinitions();
-    expect(defs).toHaveLength(2);
+    expect(defs).toHaveLength(1);
   });
 
   it('includes repos resource', () => {
@@ -47,13 +47,6 @@ describe('getResourceDefinitions', () => {
     const repos = defs.find(d => d.uri === 'gitnexus://repos');
     expect(repos).toBeDefined();
     expect(repos!.mimeType).toBe('text/yaml');
-  });
-
-  it('includes setup resource', () => {
-    const defs = getResourceDefinitions();
-    const setup = defs.find(d => d.uri === 'gitnexus://setup');
-    expect(setup).toBeDefined();
-    expect(setup!.mimeType).toBe('text/markdown');
   });
 
   it('each definition has uri, name, description, mimeType', () => {
@@ -111,23 +104,6 @@ describe('readResource', () => {
   it('returns empty message when no repos', async () => {
     const backend = createMockBackend({ repos: [] });
     const result = await readResource('gitnexus://repos', backend);
-    expect(result).toContain('No repositories indexed');
-  });
-
-  it('routes gitnexus://setup to setup resource', async () => {
-    const backend = createMockBackend({
-      repos: [
-        { name: 'proj', path: '/tmp/proj', indexedAt: '2024-01-01', lastCommit: 'abc', stats: { nodes: 10, edges: 20, processes: 3 } },
-      ],
-    });
-    const result = await readResource('gitnexus://setup', backend);
-    expect(result).toContain('GitNexus MCP');
-    expect(result).toContain('proj');
-  });
-
-  it('returns fallback when setup has no repos', async () => {
-    const backend = createMockBackend({ repos: [] });
-    const result = await readResource('gitnexus://setup', backend);
     expect(result).toContain('No repositories indexed');
   });
 
