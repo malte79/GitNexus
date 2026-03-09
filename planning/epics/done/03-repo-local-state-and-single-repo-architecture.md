@@ -1,7 +1,7 @@
 Title: Repo-Local State And Single-Repo Architecture
 Assigned to: Agent 1
 Lane: Architecture
-Status: doing
+Status: done
 Objective: Replace the inherited global-registry and multi-repo control plane with a repo-local, single-repo architecture rooted in `.codenexus/`, while preserving the reduced headless core and the seams needed for the upcoming CLI reshape and repo-local MCP HTTP service epics.
 In scope: repo-local state ownership under `.codenexus/`; replacement of the global registry model in storage and backend layers; conversion of the retained backend/query layer from multi-repo routing to one bound repo boundary; implementation of the v1 config, meta, Kuzu, and runtime file ownership model; repo-bound resolution rules for nearest git root, nested repos, and worktrees; minimal compatibility updates to retained `gitnexus` commands so the architecture is actually exercised; removal of multi-repo assumptions from retained package surfaces where they are architectural rather than transport-only.
 Out of scope: introducing the `cn` CLI surface; implementing `cn init`; implementing the repo-local MCP HTTP service lifecycle itself; Luau or Roblox support; branch-aware index stores; automatic refresh or delta indexing; a full rename sweep from `gitnexus` to `codenexus`; compatibility shims that preserve the old global registry as a parallel runtime path.
