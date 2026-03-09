@@ -22,9 +22,10 @@ Epic 03 implements a hard cut:
 | repo-bound query engine | [local-backend.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend.ts) | one bound repo, one Kuzu handle, one active tool surface |
 | agent-facing tool schema | [tools.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/tools.ts) | single-repo tool contracts with no repo routing |
 | agent-facing resources | [resources.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/resources.ts) | single-repo resource URIs with no repo discovery |
-| retained indexing shim | [analyze.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/analyze.ts) | write `.codenexus/kuzu` and `.codenexus/meta.json` only |
+| repo activation shim | [init.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/init.ts) | create `.codenexus/config.toml` without creating index or runtime state |
+| retained indexing shim | [index-command.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index-command.ts) | write `.codenexus/kuzu` and `.codenexus/meta.json` only |
 | retained status shim | [status.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/status.ts) | report canonical base state and detail flags |
-| retained stdio MCP shim | [mcp.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/mcp.ts) | fail clearly without config or usable local index; bind stdio transport to one repo |
+| retained serve shim | [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts) | hold the final command shape and fail clearly until Epic 05 implements the HTTP lifecycle |
 
 ## Active State Layout
 
@@ -35,7 +36,7 @@ Epic 03 uses the v1 `.codenexus/` layout already locked in [repo-state-model.md]
 - `.codenexus/kuzu/`
 - `.codenexus/runtime.json`
 
-Only the first three are exercised by the retained `gitnexus` shims in Epic 03. `runtime.json` remains part of the storage contract, but the repo-local HTTP lifecycle that owns it remains an Epic 05 concern.
+Only the first three are exercised by the retained CLI shims through Epic 04. `runtime.json` remains part of the storage contract, but the repo-local HTTP lifecycle that owns it remains an Epic 05 concern.
 
 ## Hard-Cut Removals
 
@@ -49,17 +50,16 @@ Epic 03 removes the old active architecture rather than adapting it:
 - no active `repo` parameter routing semantics
 - no `.gitnexus/` runtime ownership
 
-## Retained Transitional Behavior
+## Epic 04 CLI Surface
 
-The retained `gitnexus analyze`, `gitnexus status`, and `gitnexus mcp` commands are transitional shims only.
+Epic 04 replaces the inherited user-facing CLI with:
 
-They are allowed to fail clearly when:
+- `codenexus init`
+- `codenexus index`
+- `codenexus status`
+- `codenexus serve`
 
-- `.codenexus/config.toml` is missing
-- config is invalid
-- a usable local index does not exist
-
-They must not silently create config or preserve the old registry model for compatibility.
+`codenexus serve` intentionally fails clearly until Epic 05 implements the repo-local HTTP lifecycle. The CLI must not silently fall back to inherited transport behavior for compatibility.
 
 ## Separation From Later Epics
 
@@ -71,9 +71,9 @@ Epic 03 owns:
 
 Epic 04 still owns:
 
-- the user-facing `cn` CLI shape
-- `cn init`
-- final command naming and user ergonomics
+- the final user-facing CLI shape
+- `codenexus init`
+- command-module renaming and user ergonomics
 
 Epic 05 still owns:
 

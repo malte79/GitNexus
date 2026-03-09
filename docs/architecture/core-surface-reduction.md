@@ -23,9 +23,9 @@ The reduction rule used here is strict:
 | `gitnexus/src/core/augmentation/` | hook/search augmentation | remove now | Side-system not required for the headless core |
 | `gitnexus/src/core/embeddings/` | semantic embeddings | remove now | Explicitly deferred future upgrade |
 | `gitnexus/src/core/search/hybrid-search.ts` | semantic+BM25 blend | remove now | Embeddings removed; lexical search remains |
-| `gitnexus/src/cli/analyze.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to future `cn index` |
-| `gitnexus/src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `cn status` |
-| `gitnexus/src/cli/mcp.ts` | MCP entrypoint | keep for epic 05 | Still the shortest path to repo-local MCP work |
+| `gitnexus/src/cli/index-command.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to `codenexus index` |
+| `gitnexus/src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `codenexus status` |
+| `gitnexus/src/cli/serve.ts` | serve entrypoint | keep for epic 05 | Holds the final `codenexus serve` surface ahead of the HTTP lifecycle work |
 | `gitnexus/src/cli/index.ts` | CLI dispatcher | keep for epic 04 | Required CLI seam, but reduced to the minimal current surface |
 | `gitnexus/src/cli/setup.ts` | editor/plugin setup | remove now | Outside the headless product |
 | `gitnexus/src/cli/serve.ts` | web UI server command | remove now | Web UI is no longer a product surface |
@@ -58,9 +58,9 @@ The reduction rule used here is strict:
 
 After this reduction, the intended active product surface is:
 
-- local indexing via `gitnexus analyze`
-- local status via `gitnexus status`
-- MCP via `gitnexus mcp`
+- local indexing via `codenexus index`
+- local status via `codenexus status`
+- local service command via `codenexus serve`
 - the ingestion, graph, Kuzu, search, MCP, and storage seams needed for Epics 03-05
 
 Removed from first-class product scope:
@@ -81,7 +81,7 @@ Before:
 
 After:
 
-- headless package plus planning/docs/workflow surfaces, with only the indexing, status, MCP, and core graph-engine seams left active
+- headless package plus planning/docs/workflow surfaces, with only the indexing, status, serve, and core graph-engine seams left active
 
 ## Post-Epic-03 Note
 

@@ -1,138 +1,213 @@
 # Epics Todo
 
-This document is a planning list only. It does not create actual epics yet.
+This document is a planning list only. It does not create actual epics by itself.
 
-The intent is to define the major epics in the best implementation order, with enough context to guide later epic creation. Each actual epic should be written and specified separately when work is ready to begin.
+The purpose is to keep the remaining roadmap current as the project changes. Completed epics stay here as context, but the main value of this file is to describe the next epics in the order they should be built.
 
-## Proposed Epic Sequence
+## Completed Foundations
 
-### 1. Product And Runtime Boundary
+### 00. Docs Discipline And Gates
 
-Define the target shape of CodeNexus before implementation work starts.
+Completed.
 
-- lock down `.codenexus` layout
-- separate config from runtime state
-- define the command surface
-- define the repo-local MCP-over-HTTP model
-- define core invariants
+This established the docs policy, governed-doc surfaces, docs lint, docs-contract checks, and required docs gates before merge.
 
-This is the foundation epic.
+### 01. Product And Runtime Boundary
 
-### 2. Core Surface Reduction
+Completed.
 
-Strip away non-core product surfaces and decide what is kept, deferred, or removed.
+This locked the product contract for CodeNexus:
 
-- reduce the system toward a headless core
-- identify what stays
-- identify what is deferred
-- identify what is removed
+- `.codenexus` as the repo-local state boundary
+- config versus runtime separation
+- repo-local HTTP MCP as the intended service model
+- command contracts for `codenexus init`, `codenexus index`, `codenexus status`, and `codenexus serve`
 
-Goal is reducing noise and risk before major architectural edits. This should happen immediately after Epic 1 so the rest of the work proceeds in a codebase with less non-core surface area and less cognitive drag.
+### 02. Core Surface Reduction
 
-### 3. Repo-Local State And Single-Repo Architecture
+Completed.
 
-Replace global registry and multi-repo assumptions with repo-owned state under `.codenexus`.
+This removed the non-core platform layers and reduced the repo to a headless code-intelligence core with only the seams needed for the next architecture epics.
 
-- redesign storage ownership around one repo
-- redesign runtime ownership around one repo
-- remove shared global control-plane assumptions
+### 03. Repo-Local State And Single-Repo Architecture
 
-This is the real architectural pivot.
+Completed.
 
-### 4. CLI Reshape
+This was the real pivot:
 
-Evolve the CLI toward:
+- no active global registry
+- no active multi-repo routing
+- `.codenexus` as the active state boundary
+- single-repo backend binding
+- retained `gitnexus` shims now run on the repo-local model
 
-- `cn init`
-- `cn index`
-- `cn status`
-- `cn mcp serve`
+## Remaining Epic Sequence
 
-This epic makes the new product shape visible and operable. It should also enforce the principle of no repo mutations outside `.codenexus` by default.
+### 04. CLI Reshape
 
-### 5. Repo-Local MCP HTTP Service
+Turn the now-correct architecture into the actual CodeNexus CLI product surface.
 
-Build the repo-scoped HTTP MCP server as the primary agent interface.
+Primary goals:
 
-- adapt or replace current MCP/backend plumbing
-- serve exactly one repo cleanly
-- make the repo-local runtime model real
+- add the `codenexus` executable as the canonical command
+- implement `codenexus init`
+- rename the indexing surface to `codenexus index`
+- align `codenexus status` with the already-locked repo-state model
+- establish the `codenexus serve` command surface that Epic 05 will complete
 
-### 6. Index Freshness And Manual Refresh Semantics
+What this brings:
 
-Define and implement the first durable freshness contract.
+- closes the intentional usability gap left after Epic 03
+- makes CodeNexus operable without relying on transitional `gitnexus` commands
+- makes activation explicit and repo-owned
 
-- manual refresh is acceptable initially
-- stale versus current behavior must be explicit
-- reporting and operational behavior must be concrete
+Important note:
 
-### 7. Luau Core Support
+- Epic 04 should fully own `codenexus init`, `codenexus index`, and `codenexus status`
+- it should establish the `codenexus serve` command shape
+- but the actual repo-local HTTP service lifecycle still belongs to Epic 05
 
-Add Luau parsing and graph extraction at the language level.
+### 05. Repo-Local MCP HTTP Service
 
-- syntax support
-- code graph extraction
-- language-level indexing support
+Build the real repo-local MCP-over-HTTP service on top of the single-repo architecture from Epic 03 and the CLI surface from Epic 04.
 
-This is language support first, not full Roblox semantics yet.
+Primary goals:
 
-### 8. Roblox And Rojo Resolution
+- make `codenexus serve` real
+- bind one repo to one configured port
+- own `.codenexus/runtime.json` through the actual service lifecycle
+- expose the MCP tool surface over HTTP as the primary agent interface
 
-Add Rojo-aware repo understanding and Roblox-specific module and path resolution.
+What this brings:
 
-- Rojo project structure
-- Roblox-aware module resolution
-- `game:GetService(...)`
-- `script.Parent`
-- `WaitForChild(...)`
-- client/shared/server boundaries
+- the repo-local agent service model becomes real, not just specified
+- agents can target one long-lived repo service directly
+- the temporary stdio-focused transition can stop being the main story
 
-This is what makes Luau support actually useful for Roblox game repos.
+### 06. Index Freshness And Manual Refresh Semantics
 
-### 9. Branch And Repo State Intelligence
+Tighten the operational behavior around current versus stale indexes now that the repo-local service and CLI exist.
 
-Handle branch switching, staleness on branch changes, and possibly separate per-branch index management.
+Primary goals:
 
-This should come after the repo-local core is stable.
+- make manual refresh behavior explicit and durable
+- tighten stale/current reporting across CLI and service
+- define what happens operationally when code changes under an existing index
+
+What this brings:
+
+- clearer operator and agent behavior
+- fewer ambiguous stale-state edge cases
+- a stable base before more advanced update logic is added
+
+Important note:
+
+- this is still the manual/explicit freshness epic
+- smarter delta refresh remains later work unless pulled forward deliberately
+
+### 07. Luau Core Support
+
+Add Luau to the language engine itself.
+
+Primary goals:
+
+- parser integration
+- symbol extraction
+- graph extraction
+- baseline search/query/index support for Luau code
+
+What this brings:
+
+- CodeNexus can index Luau repos at the language level
+- Roblox-specific support has a real foundation instead of special cases on top of unsupported code
+
+Important note:
+
+- this is language support first
+- Roblox semantics and Rojo resolution still belong to Epic 08
+
+### 08. Roblox And Rojo Resolution
+
+Make Luau support actually useful for real Roblox projects, specifically Rojo-based ones.
+
+Primary goals:
+
+- read Rojo project structure
+- resolve Roblox module paths and instance-tree patterns
+- understand common static patterns like:
+  - `game:GetService(...)`
+  - `script.Parent`
+  - `WaitForChild(...)`
+- model client/shared/server boundaries correctly
+
+What this brings:
+
+- CodeNexus becomes genuinely useful on Rojo Roblox game repos
+- agents stop paying the manual “Roblox tax” of reconstructing module and instance relationships by grep
+
+Important note:
+
+- Rojo-first remains the intended initial scope
+- broad Roblox support beyond Rojo is still out of scope for the early product
+
+### 09. Branch And Repo State Intelligence
+
+Teach the repo-local system to reason about branch changes and longer-lived repo state.
+
+Primary goals:
+
+- detect branch changes cleanly
+- refine stale-state behavior across branches
+- decide whether separate per-branch indexes are required
+- make repo-state reporting less naive over time
+
+What this brings:
+
+- fewer surprises when switching branches
+- a path toward branch-aware index management
+- a more durable repo-local operating model for real day-to-day use
 
 ### 10. Deferred Intelligence Upgrades
 
-This bucket is intentionally late and should include things like:
+This remains the intentionally late bucket for higher-end capabilities once the core product is stable.
+
+Likely contents:
 
 - embeddings
 - world projection ingestion
 - richer semantic retrieval
 - smarter delta refresh
-- other advanced capabilities
+- other advanced retrieval or runtime intelligence layers
 
-These are important, but not part of the earliest useful CodeNexus product.
+What this brings:
 
-## Why This Split
+- deeper agent leverage after the product is already solid
+- differentiating intelligence features without destabilizing the core roadmap too early
 
-The first five epics establish the product.
+## Why The Remaining Order Looks Like This
 
-- Product And Runtime Boundary
-- Core Surface Reduction
-- Repo-Local State And Single-Repo Architecture
-- CLI Reshape
-- Repo-Local MCP HTTP Service
+The next two epics finish making CodeNexus a usable product:
 
-The next three make it useful in the target domain.
+- Epic 04: CLI Reshape
+- Epic 05: Repo-Local MCP HTTP Service
 
-- Index Freshness And Manual Refresh Semantics
-- Luau Core Support
-- Roblox And Rojo Resolution
+Then the next epic stabilizes operation:
 
-The final items deepen intelligence and ergonomics after the core is stable.
+- Epic 06: Index Freshness And Manual Refresh Semantics
 
-- Branch And Repo State Intelligence
-- Deferred Intelligence Upgrades
+Then the next two epics make the product useful for the target Roblox/Luau domain:
+
+- Epic 07: Luau Core Support
+- Epic 08: Roblox And Rojo Resolution
+
+Then the final two deepen robustness and intelligence:
+
+- Epic 09: Branch And Repo State Intelligence
+- Epic 10: Deferred Intelligence Upgrades
 
 ## Planning Notes
 
-Several decisions depend on earlier ones. For example, Luau or Roblox support should not land before the repo-local state and runtime shape is clear.
-
-This should not become a rolling refactor effort with vague direction. The first epic should be a boundary-definition epic, not a code-change epic.
+The roadmap is now past the foundational and architectural pivot work. Remaining epics should avoid reopening settled decisions from Epics 00-03 unless implementation reveals a real contradiction.
 
 When actual epics are created, each one should answer:
 
@@ -143,7 +218,7 @@ When actual epics are created, each one should answer:
 
 ## Things Not To Treat As Early Standalone Epics
 
-The following should not become early standalone epics:
+The following still should not become early standalone epics:
 
 - full rename epic
 - storage engine migration epic

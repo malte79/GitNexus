@@ -643,7 +643,7 @@ export const loadFTSExtension = async (): Promise<void> => {
     if (msg.includes('already loaded') || msg.includes('already installed') || msg.includes('already exists')) {
       ftsLoaded = true;
     } else {
-      console.error('GitNexus: FTS extension load failed:', msg);
+      console.error('CodeNexus: FTS extension load failed:', msg);
     }
   }
 };

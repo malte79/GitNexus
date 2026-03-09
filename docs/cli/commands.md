@@ -4,20 +4,20 @@
 
 This document defines the v1 user-facing contract for:
 
-- `cn init`
-- `cn index`
-- `cn status`
-- `cn mcp serve`
+- `codenexus init`
+- `codenexus index`
+- `codenexus status`
+- `codenexus serve`
 
 All commands resolve the nearest enclosing git root as the active repo boundary.
 
-## Transition Note
+## Epic 04 Posture
 
-During Epic 03, the retained `gitnexus analyze`, `gitnexus status`, and `gitnexus mcp` commands are transitional shims over the new repo-local architecture.
+Epic 04 makes `codenexus` the only user-facing CLI.
 
-They are allowed to fail clearly when `.codenexus/config.toml` is missing or invalid. They must not silently bootstrap config before `cn init` exists.
+`codenexus serve` exists in this epic as the final command shape, but it fails clearly until Epic 05 delivers the real repo-local HTTP service lifecycle.
 
-## `cn init`
+## `codenexus init`
 
 Activate CodeNexus for the current repo boundary.
 
@@ -29,10 +29,11 @@ Side effects:
 
 - create `.codenexus/` if missing
 - create `.codenexus/config.toml` if missing
+- initial v1 config uses port `4747`
 
 Contract:
 
-- `cn init` is idempotent
+- `codenexus init` is idempotent
 - if config already exists, it succeeds without silently changing existing values
 - it must not create index or runtime files
 - it must not mutate files outside `.codenexus/`
@@ -48,7 +49,7 @@ State transitions:
 - `initialized_unindexed -> initialized_unindexed`
 - any indexed or serving state remains unchanged except for no-op confirmation
 
-## `cn index`
+## `codenexus index`
 
 Build or refresh the local repo index.
 
@@ -64,7 +65,7 @@ Side effects:
 
 Contract:
 
-- `cn index` is both the initial build and the manual refresh command in v1
+- `codenexus index` is both the initial build and the manual refresh command in v1
 - it must not rewrite `config.toml`
 - it must not mutate files outside `.codenexus/`
 - it may run on a dirty working tree, but v1 freshness remains conservative and may still classify the resulting index as stale
@@ -81,9 +82,9 @@ State transitions:
 - `initialized_unindexed -> indexed_stale` when freshness is stale
 - `indexed_stale -> indexed_current` when refresh clears stale conditions
 - `indexed_current -> indexed_stale` when refreshed while stale conditions remain
-- when a service is already running, `cn index` refreshes on-disk index state only; v1 does not promise live service reload semantics
+- when a service is already running, `codenexus index` refreshes on-disk index state only; v1 does not promise live service reload semantics
 
-## `cn status`
+## `codenexus status`
 
 Report repo configuration, index freshness, and service state.
 
@@ -97,7 +98,7 @@ Side effects:
 
 Contract:
 
-- `cn status` is read-only
+- `codenexus status` is read-only
 - it may read `.codenexus/config.toml`, `.codenexus/meta.json`, and `.codenexus/runtime.json`
 - it may probe the local MCP HTTP service if present
 - live service checks are bounded and must not hang indefinitely
@@ -111,16 +112,22 @@ Failure cases:
 
 Reporting expectations:
 
-`cn status` must report:
+`codenexus status` must report:
 
 - the canonical base state
 - applicable detail flags
 - current configured port when available
 - whether live service information overrode stale runtime metadata
 
-## `cn mcp serve`
+## `codenexus serve`
 
 Start the repo-local MCP HTTP service for the active repo boundary.
+
+Current Epic 04 behavior:
+
+- the command exists
+- it fails clearly and explicitly until Epic 05 implements the actual service lifecycle
+- it must not silently fall back to inherited stdio MCP behavior
 
 Preconditions:
 
@@ -140,7 +147,7 @@ Contract:
 - no silent port reassignment is allowed
 - stale indexes may be served only with explicit degraded reporting
 - no silent auto-refresh is allowed on serve
-- `cn mcp serve` must not rewrite `config.toml`
+- `codenexus serve` must not rewrite `config.toml`
 
 Failure cases:
 

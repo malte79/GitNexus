@@ -169,8 +169,8 @@ function validateMeta(raw: unknown): RepoMeta {
   if (raw.version !== 1) {
     throw new Error('Index metadata version must be 1');
   }
-  if (typeof raw.indexed_head !== 'string' || !raw.indexed_head) {
-    throw new Error('Index metadata indexed_head is required');
+  if (typeof raw.indexed_head !== 'string') {
+    throw new Error('Index metadata indexed_head must be a string');
   }
   if (typeof raw.indexed_branch !== 'string') {
     throw new Error('Index metadata indexed_branch is required');

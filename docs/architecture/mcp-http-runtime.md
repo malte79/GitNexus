@@ -4,6 +4,11 @@
 
 This document defines the v1 repo-local MCP-over-HTTP service contract for one CodeNexus repo boundary.
 
+Epic 04 note:
+
+- `codenexus serve` is now the final user-facing command shape
+- the actual runtime lifecycle described below is still an Epic 05 delivery
+
 ## Runtime Scope
 
 - one running service corresponds to one repo boundary
@@ -13,7 +18,7 @@ This document defines the v1 repo-local MCP-over-HTTP service contract for one C
 
 ## Config Discovery
 
-`cn mcp serve` resolves the active repo boundary and then reads:
+`codenexus serve` resolves the active repo boundary and then reads:
 
 - `.codenexus/config.toml`
 
@@ -31,13 +36,13 @@ The service must fail if:
 
 ## Runtime Metadata
 
-On successful startup, `cn mcp serve` writes `.codenexus/runtime.json` with the required runtime fields defined in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
+On successful startup, `codenexus serve` writes `.codenexus/runtime.json` with the required runtime fields defined in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
 
-Only `cn mcp serve` owns `runtime.json` writes in v1.
+Only `codenexus serve` owns `runtime.json` writes in v1.
 
-`cn status` may read and compare runtime metadata, but it must not rewrite it.
+`codenexus status` may read and compare runtime metadata, but it must not rewrite it.
 
-V1 does not define live service hot-reload behavior when `cn index` rewrites on-disk index state. A refreshed on-disk index does not by itself imply that an already-running service has re-opened or adopted that index without restart.
+V1 does not define live service hot-reload behavior when `codenexus index` rewrites on-disk index state. A refreshed on-disk index does not by itself imply that an already-running service has re-opened or adopted that index without restart.
 
 ## Health Model
 
@@ -50,7 +55,7 @@ The service health contract is:
 
 Epic 03 limitation:
 
-- until the repo-local HTTP service exists, `cn status` only has a bounded TCP probe rather than a service-specific health endpoint
+- until the repo-local HTTP service exists, `codenexus status` only has a bounded TCP probe rather than a service-specific health endpoint
 - because that probe cannot prove repo identity on its own, a reachable configured port with missing `runtime.json` is reported as indexed state plus `runtime_metadata_stale`, not as a confirmed serving state
 - confirmed `serving_current` or `serving_stale` requires both a live probe and matching runtime metadata in Epic 03
 
@@ -58,7 +63,7 @@ Epic 03 limitation:
 
 ### Missing Index
 
-`cn mcp serve` must refuse to start if no usable local index exists.
+`codenexus serve` must refuse to start if no usable local index exists.
 
 ### Current Index
 
@@ -74,7 +79,7 @@ If the index is stale, the service may still start, but it must report degraded 
 
 If a healthy service already exists for the same repo boundary:
 
-- the new `cn mcp serve` attempt fails loudly
+- the new `codenexus serve` attempt fails loudly
 - it reports the existing service PID and port
 - it must not rewrite `runtime.json` unnecessarily
 

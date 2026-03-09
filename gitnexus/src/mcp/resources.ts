@@ -112,7 +112,7 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   const context = backend.getContext();
 
   if (!context) {
-    return 'error: No codebase loaded. Create .codenexus/config.toml and run gitnexus analyze';
+    return 'error: No codebase loaded. Create .codenexus/config.toml and run codenexus index';
   }
 
   const staleness = checkStaleness(repo.repoPath, repo.lastCommit || 'HEAD');
@@ -155,7 +155,7 @@ async function getClustersResource(backend: LocalBackend): Promise<string> {
     const result = await backend.queryClusters(100);
 
     if (!result.clusters || result.clusters.length === 0) {
-      return 'modules: []\n# No functional areas detected. Run: gitnexus analyze';
+      return 'modules: []\n# No functional areas detected. Run: codenexus index';
     }
 
     const displayLimit = 20;
@@ -186,7 +186,7 @@ async function getProcessesResource(backend: LocalBackend): Promise<string> {
     const result = await backend.queryProcesses(50);
 
     if (!result.processes || result.processes.length === 0) {
-      return 'processes: []\n# No processes detected. Run: gitnexus analyze';
+      return 'processes: []\n# No processes detected. Run: codenexus index';
     }
 
     const displayLimit = 20;
@@ -211,7 +211,7 @@ async function getProcessesResource(backend: LocalBackend): Promise<string> {
 }
 
 function getSchemaResource(): string {
-  return `# GitNexus Graph Schema
+  return `# CodeNexus Graph Schema
 
 nodes:
   - File: Source code files

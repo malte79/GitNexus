@@ -1,0 +1,64 @@
+/**
+ * Init Command
+ *
+ * Activates CodeNexus for the nearest enclosing repo boundary by creating
+ * `.codenexus/config.toml` when it does not already exist.
+ */
+
+import fs from 'fs/promises';
+import {
+  getStoragePaths,
+  loadConfigStrict,
+  resolveRepoBoundary,
+  saveConfig,
+  type CodeNexusConfig,
+} from '../storage/repo-manager.js';
+
+const DEFAULT_CONFIG: CodeNexusConfig = {
+  version: 1,
+  port: 4747,
+};
+
+async function fileExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const initCommand = async () => {
+  const boundary = resolveRepoBoundary(process.cwd());
+  if (!boundary) {
+    console.error('Not inside a git repository.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const { repoRoot } = boundary;
+  const { storagePath, configPath } = getStoragePaths(repoRoot);
+
+  if (await fileExists(configPath)) {
+    try {
+      const existing = await loadConfigStrict(storagePath);
+      console.log(`CodeNexus is already initialized for ${repoRoot}`);
+      console.log(`Config: ${configPath}`);
+      console.log(`Port: ${existing.port}`);
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Invalid CodeNexus config at ${configPath}`);
+      console.error(message);
+      console.error('Repair the existing config and rerun `codenexus init`.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  await saveConfig(storagePath, DEFAULT_CONFIG);
+
+  console.log(`Initialized CodeNexus for ${repoRoot}`);
+  console.log(`Created ${configPath}`);
+  console.log(`Port: ${DEFAULT_CONFIG.port}`);
+};

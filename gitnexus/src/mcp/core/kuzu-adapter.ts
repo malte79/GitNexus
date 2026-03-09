@@ -90,9 +90,9 @@ function closeOne(repoId: string): void {
   const entry = pool.get(repoId);
   if (!entry) return;
   for (const conn of entry.available) {
-    try { conn.close(); } catch (e) { console.error('GitNexus [pool:close-conn]:', e instanceof Error ? e.message : e); }
+    try { conn.close(); } catch (e) { console.error('CodeNexus [pool:close-conn]:', e instanceof Error ? e.message : e); }
   }
-  try { entry.db.close(); } catch (e) { console.error('GitNexus [pool:close-db]:', e instanceof Error ? e.message : e); }
+  try { entry.db.close(); } catch (e) { console.error('CodeNexus [pool:close-db]:', e instanceof Error ? e.message : e); }
   pool.delete(repoId);
 }
 
@@ -132,7 +132,7 @@ const LOCK_RETRY_DELAY_MS = 2000;
 
 /**
  * Initialize (or reuse) a Database + connection pool for a specific repo.
- * Retries on lock errors (e.g., when `gitnexus analyze` is running).
+ * Retries on lock errors (e.g., when `codenexus index` is running).
  */
 export const initKuzu = async (repoId: string, dbPath: string): Promise<void> => {
   const existing = pool.get(repoId);
@@ -145,14 +145,14 @@ export const initKuzu = async (repoId: string, dbPath: string): Promise<void> =>
   try {
     await fs.stat(dbPath);
   } catch {
-    throw new Error(`KuzuDB not found at ${dbPath}. Run: gitnexus analyze`);
+    throw new Error(`KuzuDB not found at ${dbPath}. Run: codenexus index`);
   }
 
   evictLRU();
 
   // Open in read-only mode — MCP server never writes to the database.
   // This allows multiple MCP server instances to read concurrently, and
-  // avoids lock conflicts when `gitnexus analyze` is writing.
+  // avoids lock conflicts when `codenexus index` is writing.
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= LOCK_RETRY_ATTEMPTS; attempt++) {
     silenceStdout();

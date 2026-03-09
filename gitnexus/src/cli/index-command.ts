@@ -1,5 +1,5 @@
 /**
- * Analyze Command
+ * Index Command
  *
  * Indexes a repository and stores the knowledge graph in .codenexus/
  */
@@ -41,7 +41,7 @@ function ensureHeap(): boolean {
   return true;
 }
 
-export interface AnalyzeOptions {
+export interface IndexOptions {
   force?: boolean;
   indexOnly?: boolean;
 }
@@ -61,17 +61,24 @@ const PHASE_LABELS: Record<string, string> = {
   done: 'Done',
 };
 
-export const analyzeCommand = async (
+export const indexCommand = async (
   inputPath?: string,
-  options?: AnalyzeOptions,
+  options?: IndexOptions,
 ) => {
   if (ensureHeap()) return;
 
-  console.log('\n  GitNexus Analyzer\n');
+  console.log('\n  CodeNexus Indexer\n');
 
   let repoPath: string;
   if (inputPath) {
-    repoPath = path.resolve(inputPath);
+    const resolvedPath = path.resolve(inputPath);
+    const gitRoot = getGitRoot(resolvedPath);
+    if (!gitRoot) {
+      console.log('  Not a git repository\n');
+      process.exitCode = 1;
+      return;
+    }
+    repoPath = gitRoot;
   } else {
     const gitRoot = getGitRoot(process.cwd());
     if (!gitRoot) {
@@ -93,6 +100,7 @@ export const analyzeCommand = async (
   if (!config) {
     console.log('  Repo is not initialized for CodeNexus\n');
     console.log('  Missing or invalid .codenexus/config.toml\n');
+    console.log('  Run `codenexus init` first.\n');
     process.exitCode = 1;
     return;
   }
@@ -256,7 +264,7 @@ export const analyzeCommand = async (
   console.log(`  ${repoPath}`);
 
   if (options?.indexOnly) {
-    console.log('  Note: --index-only is satisfied by default; analyze no longer mutates repo files outside .codenexus.');
+    console.log('  Note: --index-only is satisfied by default; codenexus index no longer mutates repo files outside .codenexus.');
   }
 
   if (kuzuWarnings.length > 0) {
