@@ -20,6 +20,23 @@ export const getCurrentCommit = (repoPath: string): string => {
   }
 };
 
+export const getCurrentBranch = (repoPath: string): string => {
+  try {
+    return execSync('git branch --show-current', { cwd: repoPath }).toString().trim();
+  } catch {
+    return '';
+  }
+};
+
+export const isWorkingTreeDirty = (repoPath: string): boolean => {
+  try {
+    const output = execSync('git status --porcelain', { cwd: repoPath }).toString().trim();
+    return output.length > 0;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Find the git repository root from any path inside the repo
  */

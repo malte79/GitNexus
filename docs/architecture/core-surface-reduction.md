@@ -82,3 +82,13 @@ Before:
 After:
 
 - headless package plus planning/docs/workflow surfaces, with only the indexing, status, MCP, and core graph-engine seams left active
+
+## Post-Epic-03 Note
+
+The retained surfaces above are no longer registry-backed multi-repo seams.
+
+After Epic 03:
+
+- `.codenexus/` is the active repo-local state boundary
+- the retained backend is bound to one repo boundary
+- repo-discovery affordances such as `list_repos` and `gitnexus://repos` are gone from the active runtime surface

@@ -15,9 +15,9 @@ program
 
 program
   .command('analyze [path]')
-  .description('Index a repository into the local .gitnexus state')
+  .description('Index a repository into the local .codenexus state')
   .option('-f, --force', 'Force full re-index even if up to date')
-  .option('--index-only', 'Index without mutating repo files outside .gitnexus/')
+  .option('--index-only', 'Index without mutating repo files outside .codenexus/')
   .action(createLazyAction(() => import('./analyze.js'), 'analyzeCommand'));
 
 program

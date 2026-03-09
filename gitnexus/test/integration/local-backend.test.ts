@@ -2,7 +2,7 @@
  * P0 Integration Tests: Local Backend
  *
  * Tests tool implementations via direct KuzuDB queries.
- * The full LocalBackend.callTool() requires a global registry,
+ * The full LocalBackend.callTool() is bound to one repo-local index,
  * so here we test the security-critical behaviors directly:
  * - Write-operation blocking in cypher
  * - Query execution via the pool

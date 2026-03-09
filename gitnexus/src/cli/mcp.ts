@@ -22,17 +22,18 @@ export const mcpCommand = async () => {
     console.error(`GitNexus MCP: unhandled rejection — ${msg}`);
   });
 
-  // Initialize the current registry-backed backend.
   const backend = new LocalBackend();
-  await backend.init();
+  const ready = await backend.init();
 
-  const repos = await backend.listRepos();
-  if (repos.length === 0) {
-    console.error('GitNexus: No indexed repos yet. Run `gitnexus analyze` in a git repo — the server will pick it up automatically.');
-  } else {
-    console.error(`GitNexus: MCP server starting with ${repos.length} repo(s): ${repos.map(r => r.name).join(', ')}`);
+  if (!ready) {
+    console.error('GitNexus: No usable local .codenexus index for the current repo boundary.');
+    console.error('GitNexus: Create .codenexus/config.toml and run `gitnexus analyze` first.');
+    process.exitCode = 1;
+    return;
   }
 
-  // Start the current stdio MCP server.
+  const repo = await backend.resolveRepo();
+  console.error(`GitNexus: MCP server starting for ${repo.repoPath}`);
+
   await startMCPServer(backend);
 };
