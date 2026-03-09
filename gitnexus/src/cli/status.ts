@@ -30,7 +30,9 @@ export const statusCommand = async () => {
   }
   if (state.meta) {
     console.log(`Indexed: ${new Date(state.meta.indexed_at).toLocaleString()}`);
-    console.log(`Indexed commit: ${state.meta.indexed_head.slice(0, 7)}`);
+    if (state.meta.indexed_head) {
+      console.log(`Indexed commit: ${state.meta.indexed_head.slice(0, 7)}`);
+    }
   }
   if (state.currentHead) {
     console.log(`Current commit: ${state.currentHead.slice(0, 7)}`);

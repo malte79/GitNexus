@@ -31,7 +31,7 @@
     "vendor"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "dev": "tsx watch src/cli/index.ts",
     "lint:docs": "node scripts/lint-docs.mjs",
     "check:docs-contracts": "node scripts/check-docs-contracts.mjs",
@@ -56,6 +56,7 @@
     "lru-cache": "^11.0.0",
     "mnemonist": "^0.39.0",
     "pandemonium": "^2.4.0",
+    "smol-toml": "^1.4.1",
     "tree-sitter": "^0.21.0",
     "tree-sitter-c": "^0.21.0",
     "tree-sitter-c-sharp": "^0.21.0",
@@ -81,7 +82,6 @@
     "@vitest/coverage-v8": "^4.0.18",
     "markdownlint-cli2": "^0.18.1",
     "minimatch": "^10.0.3",
-    "smol-toml": "^1.4.1",
     "tsx": "^4.0.0",
     "typescript": "^5.4.5",
     "vitest": "^4.0.18"

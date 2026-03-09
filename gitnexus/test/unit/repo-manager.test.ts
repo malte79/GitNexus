@@ -119,6 +119,33 @@ describe('repo-local state', () => {
     await repo.cleanup();
   });
 
+  it('treats an index created before the first commit as indexed_stale, not unindexed', async () => {
+    const repo = await createTempDir('repo-manager-no-commit-');
+    execSync('git init -q', { cwd: repo.dbPath });
+    execSync('git config user.email "test@example.com"', { cwd: repo.dbPath });
+    execSync('git config user.name "Test User"', { cwd: repo.dbPath });
+    await fs.writeFile(path.join(repo.dbPath, '.gitignore'), '.codenexus/\n', 'utf-8');
+    await fs.writeFile(path.join(repo.dbPath, 'hello.ts'), 'export const hello = 42;\n', 'utf-8');
+
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await saveConfig(storagePath, { version: 1, port: 4747 });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: '',
+      indexed_branch: 'master',
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: true,
+      worktree_root: repo.dbPath,
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('indexed_stale');
+    expect(state?.meta?.indexed_head).toBe('');
+    expect(state?.detailFlags).toContain('working_tree_dirty');
+    await repo.cleanup();
+  });
+
   it('loads a usable indexed repo only when config, meta, and kuzu exist', async () => {
     const repo = await createGitRepo('repo-manager-indexed-');
     await ignoreCodeNexusDir(repo.dbPath);
