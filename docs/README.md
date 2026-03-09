@@ -12,6 +12,7 @@ Stable documentation categories:
   - product shape
   - runtime contracts
   - filesystem/state ownership
+  - reduction inventories for deliberate repo simplification
 - `docs/cli/`
   - command behavior and usage contracts
 - `docs/decisions/`

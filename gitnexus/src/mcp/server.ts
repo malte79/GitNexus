@@ -1,14 +1,9 @@
 /**
- * MCP Server (Multi-Repo)
+ * MCP Server
  *
  * Model Context Protocol server that runs on stdio.
- * External AI tools (Cursor, Claude) spawn this process and
- * communicate via stdin/stdout using the MCP protocol.
- *
- * Supports multiple indexed repositories via the global registry.
- *
- * Tools: list_repos, query, cypher, context, impact, detect_changes, rename
- * Resources: repos, repo/{name}/context, repo/{name}/clusters, ...
+ * This remains as the current agent-facing seam while the repo-local
+ * HTTP runtime is built in later epics.
  */
 
 import { createRequire } from 'module';
@@ -20,8 +15,6 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
   ListResourceTemplatesRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { GITNEXUS_TOOLS } from './tools.js';
 import type { LocalBackend } from './local/local-backend.js';
@@ -92,7 +85,6 @@ export function createMCPServer(backend: LocalBackend): Server {
       capabilities: {
         tools: {},
         resources: {},
-        prompts: {},
       },
     }
   );
@@ -191,82 +183,6 @@ export function createMCPServer(backend: LocalBackend): Server {
       };
     }
   });
-
-  // Handle list prompts request
-  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-    prompts: [
-      {
-        name: 'detect_impact',
-        description: 'Analyze the impact of your current changes before committing. Guides through scope selection, change detection, process analysis, and risk assessment.',
-        arguments: [
-          { name: 'scope', description: 'What to analyze: unstaged, staged, all, or compare', required: false },
-          { name: 'base_ref', description: 'Branch/commit for compare scope', required: false },
-        ],
-      },
-      {
-        name: 'generate_map',
-        description: 'Generate architecture documentation from the knowledge graph. Creates a codebase overview with execution flows and mermaid diagrams.',
-        arguments: [
-          { name: 'repo', description: 'Repository name (omit if only one indexed)', required: false },
-        ],
-      },
-    ],
-  }));
-
-  // Handle get prompt request
-  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
-    if (name === 'detect_impact') {
-      const scope = args?.scope || 'all';
-      const baseRef = args?.base_ref || '';
-      return {
-        messages: [
-          {
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: `Analyze the impact of my current code changes before committing.
-
-Follow these steps:
-1. Run \`detect_changes(${JSON.stringify({ scope, ...(baseRef ? { base_ref: baseRef } : {}) })})\` to find what changed and affected processes
-2. For each changed symbol in critical processes, run \`context({name: "<symbol>"})\` to see its full reference graph
-3. For any high-risk items (many callers or cross-process), run \`impact({target: "<symbol>", direction: "upstream"})\` for blast radius
-4. Summarize: changes, affected processes, risk level, and recommended actions
-
-Present the analysis as a clear risk report.`,
-            },
-          },
-        ],
-      };
-    }
-
-    if (name === 'generate_map') {
-      const repo = args?.repo || '';
-      return {
-        messages: [
-          {
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: `Generate architecture documentation for this codebase using the knowledge graph.
-
-Follow these steps:
-1. READ \`gitnexus://repo/${repo || '{name}'}/context\` for codebase stats
-2. READ \`gitnexus://repo/${repo || '{name}'}/clusters\` to see all functional areas
-3. READ \`gitnexus://repo/${repo || '{name}'}/processes\` to see all execution flows
-4. For the top 5 most important processes, READ \`gitnexus://repo/${repo || '{name}'}/process/{name}\` for step-by-step traces
-5. Generate a mermaid architecture diagram showing the major areas and their connections
-6. Write an ARCHITECTURE.md file with: overview, functional areas, key execution flows, and the mermaid diagram`,
-            },
-          },
-        ],
-      };
-    }
-
-    throw new Error(`Unknown prompt: ${name}`);
-  });
-
   return server;
 }
 

@@ -1,8 +1,9 @@
 /**
- * MCP Resources (Multi-Repo)
- * 
+ * MCP Resources
+ *
  * Provides structured on-demand data to AI agents.
- * All resources use repo-scoped URIs: gitnexus://repo/{name}/context
+ * The current backend still exposes repo-scoped URIs while the
+ * single-repo runtime rewrite is pending.
  */
 
 import type { LocalBackend } from './local/local-backend.js';
@@ -23,7 +24,7 @@ export interface ResourceTemplate {
 }
 
 /**
- * Static resources — includes per-repo resources and the global repos list
+ * Static resources
  */
 export function getResourceDefinitions(): ResourceDefinition[] {
   return [
@@ -32,12 +33,6 @@ export function getResourceDefinitions(): ResourceDefinition[] {
       name: 'All Indexed Repositories',
       description: 'List of all indexed repos with stats. Read this first to discover available repos.',
       mimeType: 'text/yaml',
-    },
-    {
-      uri: 'gitnexus://setup',
-      name: 'GitNexus Setup Content',
-      description: 'Returns AGENTS.md content for all indexed repos. Useful for setup/onboarding.',
-      mimeType: 'text/markdown',
     },
   ];
 }
@@ -91,7 +86,6 @@ export function getResourceTemplates(): ResourceTemplate[] {
  */
 function parseUri(uri: string): { repoName?: string; resourceType: string; param?: string } {
   if (uri === 'gitnexus://repos') return { resourceType: 'repos' };
-  if (uri === 'gitnexus://setup') return { resourceType: 'setup' };
 
   // Repo-scoped: gitnexus://repo/{name}/context
   const repoMatch = uri.match(/^gitnexus:\/\/repo\/([^/]+)\/(.+)$/);
@@ -123,11 +117,6 @@ export async function readResource(uri: string, backend: LocalBackend): Promise<
     return getReposResource(backend);
   }
   
-  // Setup resource — returns AGENTS.md content for all repos
-  if (parsed.resourceType === 'setup') {
-    return getSetupResource(backend);
-  }
-
   const repoName = parsed.repoName;
 
   switch (parsed.resourceType) {
@@ -222,7 +211,7 @@ async function getContextResource(backend: LocalBackend, repoName?: string): Pro
   lines.push('  - detect_changes: Git-diff impact analysis (what do your changes affect)');
   lines.push('  - rename: Multi-file coordinated rename with confidence tags');
   lines.push('  - cypher: Raw graph queries');
-  lines.push('  - list_repos: Discover all indexed repositories');
+  lines.push('  - list_repos: Discover indexed repositories in the current backend');
   lines.push('');
   lines.push('re_index: Run `npx gitnexus analyze` in terminal if data is stale');
   lines.push('');
@@ -425,49 +414,4 @@ async function getProcessDetailResource(name: string, backend: LocalBackend, rep
   } catch (err: any) {
     return `error: ${err.message}`;
   }
-}
-
-/**
- * Setup resource — generates AGENTS.md content for all indexed repos.
- * Useful for `gitnexus setup` onboarding or dynamic content injection.
- */
-async function getSetupResource(backend: LocalBackend): Promise<string> {
-  const repos = await backend.listRepos();
-
-  if (repos.length === 0) {
-    return '# GitNexus\n\nNo repositories indexed. Run: `npx gitnexus analyze` in a repository.';
-  }
-  
-  const sections: string[] = [];
-  
-  for (const repo of repos) {
-    const stats = repo.stats || {};
-    const lines = [
-      `# GitNexus MCP — ${repo.name}`,
-      '',
-      `This project is indexed by GitNexus as **${repo.name}** (${stats.nodes || 0} symbols, ${stats.edges || 0} relationships, ${stats.processes || 0} execution flows).`,
-      '',
-      '## Tools',
-      '',
-      '| Tool | What it gives you |',
-      '|------|-------------------|',
-      '| `query` | Process-grouped code intelligence — execution flows related to a concept |',
-      '| `context` | 360-degree symbol view — categorized refs, processes it participates in |',
-      '| `impact` | Symbol blast radius — what breaks at depth 1/2/3 with confidence |',
-      '| `detect_changes` | Git-diff impact — what do your current changes affect |',
-      '| `rename` | Multi-file coordinated rename with confidence-tagged edits |',
-      '| `cypher` | Raw graph queries |',
-      '| `list_repos` | Discover indexed repos |',
-      '',
-      '## Resources',
-      '',
-      `- \`gitnexus://repo/${repo.name}/context\` — Stats, staleness check`,
-      `- \`gitnexus://repo/${repo.name}/clusters\` — All functional areas`,
-      `- \`gitnexus://repo/${repo.name}/processes\` — All execution flows`,
-      `- \`gitnexus://repo/${repo.name}/schema\` — Graph schema for Cypher`,
-    ];
-    sections.push(lines.join('\n'));
-  }
-  
-  return sections.join('\n\n---\n\n');
 }

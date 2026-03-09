@@ -7,9 +7,6 @@ vi.mock('../../src/cli/analyze.js', () => ({
 vi.mock('../../src/cli/mcp.js', () => ({
   mcpCommand: vi.fn(),
 }));
-vi.mock('../../src/cli/setup.js', () => ({
-  setupCommand: vi.fn(),
-}));
 
 describe('CLI commands', () => {
   describe('version', () => {
@@ -55,10 +52,4 @@ describe('CLI commands', () => {
     });
   });
 
-  describe('setupCommand', () => {
-    it('is a function', async () => {
-      const { setupCommand } = await import('../../src/cli/setup.js');
-      expect(typeof setupCommand).toBe('function');
-    });
-  });
 });

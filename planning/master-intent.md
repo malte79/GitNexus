@@ -81,7 +81,7 @@ The v1 contract is intentionally minimal:
 
 ## Freshness And Indexing
 
-Automatic freshness should not be overpromised at the start. Manual refresh is acceptable for v1. The desirable future direction is smart refresh using deltas rather than full rebuilds, but the current codebase does not yet support true incremental graph refresh. Today it can skip a rebuild if the commit is unchanged, and it can preserve cached embeddings, but a changed repo still triggers a full rebuild.
+Automatic freshness should not be overpromised at the start. Manual refresh is acceptable for v1. The desirable future direction is smart refresh using deltas rather than full rebuilds, but the current codebase does not yet support true incremental graph refresh. Today it can skip a rebuild if the commit is unchanged, but a changed repo still triggers a full rebuild.
 
 The v1 repo-state model uses a finite base-state set with detail flags rather than pretending the runtime is fully self-healing. Durable freshness and state-transition rules live in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
 
@@ -193,6 +193,8 @@ Preferred strategy:
 2. redirect core flows toward repo-local `.codenexus/` ownership and repo-local MCP over HTTP
 3. isolate and disable non-core product surfaces
 4. remove dead code and dead tests only after the core path is stable
+
+The current reduction inventory and before/after repo surface are tracked in [core-surface-reduction.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/core-surface-reduction.md).
 
 This reduction should preserve the parts that actually do the work:
 

@@ -8,7 +8,6 @@ import {
   NODE_TABLES,
   REL_TABLE_NAME,
   SCHEMA_QUERIES,
-  EMBEDDING_TABLE_NAME,
   NodeTableName,
 } from './schema.js';
 import { streamAllCSVsToDisk } from './csv-generator.js';
@@ -537,41 +536,6 @@ export const getKuzuStats = async (): Promise<{ nodes: number; edges: number }> 
   return { nodes: totalNodes, edges: totalEdges };
 };
 
-/**
- * Load cached embeddings from KuzuDB before a rebuild.
- * Returns all embedding vectors so they can be re-inserted after the graph is reloaded,
- * avoiding expensive re-embedding of unchanged nodes.
- */
-export const loadCachedEmbeddings = async (): Promise<{
-  embeddingNodeIds: Set<string>;
-  embeddings: Array<{ nodeId: string; embedding: number[] }>;
-}> => {
-  if (!conn) {
-    return { embeddingNodeIds: new Set(), embeddings: [] };
-  }
-
-  const embeddingNodeIds = new Set<string>();
-  const embeddings: Array<{ nodeId: string; embedding: number[] }> = [];
-  try {
-    const rows = await conn.query(`MATCH (e:${EMBEDDING_TABLE_NAME}) RETURN e.nodeId AS nodeId, e.embedding AS embedding`);
-    const result = Array.isArray(rows) ? rows[0] : rows;
-    for (const row of await result.getAll()) {
-      const nodeId = String(row.nodeId ?? row[0] ?? '');
-      if (!nodeId) continue;
-      embeddingNodeIds.add(nodeId);
-      const embedding = row.embedding ?? row[1];
-      if (embedding) {
-        embeddings.push({
-          nodeId,
-          embedding: Array.isArray(embedding) ? embedding.map(Number) : Array.from(embedding as any).map(Number),
-        });
-      }
-    }
-  } catch { /* embedding table may not exist */ }
-
-  return { embeddingNodeIds, embeddings };
-};
-
 export const closeKuzu = async (): Promise<void> => {
   if (conn) {
     try {
@@ -645,15 +609,6 @@ export const deleteNodesForFile = async (filePath: string, dbPath?: string): Pro
       }
     }
     
-    // Also delete any embeddings for nodes in this file
-    try {
-      await targetConn!.query(
-        `MATCH (e:${EMBEDDING_TABLE_NAME}) WHERE e.nodeId STARTS WITH '${escapedPath}' DELETE e`
-      );
-    } catch {
-      // Embedding table may not exist or nodeId format may differ
-    }
-    
     return { deletedNodes };
   } finally {
     // Close per-query connection if used
@@ -665,8 +620,6 @@ export const deleteNodesForFile = async (filePath: string, dbPath?: string): Pro
     }
   }
 };
-
-export const getEmbeddingTableName = (): string => EMBEDDING_TABLE_NAME;
 
 // ============================================================================
 // Full-Text Search (FTS) Functions
