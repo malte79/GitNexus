@@ -1,7 +1,7 @@
 Title: Product And Runtime Boundary
 Assigned to: Agent 1
 Lane: Architecture
-Status: doing
+Status: done
 Objective: Lock the concrete product, runtime, and repo-state boundaries for CodeNexus so all later epics build against one explicit contract for repo ownership, command behavior, runtime state, and repo-local MCP service lifecycle.
 In scope: the `.codenexus` ownership contract; config versus runtime-state separation; v1 command contracts for `cn init`, `cn index`, `cn status`, and `cn mcp serve`; repo-local MCP-over-HTTP runtime contract; repo lifecycle states; staleness/freshness product semantics; explicit v1 invariants and non-goals.
 Out of scope: implementation changes to production code; multi-repo registry removal; CLI rewiring; MCP transport implementation; Luau parsing; Roblox/Rojo resolution; branch-aware indexing; embeddings; storage-engine migration; full `gitnexus` to `codenexus` rename sweep.
