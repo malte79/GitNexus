@@ -1,7 +1,7 @@
 Title: CLI Reshape
 Assigned to: Agent 1
 Lane: Product
-Status: doing
+Status: done
 Objective: Turn the repo-local architecture from Epic 03 into the actual CodeNexus CLI product surface by introducing the `codenexus` executable, implementing `codenexus init`, aligning `codenexus index` and `codenexus status` to the locked contracts, and establishing the `codenexus serve` command shape that Epic 05 will complete.
 In scope: adding `codenexus` as the canonical CLI entrypoint; removing user-facing `gitnexus` CLI naming entirely; implementing `codenexus init`; renaming or reshaping the retained indexing surface into `codenexus index`; aligning status output and behavior to the canonical repo-state model; defining the `codenexus serve` CLI surface and failure behavior before the HTTP lifecycle exists; package/bin/help text updates; docs and tests for the new CLI contract.
 Out of scope: implementing the repo-local HTTP MCP lifecycle itself; owning `.codenexus/runtime.json` through a real HTTP service; Luau or Roblox support; branch-aware indexing; automatic refresh or delta indexing; full repo/package rename sweep beyond the CLI/product surface; preserving old `gitnexus` UX for compatibility.
