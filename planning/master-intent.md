@@ -8,6 +8,27 @@ This fork is evolving from `GitNexus` into `CodeNexus`, a globally installed but
 
 Each repository should be self-contained and isolated. A repo that uses the tool is explicitly activated, and all index data plus runtime metadata should live only under `.codenexus/`. The tool should not mutate other files in the repo by default. The previously added `--index-only` behavior is important because it already aligns with that principle, and the broader product direction is pushing toward making that model the norm rather than an exception.
 
+## V1 Invariants
+
+- CodeNexus may create or update repo state only under `.codenexus/`
+- The no-mutation rule outside `.codenexus/` is absolute
+- The nearest enclosing git root is the operative repo boundary
+- Nested git repos are separate repo boundaries from their parents
+- Git worktrees are separate runtime boundaries in v1
+- The primary runtime interface is repo-local MCP over HTTP
+- Runtime metadata is advisory only; live service checks are authoritative
+- A stale index may be served only with explicit degraded reporting
+
+## V1 Non-Goals
+
+- global multi-repo control-plane behavior
+- stdio as the primary runtime transport
+- automatic background freshness guarantees
+- branch-specific index stores
+- repo mutation outside `.codenexus/`
+- human-oriented visualization as a core product surface
+- a storage-engine migration away from Kuzu
+
 ## Architecture Direction
 
 The product should not retain the current shared global control-plane model. Today the code stores the heavy index locally but still relies on a global registry and multi-repo routing. We confirmed that the current MCP server is not talking to a separate backend daemon; it is the backend. It loads a `LocalBackend`, resolves repos through the global registry, and queries each repo's local Kuzu DB directly.
@@ -35,6 +56,13 @@ HTTP is the chosen transport, not stdio, for the repo-local MCP service. The int
 - `cn status`
   - reports repo config, freshness, and whether the local MCP service is running
 
+Durable command and runtime contracts live in:
+
+- [product-and-runtime-boundary.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/product-and-runtime-boundary.md)
+- [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md)
+- [commands.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/cli/commands.md)
+- [mcp-http-runtime.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/mcp-http-runtime.md)
+
 ## Config And Runtime State
 
 Config and live state must be separate.
@@ -44,9 +72,18 @@ Config and live state must be separate.
 - Runtime or live state should also live under `.codenexus/`, but in separate files from config
 - Runtime state would cover things like PID, active port, timestamps, and service health markers
 
+The v1 contract is intentionally minimal:
+
+- `.codenexus/config.toml`
+- `.codenexus/meta.json`
+- `.codenexus/kuzu/`
+- `.codenexus/runtime.json`
+
 ## Freshness And Indexing
 
 Automatic freshness should not be overpromised at the start. Manual refresh is acceptable for v1. The desirable future direction is smart refresh using deltas rather than full rebuilds, but the current codebase does not yet support true incremental graph refresh. Today it can skip a rebuild if the commit is unchanged, and it can preserve cached embeddings, but a changed repo still triggers a full rebuild.
+
+The v1 repo-state model uses a finite base-state set with detail flags rather than pretending the runtime is fully self-healing. Durable freshness and state-transition rules live in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
 
 ## Scope And Priorities
 
