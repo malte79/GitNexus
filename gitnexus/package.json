@@ -1,5 +1,5 @@
 {
-  "name": "gitnexus",
+  "name": "codenexus",
   "version": "1.3.10",
   "description": "Headless local code intelligence for AI agents.",
   "author": "Abhigyan Patwari",
@@ -14,18 +14,16 @@
     "url": "https://github.com/abhigyanpatwari/GitNexus/issues"
   },
   "keywords": [
-    "mcp",
-    "model-context-protocol",
+    "codenexus",
     "code-intelligence",
     "knowledge-graph",
     "ai-agent",
-    "gitnexus",
     "static-analysis",
     "codebase-indexing"
   ],
   "type": "module",
   "bin": {
-    "gitnexus": "dist/cli/index.js"
+    "codenexus": "dist/cli/index.js"
   },
   "files": [
     "dist",

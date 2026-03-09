@@ -12,12 +12,14 @@ export const statusCommand = async () => {
   
   if (!isGitRepo(cwd)) {
     console.log('Not a git repository.');
+    process.exitCode = 1;
     return;
   }
 
   const state = await getRepoState(cwd);
   if (!state) {
     console.log('Not a git repository.');
+    process.exitCode = 1;
     return;
   }
 

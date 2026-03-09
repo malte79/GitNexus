@@ -57,7 +57,7 @@ describe('readResource', () => {
   it('routes gitnexus://schema correctly', async () => {
     const backend = createMockBackend();
     const result = await readResource('gitnexus://schema', backend);
-    expect(result).toContain('GitNexus Graph Schema');
+    expect(result).toContain('CodeNexus Graph Schema');
   });
 
   it('routes gitnexus://clusters correctly', async () => {

@@ -18,10 +18,10 @@ CodeNexus should not mutate other files in the repository by default.
 
 The intended v1 lifecycle is:
 
-- `cn init`
-- `cn index`
-- `cn status`
-- `cn mcp serve`
+- `codenexus init`
+- `codenexus index`
+- `codenexus status`
+- `codenexus serve`
 
 ## Runtime Boundary
 

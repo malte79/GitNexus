@@ -10,7 +10,7 @@ Its v1 product boundary is:
 - one primary transport: repo-local MCP over HTTP
 - one primary audience: AI agents
 - one primary storage engine: Kuzu
-- one primary lifecycle: `cn init`, `cn index`, `cn status`, `cn mcp serve`
+- one primary lifecycle: `codenexus init`, `codenexus index`, `codenexus status`, `codenexus serve`
 
 ## V1 Invariants
 

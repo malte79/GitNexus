@@ -2,7 +2,7 @@
 
 ## Current Direction
 
-This fork is evolving from `GitNexus` into `CodeNexus`, a globally installed but repo-activated tool for AI-agent code intelligence. The CLI name will become `cn`, but the broader rename will be lazy and incremental. We are not doing a full rename sweep yet. One concrete rename already chosen at the product-design level is the repo-local state directory: use `.codenexus/` instead of `.gitnexus/`.
+This fork is evolving from `GitNexus` into `CodeNexus`, a globally installed but repo-activated tool for AI-agent code intelligence. The canonical executable will be `codenexus`, but the broader rename remains lazy and incremental outside the user-facing CLI/product surface. One concrete rename already chosen at the product-design level is the repo-local state directory: use `.codenexus/` instead of `.gitnexus/`.
 
 ## Core Product Intent
 
@@ -49,17 +49,17 @@ HTTP is the chosen transport, not stdio, for the repo-local MCP service. The int
 
 ## Operational Model
 
-- `cn init`
+- `codenexus init`
   - run inside a repo to activate CodeNexus for that repo
   - creates `.codenexus/`
   - writes repo-local config
-- `cn index`
+- `codenexus index`
   - builds or refreshes the local index in `.codenexus/`
-- `cn mcp serve`
+- `codenexus serve`
   - starts a repo-specific MCP HTTP server
   - serves only that repo
   - listens on the port defined in repo-local config
-- `cn status`
+- `codenexus status`
   - reports repo config, freshness, and whether the local MCP service is running
 
 Durable command and runtime contracts live in:
@@ -74,7 +74,7 @@ Durable command and runtime contracts live in:
 
 Config and live state must be separate.
 
-- Config should live in `.codenexus/`, created by `cn init`
+- Config should live in `.codenexus/`, created by `codenexus init`
 - Config should include at least the port for the repo-local MCP service
 - Runtime or live state should also live under `.codenexus/`, but in separate files from config
 - Runtime state would cover things like PID, active port, timestamps, and service health markers
@@ -126,7 +126,7 @@ The fork should retain only the core pieces needed for the intended product:
 The fork should be intentionally reduced toward a headless core for agents:
 
 - one repo-local state directory: `.codenexus/`
-- one repo-local lifecycle: `init`, `index`, `status`, `mcp serve`
+- one repo-local lifecycle: `codenexus init`, `codenexus index`, `codenexus status`, `codenexus serve`
 - one primary runtime audience: AI agents
 - one primary transport: HTTP MCP
 - one primary storage engine: Kuzu
@@ -222,6 +222,6 @@ And it should remove or strongly deprioritize:
 ## Naming Direction
 
 - Product name: `CodeNexus`
-- CLI name: `cn`
+- CLI name: `codenexus`
 - Repo-local state directory: `.codenexus/`
 - Renaming strategy: lazy and piecemeal, only where the old `gitnexus` name is getting in the way

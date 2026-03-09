@@ -8,17 +8,17 @@ This document defines the v1 `.codenexus/` layout, config and runtime ownership,
 
 | Path | Type | Created by | Purpose | Safe to delete |
 |---|---|---|---|---|
-| `.codenexus/` | container | `cn init` | Repo-local CodeNexus state root | No |
-| `.codenexus/config.toml` | config | `cn init` | User-owned repo config | No |
-| `.codenexus/meta.json` | derived index metadata | `cn index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
-| `.codenexus/kuzu/` | derived index state | `cn index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |
-| `.codenexus/runtime.json` | advisory runtime state | `cn mcp serve` | Last known local MCP service facts | Yes, but service discovery falls back to live checks only |
+| `.codenexus/` | container | `codenexus init` | Repo-local CodeNexus state root | No |
+| `.codenexus/config.toml` | config | `codenexus init` | User-owned repo config | No |
+| `.codenexus/meta.json` | derived index metadata | `codenexus index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
+| `.codenexus/kuzu/` | derived index state | `codenexus index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |
+| `.codenexus/runtime.json` | advisory runtime state | `codenexus serve` | Last known local MCP service facts | Yes, but service discovery falls back to live checks only |
 
 V1 creates no placeholder directories or reserved future paths beyond the paths above.
 
 ## Init-Time Layout
 
-`cn init` creates:
+`codenexus init` creates:
 
 - `.codenexus/`
 - `.codenexus/config.toml`
@@ -53,10 +53,10 @@ port = 4747
 
 ### Config Rewrite Rules
 
-- `cn init` creates `config.toml` if absent.
-- `cn init` is idempotent if `config.toml` already exists.
-- `cn init` must not silently replace an existing configured port or other user-owned config.
-- `cn index`, `cn status`, and `cn mcp serve` must never rewrite `config.toml`.
+- `codenexus init` creates `config.toml` if absent.
+- `codenexus init` is idempotent if `config.toml` already exists.
+- `codenexus init` must not silently replace an existing configured port or other user-owned config.
+- `codenexus index`, `codenexus status`, and `codenexus serve` must never rewrite `config.toml`.
 - A config change requires explicit user action in a later command or manual edit path; v1 does not define such a command yet.
 
 ## Index Metadata Contract
@@ -104,7 +104,7 @@ Required fields:
 
 Epic 03 limitation:
 
-- until the repo-local HTTP service exists, `cn status` only has a bounded TCP port probe
+- until the repo-local HTTP service exists, `codenexus status` only has a bounded TCP port probe
 - because that probe cannot prove repo identity on its own, a live configured port with missing `runtime.json` is reported as indexed state plus `runtime_metadata_stale`
 - Epic 03 only reports `serving_current` or `serving_stale` when the live probe and runtime metadata agree on the same repo-local service boundary
 
@@ -157,41 +157,41 @@ An index is `stale` when any of the following are true:
 - working tree is dirty
 - required index files are present but internally inconsistent
 
-V1 freshness is intentionally conservative. Dirty working trees are stale even if `cn index` was just run.
+V1 freshness is intentionally conservative. Dirty working trees are stale even if `codenexus index` was just run.
 
 If required index artifacts are missing entirely, the repo falls back to `initialized_unindexed` rather than `indexed_stale`.
 
 ## Manual Refresh
 
-`cn index` is both:
+`codenexus index` is both:
 
 - the initial build command
 - the manual refresh command
 
-V1 does not define a separate `cn refresh`.
+V1 does not define a separate `codenexus refresh`.
 
 ## State Transition Matrix
 
 | From | Trigger | To |
 |---|---|---|
-| `uninitialized` | `cn init` succeeds | `initialized_unindexed` |
+| `uninitialized` | `codenexus init` succeeds | `initialized_unindexed` |
 | `invalid_config` | config is repaired into a valid v1 config | `initialized_unindexed` |
-| `initialized_unindexed` | `cn index` completes and freshness is current | `indexed_current` |
-| `initialized_unindexed` | `cn index` completes but freshness is stale | `indexed_stale` |
+| `initialized_unindexed` | `codenexus index` completes and freshness is current | `indexed_current` |
+| `initialized_unindexed` | `codenexus index` completes but freshness is stale | `indexed_stale` |
 | `indexed_current` | required index artifacts are removed entirely | `initialized_unindexed` |
 | `indexed_stale` | required index artifacts are removed entirely | `initialized_unindexed` |
 | `indexed_current` | worktree becomes dirty, HEAD changes, branch changes, or worktree changes | `indexed_stale` |
-| `indexed_stale` | `cn index` completes and freshness is current | `indexed_current` |
-| `indexed_current` | `cn mcp serve` starts successfully | `serving_current` |
-| `indexed_stale` | `cn mcp serve` starts successfully | `serving_stale` |
+| `indexed_stale` | `codenexus index` completes and freshness is current | `indexed_current` |
+| `indexed_current` | `codenexus serve` starts successfully | `serving_current` |
+| `indexed_stale` | `codenexus serve` starts successfully | `serving_stale` |
 | `serving_current` | live service stops | `indexed_current` |
 | `serving_current` | freshness becomes stale while service remains live | `serving_stale` |
 | `serving_stale` | live service stops | `indexed_stale` |
-| `serving_stale` | `cn index` completes and freshness becomes current while service remains live | `serving_stale` plus refreshed on-disk index state |
+| `serving_stale` | `codenexus index` completes and freshness becomes current while service remains live | `serving_stale` plus refreshed on-disk index state |
 
 ## Status Precedence
 
-`cn status` reports:
+`codenexus status` reports:
 
 1. the canonical base state
 2. any applicable detail flags
