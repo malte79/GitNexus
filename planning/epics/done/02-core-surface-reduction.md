@@ -1,7 +1,7 @@
 Title: Core Surface Reduction
 Assigned to: Agent 1
 Lane: Architecture
-Status: doing
+Status: done
 Objective: Reduce the repository to the minimum product surfaces needed for the headless CodeNexus core, while preserving the seams required for the upcoming single-repo architecture, CLI reshape, and repo-local MCP HTTP service epics.
 In scope: a keep/defer/remove inventory for top-level subprojects, package surfaces, CLI commands, core subsystems, server/MCP layers, workflow/docs surfaces, tests, and dependencies; removal of clearly non-core product surfaces; disabling or quarantining ambiguous surfaces that should not remain first-class; updates to docs and package metadata so the reduced repo accurately reflects the intended product.
 Out of scope: implementing repo-local `.codenexus` state ownership; implementing `cn` commands; implementing the repo-local MCP HTTP service; Luau/Roblox/Rojo support; branch-aware indexing; storage-engine changes; full rename sweep from `gitnexus` to `codenexus`; deleting load-bearing seams needed for Epics 03-05.
