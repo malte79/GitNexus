@@ -37,6 +37,12 @@ Based on that, a separate daemon is not automatically justified. If all it would
 
 `agent <-> repo-local MCP server <-> local repo Kuzu DB`
 
+Epic 03 implements the architectural pivot underneath the retained `gitnexus` shims:
+
+- `.codenexus/` is now the only active repo-state boundary
+- the backend is bound to one repo boundary
+- the old global registry and repo-discovery affordances are no longer part of the active runtime model
+
 ## Transport Decision
 
 HTTP is the chosen transport, not stdio, for the repo-local MCP service. The intended model is a long-lived, repo-scoped service with a configured port. That fits HTTP naturally. Stdio is better for client-spawned ephemeral MCP processes, which is not the desired product shape.
@@ -62,6 +68,7 @@ Durable command and runtime contracts live in:
 - [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md)
 - [commands.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/cli/commands.md)
 - [mcp-http-runtime.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/mcp-http-runtime.md)
+- [repo-local-implementation.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-local-implementation.md)
 
 ## Config And Runtime State
 

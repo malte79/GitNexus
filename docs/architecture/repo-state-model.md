@@ -102,6 +102,12 @@ Required fields:
 - If `runtime.json` claims a service exists but no live service answers, the runtime metadata is stale.
 - If a live service answers but `runtime.json` is missing or stale, the live service wins and status must report the runtime metadata mismatch.
 
+Epic 03 limitation:
+
+- until the repo-local HTTP service exists, `cn status` only has a bounded TCP port probe
+- because that probe cannot prove repo identity on its own, a live configured port with missing `runtime.json` is reported as indexed state plus `runtime_metadata_stale`
+- Epic 03 only reports `serving_current` or `serving_stale` when the live probe and runtime metadata agree on the same repo-local service boundary
+
 ## Canonical Base States
 
 Every repo/runtime outcome maps to one base state.

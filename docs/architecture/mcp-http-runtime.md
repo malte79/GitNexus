@@ -48,6 +48,12 @@ The service health contract is:
 - stale or missing `runtime.json` must not outweigh a successful live probe
 - failed live probes with stale `runtime.json` must be reported as runtime metadata stale
 
+Epic 03 limitation:
+
+- until the repo-local HTTP service exists, `cn status` only has a bounded TCP probe rather than a service-specific health endpoint
+- because that probe cannot prove repo identity on its own, a reachable configured port with missing `runtime.json` is reported as indexed state plus `runtime_metadata_stale`, not as a confirmed serving state
+- confirmed `serving_current` or `serving_stale` requires both a live probe and matching runtime metadata in Epic 03
+
 ## Startup Contract
 
 ### Missing Index

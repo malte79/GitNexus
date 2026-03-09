@@ -30,39 +30,32 @@ import { getResourceDefinitions, getResourceTemplates, readResource } from './re
  * The hint references the specific tool/resource to use next.
  */
 function getNextStepHint(toolName: string, args: Record<string, any> | undefined): string {
-  const repo = args?.repo;
-  const repoParam = repo ? `, repo: "${repo}"` : '';
-  const repoPath = repo || '{name}';
-
   switch (toolName) {
-    case 'list_repos':
-      return `\n\n---\n**Next:** READ gitnexus://repo/{name}/context for any repo above to get its overview and check staleness.`;
-
     case 'query':
-      return `\n\n---\n**Next:** To understand a specific symbol in depth, use context({name: "<symbol_name>"${repoParam}}) to see categorized refs and process participation.`;
+      return `\n\n---\n**Next:** To understand a specific symbol in depth, use context({name: "<symbol_name>"}) to see categorized refs and process participation.`;
 
     case 'context':
-      return `\n\n---\n**Next:** If planning changes, use impact({target: "${args?.name || '<name>'}", direction: "upstream"${repoParam}}) to check blast radius. To see execution flows, READ gitnexus://repo/${repoPath}/processes.`;
+      return `\n\n---\n**Next:** If planning changes, use impact({target: "${args?.name || '<name>'}", direction: "upstream"}) to check blast radius. To see execution flows, READ gitnexus://processes.`;
 
     case 'impact':
-      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gitnexus://repo/${repoPath}/processes.`;
+      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gitnexus://processes.`;
 
     case 'detect_changes':
-      return `\n\n---\n**Next:** Review affected processes. Use context() on high-risk changed symbols. READ gitnexus://repo/${repoPath}/process/{name} for full execution traces.`;
+      return `\n\n---\n**Next:** Review affected processes. Use context() on high-risk changed symbols. READ gitnexus://process/{name} for full execution traces.`;
 
     case 'rename':
-      return `\n\n---\n**Next:** Run detect_changes(${repoParam ? `{repo: "${repo}"}` : ''}) to verify no unexpected side effects from the rename.`;
+      return `\n\n---\n**Next:** Run detect_changes() to verify no unexpected side effects from the rename.`;
 
     case 'cypher':
-      return `\n\n---\n**Next:** To explore a result symbol, use context({name: "<name>"${repoParam}}). For schema reference, READ gitnexus://repo/${repoPath}/schema.`;
+      return `\n\n---\n**Next:** To explore a result symbol, use context({name: "<name>"}). For schema reference, READ gitnexus://schema.`;
 
     // Legacy tool names — still return useful hints
     case 'search':
-      return `\n\n---\n**Next:** To understand a result in context, use context({name: "<symbol_name>"${repoParam}}).`;
+      return `\n\n---\n**Next:** To understand a result in context, use context({name: "<symbol_name>"}).`;
     case 'explore':
-      return `\n\n---\n**Next:** If planning changes, use impact({target: "<name>", direction: "upstream"${repoParam}}).`;
+      return `\n\n---\n**Next:** If planning changes, use impact({target: "<name>", direction: "upstream"}).`;
     case 'overview':
-      return `\n\n---\n**Next:** To drill into an area, READ gitnexus://repo/${repoPath}/cluster/{name}. To see execution flows, READ gitnexus://repo/${repoPath}/processes.`;
+      return `\n\n---\n**Next:** To drill into an area, READ gitnexus://cluster/{name}. To see execution flows, READ gitnexus://processes.`;
 
     default:
       return '';

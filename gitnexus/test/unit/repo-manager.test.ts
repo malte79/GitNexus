@@ -1,136 +1,292 @@
-/**
- * P1 Unit Tests: Repository Manager
- *
- * Tests: getStoragePath, getStoragePaths, readRegistry, registerRepo, unregisterRepo
- * Covers hardening fixes #29 (API key file permissions) and #30 (case-insensitive paths on Windows)
- */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import path from 'path';
-import os from 'os';
+import { describe, it, expect } from 'vitest';
 import fs from 'fs/promises';
+import net from 'net';
+import path from 'path';
+import { execSync } from 'child_process';
 import {
   getStoragePath,
   getStoragePaths,
-  readRegistry,
-  saveCLIConfig,
-  loadCLIConfig,
+  saveConfig,
+  loadConfig,
+  saveMeta,
+  loadMeta,
+  saveRuntimeMeta,
+  loadRepo,
+  getRepoState,
 } from '../../src/storage/repo-manager.js';
 import { createTempDir } from '../helpers/test-db.js';
 
-// ─── getStoragePath ──────────────────────────────────────────────────
+async function createGitRepo(prefix: string) {
+  const handle = await createTempDir(prefix);
+  execSync('git init -q', { cwd: handle.dbPath });
+  execSync('git config user.email "test@example.com"', { cwd: handle.dbPath });
+  execSync('git config user.name "Test User"', { cwd: handle.dbPath });
+  await fs.writeFile(path.join(handle.dbPath, 'README.md'), 'hello\n', 'utf-8');
+  execSync('git add README.md', { cwd: handle.dbPath });
+  execSync('git commit -q -m "init"', { cwd: handle.dbPath });
+  return handle;
+}
+
+async function ignoreCodeNexusDir(repoPath: string): Promise<void> {
+  await fs.writeFile(path.join(repoPath, '.gitignore'), '.codenexus/\n', 'utf-8');
+  execSync('git add .gitignore', { cwd: repoPath });
+  execSync('git commit -q -m "ignore .codenexus"', { cwd: repoPath });
+}
+
+async function createListeningServer(): Promise<{ server: net.Server; port: number }> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected a TCP server address');
+  }
+
+  return { server, port: address.port };
+}
 
 describe('getStoragePath', () => {
-  it('appends .gitnexus to resolved repo path', () => {
+  it('appends .codenexus to resolved repo path', () => {
     const result = getStoragePath('/home/user/project');
-    expect(result).toContain('.gitnexus');
-    expect(path.basename(result)).toBe('.gitnexus');
-  });
-
-  it('resolves relative paths', () => {
-    const result = getStoragePath('.');
-    // Should be an absolute path
-    expect(path.isAbsolute(result)).toBe(true);
+    expect(result).toContain('.codenexus');
+    expect(path.basename(result)).toBe('.codenexus');
   });
 });
-
-// ─── getStoragePaths ─────────────────────────────────────────────────
 
 describe('getStoragePaths', () => {
-  it('returns storagePath, kuzuPath, metaPath', () => {
+  it('returns config, meta, kuzu, and runtime paths under storagePath', () => {
     const paths = getStoragePaths('/home/user/project');
-    expect(paths.storagePath).toContain('.gitnexus');
-    expect(paths.kuzuPath).toContain('kuzu');
-    expect(paths.metaPath).toContain('meta.json');
-  });
-
-  it('all paths are under storagePath', () => {
-    const paths = getStoragePaths('/home/user/project');
-    expect(paths.kuzuPath.startsWith(paths.storagePath)).toBe(true);
+    expect(paths.storagePath).toContain('.codenexus');
+    expect(paths.configPath.startsWith(paths.storagePath)).toBe(true);
     expect(paths.metaPath.startsWith(paths.storagePath)).toBe(true);
+    expect(paths.kuzuPath.startsWith(paths.storagePath)).toBe(true);
+    expect(paths.runtimePath.startsWith(paths.storagePath)).toBe(true);
   });
 });
 
-// ─── readRegistry ────────────────────────────────────────────────────
+describe('config and metadata round trips', () => {
+  it('saves and loads config from .codenexus/config.toml', async () => {
+    const handle = await createTempDir('repo-manager-config-');
+    const storagePath = path.join(handle.dbPath, '.codenexus');
 
-describe('readRegistry', () => {
-  it('returns empty array when registry does not exist', async () => {
-    // readRegistry reads from ~/.gitnexus/registry.json
-    // If the file doesn't exist, it should return []
-    // This test exercises the catch path
-    const result = await readRegistry();
-    // Result is an array (may or may not be empty depending on user's system)
-    expect(Array.isArray(result)).toBe(true);
+    await saveConfig(storagePath, { version: 1, port: 4747 });
+    const config = await loadConfig(storagePath);
+
+    expect(config).toEqual({ version: 1, port: 4747 });
+    await handle.cleanup();
+  });
+
+  it('saves and loads index metadata from .codenexus/meta.json', async () => {
+    const handle = await createTempDir('repo-manager-meta-');
+    const storagePath = path.join(handle.dbPath, '.codenexus');
+
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: 'abc123',
+      indexed_branch: 'main',
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: handle.dbPath,
+      stats: { files: 1, nodes: 2 },
+    });
+
+    const meta = await loadMeta(storagePath);
+    expect(meta?.indexed_head).toBe('abc123');
+    expect(meta?.indexed_branch).toBe('main');
+    await handle.cleanup();
   });
 });
 
-// ─── CLI Config (file permissions) ───────────────────────────────────
+describe('repo-local state', () => {
+  it('reports uninitialized when config is missing', async () => {
+    const repo = await createGitRepo('repo-manager-state-');
+    const state = await getRepoState(repo.dbPath);
 
-describe('saveCLIConfig / loadCLIConfig', () => {
-  let tmpHandle: Awaited<ReturnType<typeof createTempDir>>;
-  let originalHomedir: typeof os.homedir;
-
-  beforeEach(async () => {
-    tmpHandle = await createTempDir('gitnexus-config-test-');
-    originalHomedir = os.homedir;
-    // Mock os.homedir to point to our temp dir
-    // Note: This won't fully work because repo-manager uses its own import of os
-    // We'll test what we can.
+    expect(state?.baseState).toBe('uninitialized');
+    await repo.cleanup();
   });
 
-  afterEach(async () => {
-    os.homedir = originalHomedir;
-    await tmpHandle.cleanup();
+  it('reports initialized_unindexed when config exists without a usable index', async () => {
+    const repo = await createGitRepo('repo-manager-state-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    await saveConfig(path.join(repo.dbPath, '.codenexus'), { version: 1, port: 4747 });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('initialized_unindexed');
+    await repo.cleanup();
   });
 
-  it('loadCLIConfig returns empty object when config does not exist', async () => {
-    const config = await loadCLIConfig();
-    // Returns {} or existing config
-    expect(typeof config).toBe('object');
-  });
-});
+  it('loads a usable indexed repo only when config, meta, and kuzu exist', async () => {
+    const repo = await createGitRepo('repo-manager-indexed-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await saveConfig(storagePath, { version: 1, port: 4747 });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
+      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: repo.dbPath,
+    });
 
-// ─── Case-insensitive path comparison (Windows hardening #30) ────────
-
-describe('case-insensitive path comparison', () => {
-  it('registerRepo uses case-insensitive compare on Windows', () => {
-    // The fix is in registerRepo: process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase()
-    // We verify the logic inline since we can't easily mock process.platform
-
-    const compareWindows = (a: string, b: string): boolean => {
-      return a.toLowerCase() === b.toLowerCase();
-    };
-
-    // On Windows, these should match
-    expect(compareWindows('D:\\Projects\\MyApp', 'd:\\projects\\myapp')).toBe(true);
-    expect(compareWindows('C:\\Users\\USER\\project', 'c:\\users\\user\\project')).toBe(true);
-
-    // Different paths should not match
-    expect(compareWindows('D:\\Projects\\App1', 'D:\\Projects\\App2')).toBe(false);
+    const indexedRepo = await loadRepo(repo.dbPath);
+    expect(indexedRepo?.repoPath).toBe(path.resolve(repo.dbPath));
+    expect(indexedRepo?.config.port).toBe(4747);
+    await repo.cleanup();
   });
 
-  it('case-sensitive compare for non-Windows', () => {
-    const compareUnix = (a: string, b: string): boolean => {
-      return a === b;
-    };
+  it('reports serving_current when a live local service answers on the configured port', async () => {
+    const repo = await createGitRepo('repo-manager-serving-current-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const { server, port } = await createListeningServer();
 
-    // On Unix, case matters
-    expect(compareUnix('/home/user/Project', '/home/user/project')).toBe(false);
-    expect(compareUnix('/home/user/project', '/home/user/project')).toBe(true);
+    await saveConfig(storagePath, { version: 1, port });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
+      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: repo.dbPath,
+    });
+    await saveRuntimeMeta(storagePath, {
+      version: 1,
+      pid: process.pid,
+      port,
+      started_at: new Date().toISOString(),
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('serving_current');
+    expect(state?.detailFlags).not.toContain('runtime_metadata_stale');
+
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await repo.cleanup();
   });
-});
 
-// ─── API key file permissions (hardening #29) ────────────────────────
+  it('reports serving_stale when a live local service exists but the index is stale', async () => {
+    const repo = await createGitRepo('repo-manager-serving-stale-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const { server, port } = await createListeningServer();
 
-describe('API key file permissions', () => {
-  it('saveCLIConfig calls chmod 0o600 on non-Windows', async () => {
-    // We verify that the saveCLIConfig code has the chmod call
-    // by reading the source and checking statically.
-    // The actual chmod behavior is platform-dependent.
-    const source = await fs.readFile(
-      path.join(process.cwd(), 'src', 'storage', 'repo-manager.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('chmod(configPath, 0o600)');
-    expect(source).toContain("process.platform !== 'win32'");
+    await saveConfig(storagePath, { version: 1, port });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
+      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: repo.dbPath,
+    });
+    await saveRuntimeMeta(storagePath, {
+      version: 1,
+      pid: process.pid,
+      port,
+      started_at: new Date().toISOString(),
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
+    await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'changed\n', 'utf-8');
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('serving_stale');
+    expect(state?.detailFlags).toContain('working_tree_dirty');
+
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await repo.cleanup();
+  });
+
+  it('marks runtime metadata stale when runtime.json claims a service but no live service answers', async () => {
+    const repo = await createGitRepo('repo-manager-runtime-stale-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const { server, port } = await createListeningServer();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+
+    await saveConfig(storagePath, { version: 1, port });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
+      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: repo.dbPath,
+    });
+    await saveRuntimeMeta(storagePath, {
+      version: 1,
+      pid: 999999,
+      port,
+      started_at: new Date().toISOString(),
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('indexed_current');
+    expect(state?.detailFlags).toContain('runtime_metadata_stale');
+
+    await repo.cleanup();
+  });
+
+  it('does not report serving state when an unrelated process owns the configured port', async () => {
+    const repo = await createGitRepo('repo-manager-unrelated-port-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const { server, port } = await createListeningServer();
+
+    await saveConfig(storagePath, { version: 1, port });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
+      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: repo.dbPath,
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('indexed_current');
+    expect(state?.detailFlags).toContain('runtime_metadata_stale');
+
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await repo.cleanup();
+  });
+
+  it('marks runtime metadata stale when the configured port is live but runtime.json is missing', async () => {
+    const repo = await createGitRepo('repo-manager-missing-runtime-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const { server, port } = await createListeningServer();
+
+    await saveConfig(storagePath, { version: 1, port });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
+      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
+      indexed_at: new Date().toISOString(),
+      indexed_dirty: false,
+      worktree_root: repo.dbPath,
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('indexed_current');
+    expect(state?.detailFlags).toContain('runtime_metadata_stale');
+
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await repo.cleanup();
   });
 });

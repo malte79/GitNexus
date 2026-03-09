@@ -11,6 +11,12 @@ This document defines the v1 user-facing contract for:
 
 All commands resolve the nearest enclosing git root as the active repo boundary.
 
+## Transition Note
+
+During Epic 03, the retained `gitnexus analyze`, `gitnexus status`, and `gitnexus mcp` commands are transitional shims over the new repo-local architecture.
+
+They are allowed to fail clearly when `.codenexus/config.toml` is missing or invalid. They must not silently bootstrap config before `cn init` exists.
+
 ## `cn init`
 
 Activate CodeNexus for the current repo boundary.

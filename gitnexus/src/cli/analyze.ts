@@ -1,7 +1,7 @@
 /**
  * Analyze Command
  *
- * Indexes a repository and stores the knowledge graph in .gitnexus/
+ * Indexes a repository and stores the knowledge graph in .codenexus/
  */
 
 import path from 'path';
@@ -17,8 +17,8 @@ import {
   closeKuzu,
   createFTSIndex,
 } from '../core/kuzu/kuzu-adapter.js';
-import { getStoragePaths, saveMeta, loadMeta, registerRepo } from '../storage/repo-manager.js';
-import { getCurrentCommit, isGitRepo, getGitRoot } from '../storage/git.js';
+import { getStoragePaths, saveMeta, loadConfig, loadMeta } from '../storage/repo-manager.js';
+import { getCurrentBranch, getCurrentCommit, isGitRepo, getGitRoot, isWorkingTreeDirty } from '../storage/git.js';
 
 const HEAP_MB = 8192;
 const HEAP_FLAG = `--max-old-space-size=${HEAP_MB}`;
@@ -89,10 +89,28 @@ export const analyzeCommand = async (
   }
 
   const { storagePath, kuzuPath } = getStoragePaths(repoPath);
+  const config = await loadConfig(storagePath);
+  if (!config) {
+    console.log('  Repo is not initialized for CodeNexus\n');
+    console.log('  Missing or invalid .codenexus/config.toml\n');
+    process.exitCode = 1;
+    return;
+  }
+
   const currentCommit = getCurrentCommit(repoPath);
+  const currentBranch = getCurrentBranch(repoPath);
+  const currentDirty = isWorkingTreeDirty(repoPath);
   const existingMeta = await loadMeta(storagePath);
 
-  if (existingMeta && !options?.force && existingMeta.lastCommit === currentCommit) {
+  if (
+    existingMeta &&
+    !options?.force &&
+    !currentDirty &&
+    existingMeta.indexed_head === currentCommit &&
+    existingMeta.indexed_branch === currentBranch &&
+    existingMeta.worktree_root === repoPath &&
+    !existingMeta.indexed_dirty
+  ) {
     console.log('  Already up to date\n');
     return;
   }
@@ -200,9 +218,12 @@ export const analyzeCommand = async (
   const stats = await getKuzuStats();
 
   const meta = {
-    repoPath,
-    lastCommit: currentCommit,
-    indexedAt: new Date().toISOString(),
+    version: 1 as const,
+    indexed_head: currentCommit,
+    indexed_branch: currentBranch,
+    indexed_at: new Date().toISOString(),
+    indexed_dirty: currentDirty,
+    worktree_root: repoPath,
     stats: {
       files: pipelineResult.totalFileCount,
       nodes: stats.nodes,
@@ -212,7 +233,6 @@ export const analyzeCommand = async (
     },
   };
   await saveMeta(storagePath, meta);
-  await registerRepo(repoPath, meta);
 
   await closeKuzu();
 
@@ -236,7 +256,7 @@ export const analyzeCommand = async (
   console.log(`  ${repoPath}`);
 
   if (options?.indexOnly) {
-    console.log('  Note: --index-only is satisfied by default; analyze no longer mutates repo files outside .gitnexus.');
+    console.log('  Note: --index-only is satisfied by default; analyze no longer mutates repo files outside .codenexus.');
   }
 
   if (kuzuWarnings.length > 0) {
