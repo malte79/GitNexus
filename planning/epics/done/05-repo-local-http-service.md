@@ -2,7 +2,7 @@ Title: Repo-Local HTTP Service
 
 Assigned to: Agent 1
 Lane: Runtime
-Status: doing
+Status: done
 Objective: Turn `codenexus serve` from an honest placeholder into the real repo-local HTTP service for one repo, using `.codenexus` as the only runtime boundary and exposing the agent-facing service over HTTP with correct health, runtime metadata, and status integration.
 In scope: implementing the real `codenexus serve` runtime; HTTP server startup and shutdown; port binding from `.codenexus/config.toml`; live health probing; runtime metadata creation and cleanup in `.codenexus/runtime.json`; duplicate-serve detection; stale-runtime recovery; single-repo binding with no repo routing; status integration against the live service; tests and docs for the real service lifecycle.
 Out of scope: changing the CLI surface; changing the `.codenexus` state model beyond what the live service needs; branch-aware behavior; delta refresh; automatic indexing; Luau/Roblox/Rojo support; world projection; adding extra daemon-management commands beyond `serve`; preserving stdio as the primary runtime model.
