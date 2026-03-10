@@ -83,3 +83,17 @@ Epic 05 owns and now implements:
 - the repo-local HTTP MCP lifecycle
 - port binding and runtime metadata writes as a real service contract
 - replacement of retained stdio MCP as the primary transport
+
+## Language Layer Extension
+
+Epic 07 extends the existing indexing engine with Luau as a language-level feature, not as a separate product path.
+
+The same core seams remain responsible:
+
+- [supported-languages.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/config/supported-languages.ts) owns language registration
+- [utils.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/utils.ts) owns extension mapping
+- [parser-loader.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/tree-sitter/parser-loader.ts) and [parse-worker.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts) own parser loading
+- [tree-sitter-queries.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/tree-sitter-queries.ts) owns language capture definitions
+- [import-processor.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/import-processor.ts) and [call-processor.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/call-processor.ts) own graph linking
+
+Epic 07 adds Luau to those existing seams only. Roblox- and Rojo-specific semantics remain deferred to Epic 08.

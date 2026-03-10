@@ -178,10 +178,15 @@ Embeddings are still valuable in the future for fuzzy semantic retrieval when us
 
 ## Roblox And Luau Direction
 
-- Full Luau support is a real product goal
+- Luau is now supported as a real indexed language through the existing CodeNexus engine
 - Roblox support is also a real product goal
 - Rojo-based Roblox projects are the initial support target
 - The Rojo-only restriction is intentional because it gives a deterministic mapping from filesystem source to Roblox instance tree and makes practical support much more feasible
+
+The implementation order remains deliberate:
+
+- Epic 07 adds Luau as a real indexed language through the existing CodeNexus engine
+- Epic 08 adds Roblox- and Rojo-specific semantics on top of that language support
 
 For Roblox projects, CodeNexus should eventually understand:
 

@@ -20,4 +20,5 @@ run_test test/integration/parsing.test.ts
 run_test test/integration/pipeline.test.ts
 run_test test/integration/service-runtime.test.ts threads
 run_test test/integration/tree-sitter-languages.test.ts
+run_test test/integration/luau-indexing.test.ts
 run_test test/integration/worker-pool.test.ts

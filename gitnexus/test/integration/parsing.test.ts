@@ -73,6 +73,42 @@ describe('isNodeExported', () => {
     });
   });
 
+  describe('luau', () => {
+    it('top-level named functions are exported conservatively', () => {
+      const fnDecl = mockNode('function_declaration', 'function format() end');
+      fnDecl.childForFieldName = (field: string) => field === 'name' ? { type: 'identifier' } : null;
+      const nameNode = mockNode('identifier', 'format', fnDecl);
+      expect(isNodeExported(nameNode, 'format', 'luau')).toBe(true);
+    });
+
+    it('local declarations are not exported', () => {
+      const localDecl = mockNode('local_declaration', 'local function helper() end');
+      const fnDecl = mockNode('function_declaration', 'function helper() end', localDecl);
+      const nameNode = mockNode('identifier', 'helper', fnDecl);
+      expect(isNodeExported(nameNode, 'helper', 'luau')).toBe(false);
+    });
+
+    it('table-member assignments are treated as exported', () => {
+      const assign = mockNode('assignment_statement', 'Module.format = function() end');
+      const variableList = mockNode('variable_list', 'Module.format');
+      variableList.childForFieldName = (field: string) => field === 'name' ? mockNode('dot_index_expression', 'Module.format') : null;
+      variableList.namedChild = () => mockNode('dot_index_expression', 'Module.format');
+      assign.children = [variableList];
+      const nameNode = mockNode('identifier', 'format', assign);
+      expect(isNodeExported(nameNode, 'format', 'luau')).toBe(true);
+    });
+
+    it('typed top-level assignment-based functions are not treated as exported', () => {
+      const assign = mockNode('assignment_statement', 'formatAlias = function(request: Request) end');
+      const variableList = mockNode('variable_list', 'formatAlias');
+      variableList.childForFieldName = (field: string) => field === 'name' ? mockNode('identifier', 'formatAlias') : null;
+      variableList.namedChild = () => mockNode('identifier', 'formatAlias');
+      assign.children = [variableList];
+      const nameNode = mockNode('identifier', 'formatAlias', assign);
+      expect(isNodeExported(nameNode, 'formatAlias', 'luau')).toBe(false);
+    });
+  });
+
   // Go
   describe('go', () => {
     it('uppercase first letter is exported', () => {
@@ -199,7 +235,7 @@ describe('isNodeExported', () => {
 // ─── Fixture files exist ─────────────────────────────────────────────
 
 describe('fixture files', () => {
-  const fixtures = ['simple.ts', 'simple.py', 'simple.go', 'simple.swift',
+  const fixtures = ['simple.ts', 'simple.py', 'simple.lua', 'simple.luau', 'simple.go', 'simple.swift',
     'simple.php', 'simple.rs', 'simple.java', 'simple.c', 'simple.cpp', 'simple.cs'];
 
   for (const fixture of fixtures) {

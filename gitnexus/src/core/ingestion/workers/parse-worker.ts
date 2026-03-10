@@ -3,6 +3,7 @@ import Parser from 'tree-sitter';
 import JavaScript from 'tree-sitter-javascript';
 import TypeScript from 'tree-sitter-typescript';
 import Python from 'tree-sitter-python';
+import Luau from 'tree-sitter-luau';
 import Java from 'tree-sitter-java';
 import C from 'tree-sitter-c';
 import CPP from 'tree-sitter-cpp';
@@ -118,6 +119,7 @@ const languageMap: Record<string, any> = {
   [SupportedLanguages.TypeScript]: TypeScript.typescript,
   [`${SupportedLanguages.TypeScript}:tsx`]: TypeScript.tsx,
   [SupportedLanguages.Python]: Python,
+  [SupportedLanguages.Luau]: Luau,
   [SupportedLanguages.Java]: Java,
   [SupportedLanguages.C]: C,
   [SupportedLanguages.CPlusPlus]: CPP,
@@ -164,6 +166,24 @@ const isNodeExported = (node: any, name: string, language: string): boolean => {
 
     case 'python':
       return !name.startsWith('_');
+
+    case 'luau':
+      while (current) {
+        if (current.type === 'local_declaration') return false;
+        if (current.type === 'assignment_statement') {
+          const variableList = current.children?.find((c: any) => c.type === 'variable_list');
+          const assignedName = variableList?.childForFieldName?.('name') || variableList?.namedChild?.(0);
+          if (assignedName?.type === 'dot_index_expression' || assignedName?.type === 'method_index_expression') {
+            return true;
+          }
+        }
+        if (current.type === 'function_declaration') {
+          const nameNode = current.childForFieldName?.('name');
+          return nameNode?.type === 'identifier';
+        }
+        current = current.parent;
+      }
+      return false;
 
     case 'java':
       while (current) {
@@ -295,11 +315,21 @@ const findEnclosingFunctionId = (node: any, filePath: string): string | null => 
         return generateId(label, `${filePath}:${funcName}:${startLine}`);
       }
 
-      if (['function_declaration', 'function_definition', 'async_function_declaration',
+      if (['function_declaration', 'async_function_declaration',
            'generator_function_declaration', 'function_item'].includes(current.type)) {
         const nameNode = current.childForFieldName?.('name') ||
           current.children?.find((c: any) => c.type === 'identifier' || c.type === 'property_identifier');
-        funcName = nameNode?.text;
+        if (nameNode?.type === 'method_index_expression') {
+          funcName = nameNode.childForFieldName?.('method')?.text ||
+            nameNode.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
+        } else if (nameNode?.type === 'dot_index_expression') {
+          funcName = nameNode.childForFieldName?.('field')?.text ||
+            nameNode.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
+        } else {
+          funcName = nameNode?.text;
+        }
       } else if (current.type === 'impl_item') {
         const funcItem = current.children?.find((c: any) => c.type === 'function_item');
         if (funcItem) {
@@ -324,6 +354,22 @@ const findEnclosingFunctionId = (node: any, filePath: string): string | null => 
           const nameNode = parent.childForFieldName?.('name') ||
             parent.children?.find((c: any) => c.type === 'identifier');
           funcName = nameNode?.text;
+        }
+      } else if (current.type === 'function_definition') {
+        const expressionList = current.parent;
+        const assignment = expressionList?.type === 'expression_list' ? expressionList.parent : null;
+        const variableList = assignment?.children?.find((c: any) => c.type === 'variable_list');
+        const assignedName = variableList?.childForFieldName?.('name') || variableList?.namedChild?.(0);
+        if (assignedName?.type === 'identifier') {
+          funcName = assignedName.text;
+        } else if (assignedName?.type === 'dot_index_expression') {
+          funcName = assignedName.childForFieldName?.('field')?.text ||
+            assignedName.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
+        } else if (assignedName?.type === 'method_index_expression') {
+          funcName = assignedName.childForFieldName?.('method')?.text ||
+            assignedName.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
         }
       }
 
@@ -447,6 +493,11 @@ const BUILT_INS = new Set([
   'sink', 'store', 'assign', 'receive', 'subscribe',
   // Notification / KVO
   'addObserver', 'removeObserver', 'post', 'NotificationCenter',
+  // Lua / Luau built-ins
+  'print', 'warn', 'require', 'error', 'assert', 'pcall', 'xpcall',
+  'pairs', 'ipairs', 'next', 'type', 'typeof', 'tostring', 'tonumber',
+  'rawget', 'rawset', 'rawequal', 'select', 'setmetatable', 'getmetatable',
+  'math', 'string', 'table', 'coroutine', 'utf8', 'os', 'task',
 ]);
 
 // ============================================================================
@@ -1132,6 +1183,9 @@ const processFileGroup = (
 
       // Extract import paths before skipping
       if (captureMap['import'] && captureMap['import.source']) {
+        if (language === SupportedLanguages.Luau && captureMap['import.name']?.text !== 'require') {
+          continue;
+        }
         const rawImportPath = language === SupportedLanguages.Kotlin
           ? appendKotlinWildcard(captureMap['import.source'].text.replace(/['"<>]/g, ''), captureMap['import'])
           : captureMap['import.source'].text.replace(/['"<>]/g, '');

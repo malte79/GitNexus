@@ -200,6 +200,8 @@ const EXTENSIONS = [
   '.tsx', '.ts', '.jsx', '.js', '/index.tsx', '/index.ts', '/index.jsx', '/index.js',
   // Python
   '.py', '/__init__.py',
+  // Lua / Luau
+  '.lua', '.luau', '/init.lua', '/init.luau',
   // Java
   '.java',
   // Kotlin

@@ -95,6 +95,40 @@ describe('Tree-sitter multi-language parsing', () => {
     });
   });
 
+  describe('Luau (.luau)', () => {
+    it('parses functions, methods, and type aliases', async () => {
+      await loadLanguage(SupportedLanguages.Luau, 'simple.luau');
+      const content = readFixture('simple.luau');
+      const { matches } = parseAndQuery(parser, content, LANGUAGE_QUERIES[SupportedLanguages.Luau]);
+      const defs = extractDefinitions(matches);
+
+      expect(defs.length).toBeGreaterThan(0);
+      const defTypes = defs.map(d => d.type);
+      const names = defs.map(d => d.name);
+      expect(defTypes).toContain('definition.method');
+      expect(defTypes).toContain('definition.function');
+      expect(defTypes).toContain('definition.type');
+      expect(names).toContain('format');
+      expect(names).toContain('render');
+      expect(names).toContain('formatAlias');
+      expect(names).toContain('User');
+    });
+  });
+
+  describe('Luau (.lua)', () => {
+    it('parses functions and table-member methods from .lua fixtures', async () => {
+      await loadLanguage(SupportedLanguages.Luau, 'simple.lua');
+      const content = readFixture('simple.lua');
+      const { matches } = parseAndQuery(parser, content, LANGUAGE_QUERIES[SupportedLanguages.Luau]);
+      const defs = extractDefinitions(matches);
+
+      expect(defs.length).toBeGreaterThan(0);
+      const names = defs.map(d => d.name);
+      expect(names).toContain('slugify');
+      expect(names).toContain('internal_helper');
+    });
+  });
+
   describe('Java', () => {
     it('parses class, method, and constructor declarations', async () => {
       await loadLanguage(SupportedLanguages.Java);
@@ -222,6 +256,7 @@ describe('Tree-sitter multi-language parsing', () => {
         [SupportedLanguages.TypeScript, 'simple.ts'],
         [SupportedLanguages.JavaScript, 'simple.js'],
         [SupportedLanguages.Python, 'simple.py'],
+        [SupportedLanguages.Luau, 'simple.luau'],
         [SupportedLanguages.Java, 'simple.java'],
         [SupportedLanguages.Go, 'simple.go'],
         [SupportedLanguages.C, 'simple.c'],
@@ -243,6 +278,16 @@ describe('Tree-sitter multi-language parsing', () => {
           if (!e.message?.includes('TSQueryError')) throw e;
         }
       }
+    });
+
+    it('supports both .lua and .luau fixture paths', async () => {
+      await loadLanguage(SupportedLanguages.Luau, 'simple.lua');
+      const luaDefs = extractDefinitions(parseAndQuery(parser, readFixture('simple.lua'), LANGUAGE_QUERIES[SupportedLanguages.Luau]).matches);
+      expect(luaDefs.length).toBeGreaterThan(0);
+
+      await loadLanguage(SupportedLanguages.Luau, 'simple.luau');
+      const luauDefs = extractDefinitions(parseAndQuery(parser, readFixture('simple.luau'), LANGUAGE_QUERIES[SupportedLanguages.Luau]).matches);
+      expect(luauDefs.length).toBeGreaterThan(0);
     });
   });
 });

@@ -90,6 +90,26 @@ export const isNodeExported = (node: any, name: string, language: string): boole
     case 'python':
       return !name.startsWith('_');
 
+    // Luau: top-level named functions and table-member assignments are public.
+    // Local declarations stay internal. Returned-table export patterns remain conservative in Epic 07.
+    case 'luau':
+      while (current) {
+        if (current.type === 'local_declaration') return false;
+        if (current.type === 'assignment_statement') {
+          const variableList = current.children?.find((c: any) => c.type === 'variable_list');
+          const assignedName = variableList?.childForFieldName?.('name') || variableList?.namedChild?.(0);
+          if (assignedName?.type === 'dot_index_expression' || assignedName?.type === 'method_index_expression') {
+            return true;
+          }
+        }
+        if (current.type === 'function_declaration') {
+          const nameNode = current.childForFieldName?.('name');
+          return nameNode?.type === 'identifier';
+        }
+        current = current.parent;
+      }
+      return false;
+
     // Java: Check for 'public' modifier
     // In tree-sitter Java, modifiers are siblings of the name node, not parents
     case 'java':
