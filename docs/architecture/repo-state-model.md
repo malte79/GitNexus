@@ -94,6 +94,7 @@ Required fields:
 | `started_at` | string | ISO-8601 timestamp for service start |
 | `repo_root` | string | Absolute repo root for the service boundary |
 | `worktree_root` | string | Absolute worktree path for the service boundary |
+| `loaded_index` | object | Identity of the index metadata the live service loaded at startup |
 
 ### Runtime Precedence
 
@@ -108,6 +109,7 @@ Serving states require:
 
 - a successful service-identity response from `/api/health`
 - matching repo root, worktree root, and configured port
+- matching or intentionally stale loaded-index identity evaluation against current on-disk metadata
 
 An unrelated process listening on the configured port must not produce `serving_current` or `serving_stale`.
 
@@ -136,6 +138,7 @@ Detail flags refine a base state without replacing it.
 | `head_changed` | current HEAD differs from `meta.json.indexed_head` |
 | `branch_changed` | current branch differs from `meta.json.indexed_branch` |
 | `wrong_worktree` | metadata was produced in a different worktree root |
+| `service_restart_required` | live service is still serving an older loaded index than the current on-disk index |
 
 ## Freshness Rules
 
@@ -173,6 +176,12 @@ If required index artifacts are missing entirely, the repo falls back to `initia
 
 V1 does not define a separate `codenexus refresh`.
 
+When a service is already running:
+
+- `codenexus index` refreshes on-disk index state only
+- the running service may continue serving its older loaded index
+- restarting `codenexus serve` is required before the service adopts the refreshed index
+
 ## State Transition Matrix
 
 | From | Trigger | To |
@@ -190,7 +199,7 @@ V1 does not define a separate `codenexus refresh`.
 | `serving_current` | live service stops | `indexed_current` |
 | `serving_current` | freshness becomes stale while service remains live | `serving_stale` |
 | `serving_stale` | live service stops | `indexed_stale` |
-| `serving_stale` | `codenexus index` completes and freshness becomes current while service remains live | `serving_stale` plus refreshed on-disk index state |
+| `serving_stale` | `codenexus index` completes and freshness becomes current while service remains live | `serving_stale` plus `service_restart_required` until the service restarts |
 
 ## Status Precedence
 
@@ -203,3 +212,9 @@ V1 does not define a separate `codenexus refresh`.
 Live service truth always wins over `runtime.json`.
 
 Runtime metadata disagreement affects degraded reporting and flags, but it does not by itself redefine whether the local index is current or stale.
+
+When both live health and advisory runtime metadata are available:
+
+- live health is authoritative for loaded-index identity
+- `runtime.json` is used only for stale-runtime detection and operator inspection
+- if the two disagree about loaded-index identity, `runtime_metadata_stale` must be reported

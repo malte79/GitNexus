@@ -3,6 +3,7 @@ import http from 'http';
 import { LocalBackend } from '../mcp/local/local-backend.js';
 import { mountMCPEndpoints } from './mcp-http.js';
 import {
+  extractLoadedIndexIdentity,
   getRepoState,
   getStoragePaths,
   probeServiceHealth,
@@ -37,7 +38,12 @@ function buildHealthPayload(
   worktreeRoot: string,
   config: CodeNexusConfig,
   startedAt: string,
+  state: RepoStateSnapshot,
 ): ServiceHealth {
+  if (!state.meta) {
+    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus index` first.');
+  }
+
   return {
     version: 1,
     service: 'codenexus',
@@ -46,6 +52,7 @@ function buildHealthPayload(
     started_at: startedAt,
     repo_root: repoRoot,
     worktree_root: worktreeRoot,
+    loaded_index: extractLoadedIndexIdentity(state.meta),
   };
 }
 
@@ -140,7 +147,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
 
   const backend = await createBoundBackend(repoRoot);
   const startedAt = new Date().toISOString();
-  const health = buildHealthPayload(repoRoot, worktreeRoot, state.config, startedAt);
+  const health = buildHealthPayload(repoRoot, worktreeRoot, state.config, startedAt, state);
 
   const app = express();
   app.disable('x-powered-by');
@@ -184,6 +191,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
       started_at: startedAt,
       repo_root: repoRoot,
       worktree_root: worktreeRoot,
+      loaded_index: health.loaded_index,
     });
   } catch (error) {
     await new Promise<void>((resolve) => {

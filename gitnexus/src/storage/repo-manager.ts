@@ -21,7 +21,16 @@ export type RepoDetailFlag =
   | 'working_tree_dirty'
   | 'head_changed'
   | 'branch_changed'
-  | 'wrong_worktree';
+  | 'wrong_worktree'
+  | 'service_restart_required';
+
+export interface LoadedIndexIdentity {
+  indexed_head: string;
+  indexed_branch: string;
+  indexed_at: string;
+  indexed_dirty: boolean;
+  worktree_root: string;
+}
 
 export interface CodeNexusConfig {
   version: 1;
@@ -51,6 +60,7 @@ export interface RuntimeMeta {
   started_at: string;
   repo_root: string;
   worktree_root: string;
+  loaded_index: LoadedIndexIdentity;
 }
 
 export interface ServiceHealth {
@@ -61,6 +71,7 @@ export interface ServiceHealth {
   started_at: string;
   repo_root: string;
   worktree_root: string;
+  loaded_index: LoadedIndexIdentity;
 }
 
 export interface RepoBoundary {
@@ -96,6 +107,7 @@ export interface RepoStateSnapshot {
   config: CodeNexusConfig | null;
   meta: RepoMeta | null;
   runtime: RuntimeMeta | null;
+  liveHealth: ServiceHealth | null;
   currentHead: string;
   currentBranch: string;
   configError?: string;
@@ -183,6 +195,35 @@ function validateMeta(raw: unknown): RepoMeta {
   };
 }
 
+function validateLoadedIndexIdentity(raw: unknown): LoadedIndexIdentity {
+  if (!isRecord(raw)) {
+    throw new Error('Loaded index identity must be an object');
+  }
+  if (typeof raw.indexed_head !== 'string') {
+    throw new Error('Loaded index identity indexed_head must be a string');
+  }
+  if (typeof raw.indexed_branch !== 'string') {
+    throw new Error('Loaded index identity indexed_branch is required');
+  }
+  if (typeof raw.indexed_at !== 'string' || !raw.indexed_at) {
+    throw new Error('Loaded index identity indexed_at is required');
+  }
+  if (typeof raw.indexed_dirty !== 'boolean') {
+    throw new Error('Loaded index identity indexed_dirty is required');
+  }
+  if (typeof raw.worktree_root !== 'string' || !raw.worktree_root) {
+    throw new Error('Loaded index identity worktree_root is required');
+  }
+
+  return {
+    indexed_head: raw.indexed_head,
+    indexed_branch: raw.indexed_branch,
+    indexed_at: raw.indexed_at,
+    indexed_dirty: raw.indexed_dirty,
+    worktree_root: normalizePath(raw.worktree_root),
+  };
+}
+
 function validateRuntime(raw: unknown): RuntimeMeta {
   if (!isRecord(raw)) {
     throw new Error('Runtime metadata must be an object');
@@ -205,6 +246,7 @@ function validateRuntime(raw: unknown): RuntimeMeta {
   if (typeof raw.worktree_root !== 'string' || !raw.worktree_root) {
     throw new Error('Runtime metadata worktree_root is required');
   }
+  const loadedIndex = validateLoadedIndexIdentity(raw.loaded_index);
 
   return {
     version: 1,
@@ -213,6 +255,7 @@ function validateRuntime(raw: unknown): RuntimeMeta {
     started_at: raw.started_at,
     repo_root: normalizePath(raw.repo_root),
     worktree_root: normalizePath(raw.worktree_root),
+    loaded_index: loadedIndex,
   };
 }
 
@@ -241,6 +284,7 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
   if (typeof raw.worktree_root !== 'string' || !raw.worktree_root) {
     throw new Error('Service health worktree_root is required');
   }
+  const loadedIndex = validateLoadedIndexIdentity(raw.loaded_index);
 
   return {
     version: 1,
@@ -250,7 +294,28 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
     started_at: raw.started_at,
     repo_root: normalizePath(raw.repo_root),
     worktree_root: normalizePath(raw.worktree_root),
+    loaded_index: loadedIndex,
   };
+}
+
+export function extractLoadedIndexIdentity(meta: RepoMeta): LoadedIndexIdentity {
+  return {
+    indexed_head: meta.indexed_head,
+    indexed_branch: meta.indexed_branch,
+    indexed_at: meta.indexed_at,
+    indexed_dirty: meta.indexed_dirty,
+    worktree_root: normalizePath(meta.worktree_root),
+  };
+}
+
+function loadedIndexMatchesMeta(loadedIndex: LoadedIndexIdentity, meta: RepoMeta): boolean {
+  return (
+    loadedIndex.indexed_head === meta.indexed_head &&
+    loadedIndex.indexed_branch === meta.indexed_branch &&
+    loadedIndex.indexed_at === meta.indexed_at &&
+    loadedIndex.indexed_dirty === meta.indexed_dirty &&
+    normalizePath(loadedIndex.worktree_root) === normalizePath(meta.worktree_root)
+  );
 }
 
 export function getStoragePath(repoPath: string): string {
@@ -532,13 +597,23 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     liveHealth.worktree_root === worktreeRoot &&
     liveHealth.port === indexedState.config?.port;
 
+  const loadedIndexMatchesDiskMeta =
+    !!liveHealth &&
+    !!indexedState.meta &&
+    loadedIndexMatchesMeta(liveHealth.loaded_index, indexedState.meta);
+
   const runtimeMatchesLive =
     !!indexedState.runtime &&
     !!liveHealth &&
     indexedState.runtime.repo_root === liveHealth.repo_root &&
     indexedState.runtime.worktree_root === liveHealth.worktree_root &&
     indexedState.runtime.port === liveHealth.port &&
-    indexedState.runtime.pid === liveHealth.pid;
+    indexedState.runtime.pid === liveHealth.pid &&
+    indexedState.runtime.started_at === liveHealth.started_at &&
+    loadedIndexMatchesMeta(indexedState.runtime.loaded_index, {
+      version: 1,
+      ...liveHealth.loaded_index,
+    });
 
   const runtimeMetadataStale = liveServiceDetected
     ? !indexedState.runtime || !runtimeMatchesLive
@@ -548,10 +623,23 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     detailFlags.push('runtime_metadata_stale');
   }
 
+  const serviceRestartRequired =
+    liveServiceDetected &&
+    !!indexedState.meta &&
+    !loadedIndexMatchesDiskMeta;
+
+  if (serviceRestartRequired && !detailFlags.includes('service_restart_required')) {
+    detailFlags.push('service_restart_required');
+  }
+
   const baseState: RepoBaseState =
     liveServiceDetected &&
     (indexedState.baseState === 'indexed_current' || indexedState.baseState === 'indexed_stale')
-      ? (indexedState.baseState === 'indexed_stale' ? 'serving_stale' : 'serving_current')
+      ? (
+          indexedState.baseState === 'indexed_current' && loadedIndexMatchesDiskMeta
+            ? 'serving_current'
+            : 'serving_stale'
+        )
       : indexedState.baseState;
 
   return {
@@ -563,6 +651,7 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     config: indexedState.config,
     meta: indexedState.meta,
     runtime: indexedState.runtime,
+    liveHealth: liveServiceDetected ? liveHealth : null,
     currentHead: indexedState.currentHead,
     currentBranch: indexedState.currentBranch,
     configError: indexedState.configError,

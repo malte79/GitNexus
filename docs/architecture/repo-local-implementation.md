@@ -39,6 +39,8 @@ Epic 03 uses the v1 `.codenexus/` layout already locked in [repo-state-model.md]
 
 All four paths are now exercised by the active CLI surface. `codenexus serve` owns the live HTTP lifecycle and advisory `runtime.json`.
 
+The live service health contract is now also responsible for exposing the loaded index identity the service actually opened at startup. That identity is the source of truth for serving freshness, while `runtime.json` persists the same facts only as advisory recovery state.
+
 ## Hard-Cut Removals
 
 Epic 03 removes the old active architecture rather than adapting it:

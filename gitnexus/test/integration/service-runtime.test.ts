@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
 import { createTempDir } from '../helpers/test-db.js';
-import { saveConfig, saveMeta, getRepoState, probeServiceHealth } from '../../src/storage/repo-manager.js';
+import { saveConfig, saveMeta, getRepoState, probeServiceHealth, type LoadedIndexIdentity } from '../../src/storage/repo-manager.js';
 import { startRepoLocalService, DuplicateServiceError, ServiceStartupError } from '../../src/server/service-runtime.js';
 
 async function createGitRepo(prefix: string) {
@@ -17,6 +17,17 @@ async function createGitRepo(prefix: string) {
   return handle;
 }
 
+async function buildLoadedIndex(repoPath: string, overrides: Partial<LoadedIndexIdentity> = {}): Promise<LoadedIndexIdentity> {
+  return {
+    indexed_head: execSync('git rev-parse HEAD', { cwd: repoPath }).toString().trim(),
+    indexed_branch: execSync('git branch --show-current', { cwd: repoPath }).toString().trim(),
+    indexed_at: new Date().toISOString(),
+    indexed_dirty: false,
+    worktree_root: repoPath,
+    ...overrides,
+  };
+}
+
 async function prepareIndexedRepo(repoPath: string, port: number) {
   const storagePath = path.join(repoPath, '.codenexus');
   await fs.writeFile(path.join(repoPath, '.gitignore'), '.codenexus/\n', 'utf-8');
@@ -25,16 +36,13 @@ async function prepareIndexedRepo(repoPath: string, port: number) {
 
   await saveConfig(storagePath, { version: 1, port });
   await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+  const loadedIndex = await buildLoadedIndex(repoPath);
   await saveMeta(storagePath, {
     version: 1,
-    indexed_head: execSync('git rev-parse HEAD', { cwd: repoPath }).toString().trim(),
-    indexed_branch: execSync('git branch --show-current', { cwd: repoPath }).toString().trim(),
-    indexed_at: new Date().toISOString(),
-    indexed_dirty: false,
-    worktree_root: repoPath,
+    ...loadedIndex,
   });
 
-  return storagePath;
+  return { storagePath, loadedIndex };
 }
 
 async function reservePort(): Promise<number> {
@@ -59,7 +67,7 @@ describe('repo-local HTTP service runtime', () => {
   it('starts a live service for an indexed repo and cleans up runtime metadata on shutdown', async () => {
     const repo = await createGitRepo('service-runtime-live-');
     const port = await reservePort();
-    const storagePath = await prepareIndexedRepo(repo.dbPath, port);
+    const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
 
     const runtime = await startRepoLocalService(repo.dbPath);
 
@@ -123,7 +131,7 @@ describe('repo-local HTTP service runtime', () => {
   it('cleans up the bound server when runtime metadata cannot be written', async () => {
     const repo = await createGitRepo('service-runtime-runtime-write-failure-');
     const port = await reservePort();
-    const storagePath = await prepareIndexedRepo(repo.dbPath, port);
+    const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
 
     await fs.chmod(storagePath, 0o555);
     try {
@@ -133,5 +141,25 @@ describe('repo-local HTTP service runtime', () => {
       await fs.chmod(storagePath, 0o755);
       await repo.cleanup();
     }
+  });
+
+  it('reports serving_stale after manual reindex until the running service is restarted', async () => {
+    const repo = await createGitRepo('service-runtime-refresh-stale-');
+    const port = await reservePort();
+    const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
+
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    await saveMeta(storagePath, {
+      version: 1,
+      ...(await buildLoadedIndex(repo.dbPath, { indexed_at: '2026-03-09T01:00:00.000Z' })),
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('serving_stale');
+    expect(state?.detailFlags).toContain('service_restart_required');
+
+    await runtime.close();
+    await repo.cleanup();
   });
 });
