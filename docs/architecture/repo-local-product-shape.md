@@ -25,7 +25,7 @@ The intended v1 lifecycle is:
 
 ## Runtime Boundary
 
-The primary runtime interface is a repo-local MCP server over HTTP.
+The primary runtime interface is a real repo-local MCP server over HTTP.
 
 The server is scoped to one repo boundary and should expose the agent-facing CodeNexus commands for that repo only.
 

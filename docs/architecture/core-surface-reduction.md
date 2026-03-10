@@ -25,7 +25,7 @@ The reduction rule used here is strict:
 | `gitnexus/src/core/search/hybrid-search.ts` | semantic+BM25 blend | remove now | Embeddings removed; lexical search remains |
 | `gitnexus/src/cli/index-command.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to `codenexus index` |
 | `gitnexus/src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `codenexus status` |
-| `gitnexus/src/cli/serve.ts` | serve entrypoint | keep for epic 05 | Holds the final `codenexus serve` surface ahead of the HTTP lifecycle work |
+| `gitnexus/src/cli/serve.ts` | serve entrypoint | keep | Active `codenexus serve` command for the repo-local HTTP runtime |
 | `gitnexus/src/cli/index.ts` | CLI dispatcher | keep for epic 04 | Required CLI seam, but reduced to the minimal current surface |
 | `gitnexus/src/cli/setup.ts` | editor/plugin setup | remove now | Outside the headless product |
 | `gitnexus/src/cli/serve.ts` | web UI server command | remove now | Web UI is no longer a product surface |
@@ -36,8 +36,8 @@ The reduction rule used here is strict:
 | `gitnexus/src/cli/tool.ts` | direct tool CLI commands | remove now | MCP remains the primary agent-facing surface |
 | `gitnexus/src/cli/eval-server.ts` | eval daemon | remove now | Eval subsystem removed |
 | `gitnexus/src/cli/ai-context.ts` | AGENTS/context file generation | remove now | Product rule is no repo mutation outside repo state |
-| `gitnexus/src/mcp/` | MCP tool/server seam | keep for epic 05 | Still the shortest path to repo-local MCP |
-| `gitnexus/src/server/mcp-http.ts` | HTTP MCP transport mount | keep for epic 05 | Direct seam for repo-local HTTP MCP |
+| `gitnexus/src/mcp/` | MCP tool/server seam | keep | Active repo-local MCP surface |
+| `gitnexus/src/server/mcp-http.ts` | HTTP MCP transport mount | keep | Active repo-local HTTP runtime seam |
 | `gitnexus/src/server/api.ts` | web/browser API server | remove now | Web UI surface removed |
 | `gitnexus/src/storage/` | repo/git storage helpers | keep for epic 03 | Required until repo-local state rewrite lands |
 | `gitnexus-web/` | browser UI product | remove now | Human-facing visualization is out of scope |

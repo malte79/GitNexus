@@ -25,7 +25,8 @@ Epic 03 implements a hard cut:
 | repo activation shim | [init.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/init.ts) | create `.codenexus/config.toml` without creating index or runtime state |
 | retained indexing shim | [index-command.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index-command.ts) | write `.codenexus/kuzu` and `.codenexus/meta.json` only |
 | retained status shim | [status.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/status.ts) | report canonical base state and detail flags |
-| retained serve shim | [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts) | hold the final command shape and fail clearly until Epic 05 implements the HTTP lifecycle |
+| serve command | [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts) | start the repo-local HTTP service for one repo boundary |
+| service runtime | [service-runtime.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/server/service-runtime.ts) | bind the HTTP server, own graceful shutdown, and maintain runtime metadata |
 
 ## Active State Layout
 
@@ -36,7 +37,7 @@ Epic 03 uses the v1 `.codenexus/` layout already locked in [repo-state-model.md]
 - `.codenexus/kuzu/`
 - `.codenexus/runtime.json`
 
-Only the first three are exercised by the retained CLI shims through Epic 04. `runtime.json` remains part of the storage contract, but the repo-local HTTP lifecycle that owns it remains an Epic 05 concern.
+All four paths are now exercised by the active CLI surface. `codenexus serve` owns the live HTTP lifecycle and advisory `runtime.json`.
 
 ## Hard-Cut Removals
 
@@ -50,7 +51,7 @@ Epic 03 removes the old active architecture rather than adapting it:
 - no active `repo` parameter routing semantics
 - no `.gitnexus/` runtime ownership
 
-## Epic 04 CLI Surface
+## Active CLI Surface
 
 Epic 04 replaces the inherited user-facing CLI with:
 
@@ -59,7 +60,7 @@ Epic 04 replaces the inherited user-facing CLI with:
 - `codenexus status`
 - `codenexus serve`
 
-`codenexus serve` intentionally fails clearly until Epic 05 implements the repo-local HTTP lifecycle. The CLI must not silently fall back to inherited transport behavior for compatibility.
+`codenexus serve` now starts the repo-local HTTP service directly. The CLI must not silently fall back to inherited transport behavior for compatibility.
 
 ## Separation From Later Epics
 
@@ -75,7 +76,7 @@ Epic 04 still owns:
 - `codenexus init`
 - command-module renaming and user ergonomics
 
-Epic 05 still owns:
+Epic 05 owns and now implements:
 
 - the repo-local HTTP MCP lifecycle
 - port binding and runtime metadata writes as a real service contract

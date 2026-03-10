@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { realpathSync } from 'fs';
 import fs from 'fs/promises';
-import net from 'net';
+import http from 'http';
 import path from 'path';
 import { execSync } from 'child_process';
 import {
@@ -11,6 +12,7 @@ import {
   saveMeta,
   loadMeta,
   saveRuntimeMeta,
+  probeServiceHealth,
   loadRepo,
   getRepoState,
 } from '../../src/storage/repo-manager.js';
@@ -33,8 +35,50 @@ async function ignoreCodeNexusDir(repoPath: string): Promise<void> {
   execSync('git commit -q -m "ignore .codenexus"', { cwd: repoPath });
 }
 
-async function createListeningServer(): Promise<{ server: net.Server; port: number }> {
-  const server = net.createServer();
+async function createHealthServer(health: {
+  pid: number;
+  started_at: string;
+  repo_root: string;
+  worktree_root: string;
+}): Promise<{ server: http.Server; port: number }> {
+  let boundPort = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/api/health') {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      version: 1,
+      service: 'codenexus',
+      port: boundPort,
+      ...health,
+    }));
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected a TCP server address');
+  }
+
+  boundPort = address.port;
+
+  return { server, port: address.port };
+}
+
+async function createUnrelatedServer(): Promise<{ server: http.Server; port: number }> {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ service: 'other' }));
+  });
+
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => resolve());
@@ -171,7 +215,13 @@ describe('repo-local state', () => {
     const repo = await createGitRepo('repo-manager-serving-current-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
-    const { server, port } = await createListeningServer();
+    const startedAt = new Date().toISOString();
+    const { server, port } = await createHealthServer({
+      pid: process.pid,
+      started_at: startedAt,
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
@@ -187,7 +237,7 @@ describe('repo-local state', () => {
       version: 1,
       pid: process.pid,
       port,
-      started_at: new Date().toISOString(),
+      started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
     });
@@ -204,7 +254,13 @@ describe('repo-local state', () => {
     const repo = await createGitRepo('repo-manager-serving-stale-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
-    const { server, port } = await createListeningServer();
+    const startedAt = new Date().toISOString();
+    const { server, port } = await createHealthServer({
+      pid: process.pid,
+      started_at: startedAt,
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
@@ -220,7 +276,7 @@ describe('repo-local state', () => {
       version: 1,
       pid: process.pid,
       port,
-      started_at: new Date().toISOString(),
+      started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
     });
@@ -238,7 +294,7 @@ describe('repo-local state', () => {
     const repo = await createGitRepo('repo-manager-runtime-stale-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
-    const { server, port } = await createListeningServer();
+    const { server, port } = await createUnrelatedServer();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 
     await saveConfig(storagePath, { version: 1, port });
@@ -271,7 +327,7 @@ describe('repo-local state', () => {
     const repo = await createGitRepo('repo-manager-unrelated-port-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
-    const { server, port } = await createListeningServer();
+    const { server, port } = await createUnrelatedServer();
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
@@ -286,7 +342,7 @@ describe('repo-local state', () => {
 
     const state = await getRepoState(repo.dbPath);
     expect(state?.baseState).toBe('indexed_current');
-    expect(state?.detailFlags).toContain('runtime_metadata_stale');
+    expect(state?.detailFlags).not.toContain('runtime_metadata_stale');
 
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await repo.cleanup();
@@ -296,7 +352,12 @@ describe('repo-local state', () => {
     const repo = await createGitRepo('repo-manager-missing-runtime-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
-    const { server, port } = await createListeningServer();
+    const { server, port } = await createHealthServer({
+      pid: process.pid,
+      started_at: new Date().toISOString(),
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
@@ -310,8 +371,26 @@ describe('repo-local state', () => {
     });
 
     const state = await getRepoState(repo.dbPath);
-    expect(state?.baseState).toBe('indexed_current');
+    expect(state?.baseState).toBe('serving_current');
     expect(state?.detailFlags).toContain('runtime_metadata_stale');
+
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await repo.cleanup();
+  });
+
+  it('can probe a live CodeNexus service identity payload', async () => {
+    const repo = await createGitRepo('repo-manager-health-probe-');
+    const startedAt = new Date().toISOString();
+    const { server, port } = await createHealthServer({
+      pid: process.pid,
+      started_at: startedAt,
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+    });
+
+    const health = await probeServiceHealth(port);
+    expect(health?.service).toBe('codenexus');
+    expect(health?.repo_root).toBe(realpathSync(repo.dbPath));
 
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await repo.cleanup();

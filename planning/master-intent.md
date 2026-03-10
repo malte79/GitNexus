@@ -59,6 +59,7 @@ HTTP is the chosen transport, not stdio, for the repo-local MCP service. The int
   - starts a repo-specific MCP HTTP server
   - serves only that repo
   - listens on the port defined in repo-local config
+  - writes advisory runtime metadata under `.codenexus/`
 - `codenexus status`
   - reports repo config, freshness, and whether the local MCP service is running
 

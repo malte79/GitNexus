@@ -11,11 +11,9 @@ This document defines the v1 user-facing contract for:
 
 All commands resolve the nearest enclosing git root as the active repo boundary.
 
-## Epic 04 Posture
+## Epic 05 Posture
 
-Epic 04 makes `codenexus` the only user-facing CLI.
-
-`codenexus serve` exists in this epic as the final command shape, but it fails clearly until Epic 05 delivers the real repo-local HTTP service lifecycle.
+Epic 05 makes `codenexus serve` real as the repo-local HTTP service command.
 
 ## `codenexus init`
 
@@ -123,12 +121,6 @@ Reporting expectations:
 
 Start the repo-local MCP HTTP service for the active repo boundary.
 
-Current Epic 04 behavior:
-
-- the command exists
-- it fails clearly and explicitly until Epic 05 implements the actual service lifecycle
-- it must not silently fall back to inherited stdio MCP behavior
-
 Preconditions:
 
 - repo boundary must exist
@@ -139,6 +131,7 @@ Side effects:
 
 - bind the configured port
 - write `.codenexus/runtime.json` on successful startup
+- remove `.codenexus/runtime.json` on graceful shutdown
 
 Contract:
 
@@ -148,6 +141,7 @@ Contract:
 - stale indexes may be served only with explicit degraded reporting
 - no silent auto-refresh is allowed on serve
 - `codenexus serve` must not rewrite `config.toml`
+- live service identity is proven through a repo-specific HTTP health endpoint, not raw port reachability
 
 Failure cases:
 
@@ -156,11 +150,14 @@ Failure cases:
 - fail when no usable index exists
 - fail when config is invalid
 - fail when port binding conflicts cannot be resolved explicitly
+- fail duplicate same-repo serve attempts while reporting the existing PID and port
 
 State transitions:
 
 - `indexed_current -> serving_current`
 - `indexed_stale -> serving_stale`
+- `serving_current -> indexed_current` when the live service stops cleanly
+- `serving_stale -> indexed_stale` when the live service stops cleanly
 - no transition on failed duplicate-serve attempts or port conflicts
 
 ## Wrong-Context Behavior
