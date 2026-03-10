@@ -30,6 +30,10 @@ describe('parser-loader', () => {
       await expect(loadLanguage(SupportedLanguages.Python)).resolves.not.toThrow();
     });
 
+    it('loads Luau language', async () => {
+      await expect(loadLanguage(SupportedLanguages.Luau, 'module.luau')).resolves.not.toThrow();
+    });
+
     it('loads Java language', async () => {
       await expect(loadLanguage(SupportedLanguages.Java)).resolves.not.toThrow();
     });

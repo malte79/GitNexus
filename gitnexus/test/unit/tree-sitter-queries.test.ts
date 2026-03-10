@@ -3,6 +3,7 @@ import {
   TYPESCRIPT_QUERIES,
   JAVASCRIPT_QUERIES,
   PYTHON_QUERIES,
+  LUAU_QUERIES,
   JAVA_QUERIES,
   C_QUERIES,
   GO_QUERIES,
@@ -29,6 +30,7 @@ describe('tree-sitter queries', () => {
       expect(LANGUAGE_QUERIES[SupportedLanguages.TypeScript]).toBe(TYPESCRIPT_QUERIES);
       expect(LANGUAGE_QUERIES[SupportedLanguages.JavaScript]).toBe(JAVASCRIPT_QUERIES);
       expect(LANGUAGE_QUERIES[SupportedLanguages.Python]).toBe(PYTHON_QUERIES);
+      expect(LANGUAGE_QUERIES[SupportedLanguages.Luau]).toBe(LUAU_QUERIES);
       expect(LANGUAGE_QUERIES[SupportedLanguages.Java]).toBe(JAVA_QUERIES);
       expect(LANGUAGE_QUERIES[SupportedLanguages.C]).toBe(C_QUERIES);
       expect(LANGUAGE_QUERIES[SupportedLanguages.Go]).toBe(GO_QUERIES);
@@ -110,6 +112,25 @@ describe('tree-sitter queries', () => {
 
     it('captures heritage (class inheritance)', () => {
       expect(PYTHON_QUERIES).toContain('@heritage.extends');
+    });
+  });
+
+  describe('Luau queries', () => {
+    it('captures function, method, and type definitions', () => {
+      expect(LUAU_QUERIES).toContain('@definition.function');
+      expect(LUAU_QUERIES).toContain('@definition.method');
+      expect(LUAU_QUERIES).toContain('@definition.type');
+    });
+
+    it('captures string-based require imports', () => {
+      expect(LUAU_QUERIES).toContain('@import.source');
+      expect(LUAU_QUERIES).toContain('@import.name');
+    });
+
+    it('captures direct and member function calls', () => {
+      expect(LUAU_QUERIES).toContain('@call.name');
+      expect(LUAU_QUERIES).toContain('method_index_expression');
+      expect(LUAU_QUERIES).toContain('dot_index_expression');
     });
   });
 

@@ -2,6 +2,7 @@ import Parser from 'tree-sitter';
 import JavaScript from 'tree-sitter-javascript';
 import TypeScript from 'tree-sitter-typescript';
 import Python from 'tree-sitter-python';
+import Luau from 'tree-sitter-luau';
 import Java from 'tree-sitter-java';
 import C from 'tree-sitter-c';
 import CPP from 'tree-sitter-cpp';
@@ -25,6 +26,7 @@ const languageMap: Record<string, any> = {
   [SupportedLanguages.TypeScript]: TypeScript.typescript,
   [`${SupportedLanguages.TypeScript}:tsx`]: TypeScript.tsx,
   [SupportedLanguages.Python]: Python,
+  [SupportedLanguages.Luau]: Luau,
   [SupportedLanguages.Java]: Java,
   [SupportedLanguages.C]: C,
   [SupportedLanguages.CPlusPlus]: CPP,

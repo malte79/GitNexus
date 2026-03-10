@@ -71,14 +71,23 @@ const findEnclosingFunction = (
       }
 
       if (current.type === 'function_declaration' ||
-          current.type === 'function_definition' ||
           current.type === 'async_function_declaration' ||
           current.type === 'generator_function_declaration' ||
           current.type === 'function_item') { // Rust function
         // Named function: function foo() {}
         const nameNode = current.childForFieldName?.('name') || 
                          current.children?.find((c: any) => c.type === 'identifier' || c.type === 'property_identifier');
-        funcName = nameNode?.text;
+        if (nameNode?.type === 'method_index_expression') {
+          funcName = nameNode.childForFieldName?.('method')?.text ||
+            nameNode.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
+        } else if (nameNode?.type === 'dot_index_expression') {
+          funcName = nameNode.childForFieldName?.('field')?.text ||
+            nameNode.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
+        } else {
+          funcName = nameNode?.text;
+        }
       } else if (current.type === 'impl_item') {
         // Rust method inside impl block: wrapper around function_item or const_item
         // We need to look inside for the function_item
@@ -114,6 +123,22 @@ const findEnclosingFunction = (
           const nameNode = parent.childForFieldName?.('name') ||
                            parent.children?.find((c: any) => c.type === 'identifier');
           funcName = nameNode?.text;
+        }
+      } else if (current.type === 'function_definition') {
+        const expressionList = current.parent;
+        const assignment = expressionList?.type === 'expression_list' ? expressionList.parent : null;
+        const variableList = assignment?.children?.find((c: any) => c.type === 'variable_list');
+        const assignedName = variableList?.childForFieldName?.('name') || variableList?.namedChild?.(0);
+        if (assignedName?.type === 'identifier') {
+          funcName = assignedName.text;
+        } else if (assignedName?.type === 'dot_index_expression') {
+          funcName = assignedName.childForFieldName?.('field')?.text ||
+            assignedName.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
+        } else if (assignedName?.type === 'method_index_expression') {
+          funcName = assignedName.childForFieldName?.('method')?.text ||
+            assignedName.children?.find((c: any) => c.type === 'identifier')?.text;
+          label = 'Method';
         }
       }
       
@@ -396,6 +421,11 @@ const BUILT_IN_NAMES = new Set([
   'sink', 'store', 'assign', 'receive', 'subscribe',
   // Notification / KVO
   'addObserver', 'removeObserver', 'post', 'NotificationCenter',
+  // Lua / Luau built-ins
+  'print', 'warn', 'require', 'error', 'assert', 'pcall', 'xpcall',
+  'pairs', 'ipairs', 'next', 'type', 'typeof', 'tostring', 'tonumber',
+  'rawget', 'rawset', 'rawequal', 'select', 'setmetatable', 'getmetatable',
+  'math', 'string', 'table', 'coroutine', 'utf8', 'os', 'task',
 ]);
 
 const isBuiltInOrNoise = (name: string): boolean => BUILT_IN_NAMES.has(name);

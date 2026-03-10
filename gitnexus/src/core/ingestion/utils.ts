@@ -35,6 +35,9 @@ export const getLanguageFromFilename = (filename: string): SupportedLanguages | 
   if (filename.endsWith('.js')) return SupportedLanguages.JavaScript;
   // Python
   if (filename.endsWith('.py')) return SupportedLanguages.Python;
+  // Luau / Lua
+  if (filename.endsWith('.luau')) return SupportedLanguages.Luau;
+  if (filename.endsWith('.lua')) return SupportedLanguages.Luau;
   // Java
   if (filename.endsWith('.java')) return SupportedLanguages.Java;
   // C (source and headers)
@@ -59,4 +62,3 @@ export const getLanguageFromFilename = (filename: string): SupportedLanguages | 
   if (filename.endsWith('.swift')) return SupportedLanguages.Swift;
   return null;
 };
-

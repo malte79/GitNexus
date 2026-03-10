@@ -1,0 +1,75 @@
+Title: Luau Core Support
+
+Assigned to: Agent 1
+Lane: Language
+Status: doing
+Objective: Add Luau as a first-class language in the CodeNexus indexing engine so `codenexus index`, `codenexus status`, and the live repo-local service can index and query Luau code at the language level, without yet adding Roblox- or Rojo-specific semantics.
+In scope: adding Luau to the supported-language model; mapping `.lua` and `.luau` files; loading a Tree-sitter Luau grammar; adding Luau language queries; extracting Luau definitions, calls, and basic `require(...)` imports; aligning import/call processing enough for filesystem-level Luau modules; tests and docs for Luau indexing/query behavior; using `luau-lsp` only as a semantic/reference aid for coverage and test-shape decisions.
+Out of scope: Rojo project parsing; Roblox instance-tree semantics; `game:GetService(...)`; `script.Parent`; `WaitForChild(...)`; DataModel path resolution; broad Lua ecosystem support beyond what is needed for Luau indexing; editor/LSP integration; integrating `luau-lsp` as a dependency or runtime component; type-checking or editor-grade semantic analysis.
+Dependencies: `/Users/alex/Projects/GitNexusFork-agent-1/planning/master-intent.md`; `/Users/alex/Projects/GitNexusFork-agent-1/planning/epics-todo.md`; `/Users/alex/Projects/GitNexusFork-agent-1/docs/policy.md`; `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-local-implementation.md`; current language-engine seams in `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/config/supported-languages.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/utils.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/tree-sitter/parser-loader.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/tree-sitter-queries.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/import-processor.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/call-processor.ts`; external reference only: [JohnnyMorganz/luau-lsp](https://github.com/JohnnyMorganz/luau-lsp).
+Risks: if Epic 07 drifts into Roblox semantics, it will blur the boundary with Epic 08 and slow both epics; if Luau extraction is too narrow, the graph will technically “support Luau” but still be weak on real codebases; if the grammar choice is poor or unstable, the parser layer will become fragile; if filesystem-level `require(...)` handling is overfit to Roblox patterns, Epic 07 will accidentally bake Roblox assumptions into the generic language layer; if tests do not cover representative Luau constructs, later Roblox work will be built on a misleadingly shallow baseline; if the epic adds only parser support without proving end-to-end indexing/query usefulness, Epic 08 will inherit a shallow language layer that looks “done” but is not actually usable; if `.lua` and `.luau` are both declared supported but only one path is meaningfully exercised, the support claim will be stronger than the evidence.
+Rollback strategy: keep Epic 07 strictly language-level; if a Luau construct proves harder than expected, degrade gracefully and document it as deferred rather than sneaking Roblox-specific logic into the engine; if a grammar or query approach is wrong, revise the Luau layer within the existing Tree-sitter seams instead of adding a one-off parser path; if extraction quality is insufficient, strengthen definitions/imports/calls coverage before moving on to Epic 08; if a construct cannot be handled without Roblox semantics, defer it explicitly instead of solving it here under a language-only label; if one file-extension path proves materially weaker, tighten the support claim in docs/tests rather than leaving both extensions equally implied without evidence.
+
+### [x] 100 Lock The Luau Language-Support Contract
+
+Surface: `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-local-implementation.md`; durable Luau support doc under `docs/architecture/` or `docs/features/`; existing language-engine seams
+Work: Lock exactly what “Luau core support” means for CodeNexus before changing the engine. This unit must define which file extensions are supported, whether `.lua` and `.luau` are equally supported in v1, which Luau construct families must be indexed in v1, how basic `require(...)` is treated at the language level, what export/public heuristics exist for Luau modules, and what is explicitly deferred to Epic 08. It must also make explicit that `luau-lsp` is reference material only, not an integration dependency. Done when the repo has one durable definition of Luau support scope that later implementation can execute mechanically.
+Tests: Validate the contract against representative Luau source shapes including top-level functions, local functions, table-attached methods, basic module-return patterns, and plain `require(...)` calls. Confirm Roblox-specific constructs are explicitly deferred rather than ambiguously half-included, confirm the contract distinguishes “language-level require” from Roblox DataModel resolution, and confirm the support claim for `.lua` versus `.luau` matches the intended validation bar.
+Docs: Create `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md` and sync a short note into `/Users/alex/Projects/GitNexusFork-agent-1/planning/master-intent.md`.
+
+### [x] 101 Add Luau To The Language Registry And Parser Layer
+
+Surface: `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/config/supported-languages.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/utils.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/tree-sitter/parser-loader.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts`; package dependencies
+Work: Add Luau to the supported-language registry and parser loading path. This unit must introduce the Luau enum value, map `.lua` and `.luau`, add the selected Tree-sitter Luau grammar dependency, and make both the main parser loader and the parse worker able to select that grammar. It must keep Luau on the same parser path as the rest of the engine rather than adding a separate parser subsystem. Done when CodeNexus can parse Luau source files through the same Tree-sitter-based engine used for existing languages.
+Tests: Add or update tests proving `.lua` and `.luau` resolve to Luau, the parser loader accepts Luau, and the parse worker can initialize the Luau grammar without special-case fallback logic. At least one fixture for each supported extension path must exist.
+Docs: Update `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md` and any affected engine/docs references to include the grammar and extension mapping.
+
+### [x] 102 Add Luau Queries And Definition Extraction
+
+Surface: `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/tree-sitter-queries.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/parsing-processor.ts`
+Work: Add the Luau AST queries and extraction logic needed to build a useful code graph. This unit must capture at least top-level functions, local functions, method-style definitions, and any other statically obvious definition forms needed for real Luau repos. It must also make a deliberate choice about what counts as “exported” or public at the language level for Luau modules, including returned-table patterns where they can be handled without Roblox semantics. Done when Luau files contribute useful definition nodes and symbols to the graph through the standard parsing pipeline.
+Tests: Add or update worker/parsing tests for representative Luau definition patterns, including local function declarations, function assignments, table method syntax when statically obvious, and simple returned-table module patterns if supported.
+Docs: Update `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md` with the supported Luau construct set and any explicit limitations.
+
+### [x] 103 Add Luau Call And Basic Import Extraction
+
+Surface: `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/import-processor.ts`; `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/call-processor.ts`
+Work: Add call extraction and conservative language-level import handling for Luau. This unit must capture ordinary function/method calls and basic statically visible `require(...)` usage without introducing Roblox-specific path semantics. Filesystem-level or simple module-string forms may be supported where appropriate, but Roblox DataModel resolution must remain out of scope. The unit must explicitly define what happens to unresolved `require(...)` forms so the graph does not silently imply more understanding than the engine actually has. Done when Luau files produce useful call edges and basic import edges through the standard processors.
+Tests: Add or update tests covering Luau call extraction and basic `require(...)` handling, including success cases and explicit non-goals where dynamic or Roblox-specific resolution is intentionally deferred. Include unresolved `require(...)` cases so the behavior is visible and deliberate.
+Docs: Update `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md` so the import/call behavior and deferrals are explicit.
+
+### [x] 104 Prove Luau Support Through Index And Query Workflows
+
+Surface: Luau fixtures; unit/integration tests; live query/index workflow surfaces
+Work: Prove that Luau support is real at the product level rather than only in isolated parser tests. This unit must add representative Luau fixtures, run them through the indexing pipeline, and verify that definitions, calls, imports, and queries work through the existing local index and runtime model. It should use the installed CodeNexus product surface where practical, but still keep the epic language-focused. Done when Luau support is demonstrated end-to-end through indexing and graph queries, not just parser setup, and when the demonstrated fixture shape is clearly language-level rather than Roblox-specialized.
+Tests: Add or update integration coverage proving Luau files are indexed, symbols are queryable, and graph relationships appear in realistic fixture repos. Include at least one fixture that resembles Luau module organization without requiring Roblox semantics, at least one product-level smoke path that queries Luau symbols through the real local service, and evidence that the supported `.lua`/`.luau` extension paths both work as documented.
+Docs: Update `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md`, `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-local-implementation.md`, and any affected operator docs to note that Luau is now supported.
+
+### [ ] 190 Milestone 100 Closeout
+
+Surface: Luau language registry; parser layer; definition/call/import extraction; durable docs; validation evidence
+Work: Confirm CodeNexus now supports Luau as a real indexed language. This closeout must prove Luau files can be parsed, indexed, queried, and graph-linked through the existing product without pulling Roblox semantics into the language layer. It must also clearly separate what Epic 07 solved from what Epic 08 still owns.  
+Tests: Run the selected docs, build, unit, integration, and product-level smoke checks for the final Luau support.  
+Docs: Record closeout evidence in the epic and ensure the final behavior is reflected in `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md`, `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-local-implementation.md`, and `/Users/alex/Projects/GitNexusFork-agent-1/planning/master-intent.md`.
+
+Closeout evidence table (required):
+
+| Unit | Required evidence | Link / Note | Status |
+|---|---|---|---|
+| 100 | Luau support contract is locked | `/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/luau-core-support.md` defines supported extensions, construct families, conservative `require(...)` behavior, and Epic 08 deferrals. | [x] |
+| 101 | Luau is registered and parsable | `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/config/supported-languages.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/utils.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/tree-sitter/parser-loader.ts`, and `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts` all support Luau. | [x] |
+| 102 | Luau definition extraction is useful | `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/tree-sitter-queries.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts`, and `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/test/integration/luau-indexing.test.ts` prove definitions and symbols flow through the standard pipeline. | [x] |
+| 103 | Luau calls and basic imports are extracted conservatively | `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/import-processor.ts`, `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/call-processor.ts`, and Luau fixtures/tests show language-level `require(...)` and calls work without Roblox coupling. | [x] |
+| 104 | Luau works end-to-end through indexing and queries | `npm run test:integration --prefix gitnexus` covers `/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/test/integration/luau-indexing.test.ts`, and the packed-install smoke path against `mini-luau-repo` proved `codenexus init`, `codenexus index`, `codenexus serve`, and a live `query(\"slugify\")`. | [x] |
+| 190 | Validation passed on final Luau support | `npm run lint:docs --prefix gitnexus`, `npm run check:docs-contracts --prefix gitnexus`, `npm run build --prefix gitnexus`, `npm test --prefix gitnexus`, `npm run test:integration --prefix gitnexus`, and `npm run test:all --prefix gitnexus` all passed. | [x] |
+
+Blocker criteria (190 cannot close if any are true):
+
+- Luau is still only partially wired into the parser layer.
+- Luau definition extraction is too shallow to produce useful graph symbols.
+- Basic call/import handling for Luau is still missing or undefined.
+- Unresolved Luau `require(...)` behavior is still implicit or misleading.
+- `.lua` and `.luau` support claims are not matched by explicit validation evidence.
+- Roblox- or Rojo-specific semantics were pulled into the generic Luau layer.
+- The epic still depends on `luau-lsp` as an integration component instead of using it only as reference material.
+- Docs, build, unit, integration, or product-level validation fail on the resulting Luau support.

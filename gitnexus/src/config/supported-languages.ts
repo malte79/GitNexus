@@ -2,6 +2,7 @@ export enum SupportedLanguages {
     JavaScript = 'javascript',
     TypeScript = 'typescript',
     Python = 'python',
+    Luau = 'luau',
     Java = 'java',
     C = 'c',
     CPlusPlus = 'cpp',

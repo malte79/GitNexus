@@ -64,33 +64,23 @@ This made the runtime real:
 - `codenexus status` now reflects the real live runtime model instead of placeholder heuristics
 - duplicate serve and stale runtime handling are now part of the real runtime path
 
-## Remaining Epic Sequence
-
 ### 06. Index Freshness And Manual Refresh Semantics
 
-Tighten the operational model now that the repo-local service and CLI are real.
+Completed.
 
-Primary goals:
+This tightened the post-Epic-05 operating model:
 
-- make manual refresh behavior explicit and durable
-- tighten stale/current reporting across CLI and service
-- define what happens operationally when code changes under an existing index
-- decide what `status` and the live service should report when on-disk index state changes during service uptime
+- `codenexus index` is now explicitly the manual refresh path
+- the live service exposes loaded-index identity
+- `codenexus status` can distinguish on-disk freshness from what the live service has actually loaded
+- restart-required behavior after reindex while serving is now explicit
+- the freshness model has been proven against a real installed package and live service run
 
-What this brings:
-
-- clearer operator and agent behavior
-- fewer ambiguous stale-state edge cases
-- a stable base before smarter update logic is added
-
-Important note:
-
-- this is still the manual and explicit freshness epic
-- the service already exists, so this epic is about behavior and contract tightening, not introducing runtime primitives
+## Remaining Epic Sequence
 
 ### 07. Luau Core Support
 
-Add Luau to the language engine itself.
+Add Luau to the language engine itself, on top of the now-working installable CLI and live repo-local service.
 
 Primary goals:
 
@@ -101,9 +91,9 @@ Primary goals:
 
 What this brings:
 
-- CodeNexus can index Luau repos at the language level
-- Roblox-specific support has a real foundation instead of special cases on top of unsupported code
-- the runtime and CLI are already in place, so this becomes pure language-engine work rather than product-surface work
+- CodeNexus can index Luau repos at the language level instead of only the currently supported languages
+- Roblox-specific support gets a real language-engine foundation instead of heuristics layered on unsupported code
+- because the CLI, repo-local index, and live service already work, new Luau support becomes usable through the existing product immediately
 
 Important note:
 
@@ -128,7 +118,7 @@ What this brings:
 
 - CodeNexus becomes genuinely useful on Rojo Roblox game repos
 - agents stop paying the manual “Roblox tax” of reconstructing module and instance relationships by grep
-- the value here now compounds on top of the already-real local service, which means agents can use the new Roblox-aware capabilities immediately through the existing runtime
+- the value compounds on top of the already-real local service and freshness model, so agents can use the new Roblox-aware capabilities immediately through the existing runtime
 
 Important note:
 
@@ -150,7 +140,7 @@ What this brings:
 
 - fewer surprises when switching branches
 - a path toward branch-aware index management
-- a more durable repo-local operating model for real day-to-day use now that service state and CLI state are already established
+- a more durable repo-local operating model for real day-to-day use now that service state, CLI state, and freshness semantics are all already established
 
 ### 10. Deferred Intelligence Upgrades
 
@@ -168,14 +158,13 @@ What this brings:
 
 - deeper agent leverage after the product is already solid
 - differentiating intelligence features without destabilizing the now-working core product too early
+- a place for future world-projection ingestion once Luau and Rojo support exist
 
 ## Why The Remaining Order Looks Like This
 
-The product and runtime core now exist. The next epic stabilizes operation:
+The product and runtime core now exist and have been proven in a real installed run against a live repo-local service.
 
-- Epic 06: Index Freshness And Manual Refresh Semantics
-
-Then the next two epics make the existing product useful for the target Roblox/Luau domain:
+The next two epics make the existing product useful for the target Roblox/Luau domain:
 
 - Epic 07: Luau Core Support
 - Epic 08: Roblox And Rojo Resolution
@@ -187,7 +176,7 @@ Then the final two deepen robustness and intelligence:
 
 ## Planning Notes
 
-The roadmap is now past the foundational, architectural, CLI, and initial runtime work. Remaining epics should avoid reopening settled decisions from Epics 00-05 unless implementation reveals a real contradiction.
+The roadmap is now past the foundational, architectural, CLI, runtime, and freshness work. Remaining epics should avoid reopening settled decisions from Epics 00-06 unless implementation reveals a real contradiction.
 
 When actual epics are created, each one should answer:
 

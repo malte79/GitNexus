@@ -33,6 +33,16 @@ describe('getLanguageFromFilename', () => {
     });
   });
 
+  describe('Luau', () => {
+    it('detects .lua files', () => {
+      expect(getLanguageFromFilename('main.lua')).toBe(SupportedLanguages.Luau);
+    });
+
+    it('detects .luau files', () => {
+      expect(getLanguageFromFilename('main.luau')).toBe(SupportedLanguages.Luau);
+    });
+  });
+
   describe('Java', () => {
     it('detects .java files', () => {
       expect(getLanguageFromFilename('Main.java')).toBe(SupportedLanguages.Java);
@@ -101,7 +111,7 @@ describe('getLanguageFromFilename', () => {
   });
 
   describe('unsupported', () => {
-    it.each(['.rb', '.scala', '.r', '.lua', '.zig', '.txt', '.md', '.json', '.yaml'])(
+    it.each(['.rb', '.scala', '.r', '.zig', '.txt', '.md', '.json', '.yaml'])(
       'returns null for %s files',
       (ext) => {
         expect(getLanguageFromFilename(`file${ext}`)).toBeNull();

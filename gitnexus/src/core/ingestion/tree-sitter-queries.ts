@@ -148,6 +148,81 @@ export const PYTHON_QUERIES = `
     (identifier) @heritage.extends)) @heritage
 `;
 
+// Luau queries - works with tree-sitter-luau
+export const LUAU_QUERIES = `
+; Top-level and local named functions
+(function_declaration
+  name: (identifier) @name) @definition.function
+
+; Method-style declarations: function Module:method() ... end
+(function_declaration
+  name: (method_index_expression
+    method: (identifier) @name)) @definition.method
+
+; Table-member declarations: function Module.method() ... end
+(function_declaration
+  name: (dot_index_expression
+    field: (identifier) @name)) @definition.method
+
+; Local or top-level assignment-based functions
+(variable_declaration
+  (assignment_statement
+    (variable_list
+      name: (identifier) @name)
+    (expression_list
+      value: (function_definition)))) @definition.function
+
+; Plain top-level assignment-based functions: name = function() ... end
+(assignment_statement
+  (variable_list
+    name: (identifier) @name)
+  (expression_list
+    value: (function_definition))) @definition.function
+
+; Assignment-based table-member functions
+(assignment_statement
+  (variable_list
+    name: (dot_index_expression
+      field: (identifier) @name))
+  (expression_list
+    value: (function_definition))) @definition.method
+
+; Type aliases
+(type_definition
+  name: (identifier) @name) @definition.type
+
+; String-based require() imports only
+(variable_declaration
+  (assignment_statement
+    (variable_list
+      name: (_))
+    (expression_list
+      value: (function_call
+        name: (identifier) @import.name
+        arguments: (arguments
+          (string
+            content: (string_content) @import.source)))))) @import
+
+; Bare string-based require() calls: require("./bootstrap")
+(function_call
+  name: (identifier) @import.name
+  arguments: (arguments
+    (string
+      content: (string_content) @import.source))) @import
+
+; Direct and member calls
+(function_call
+  name: (identifier) @call.name) @call
+
+(function_call
+  name: (dot_index_expression
+    field: (identifier) @call.name)) @call
+
+(function_call
+  name: (method_index_expression
+    method: (identifier) @call.name)) @call
+`;
+
 // Java queries - works with tree-sitter-java
 export const JAVA_QUERIES = `
 ; Classes, Interfaces, Enums, Annotations
@@ -533,6 +608,7 @@ export const LANGUAGE_QUERIES: Record<SupportedLanguages, string> = {
   [SupportedLanguages.TypeScript]: TYPESCRIPT_QUERIES,
   [SupportedLanguages.JavaScript]: JAVASCRIPT_QUERIES,
   [SupportedLanguages.Python]: PYTHON_QUERIES,
+  [SupportedLanguages.Luau]: LUAU_QUERIES,
   [SupportedLanguages.Java]: JAVA_QUERIES,
   [SupportedLanguages.C]: C_QUERIES,
   [SupportedLanguages.Go]: GO_QUERIES,
