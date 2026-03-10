@@ -12,7 +12,7 @@ This document defines the v1 `.codenexus/` layout, config and runtime ownership,
 | `.codenexus/config.toml` | config | `codenexus init` | User-owned repo config | No |
 | `.codenexus/meta.json` | derived index metadata | `codenexus index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
 | `.codenexus/kuzu/` | derived index state | `codenexus index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |
-| `.codenexus/runtime.json` | advisory runtime state | `codenexus serve` | Last known local MCP service facts | Yes, but service discovery falls back to live checks only |
+| `.codenexus/runtime.json` | advisory runtime state | `codenexus serve` | Last known local HTTP service facts | Yes, but service discovery falls back to live checks only |
 
 V1 creates no placeholder directories or reserved future paths beyond the paths above.
 
@@ -102,11 +102,14 @@ Required fields:
 - If `runtime.json` claims a service exists but no live service answers, the runtime metadata is stale.
 - If a live service answers but `runtime.json` is missing or stale, the live service wins and status must report the runtime metadata mismatch.
 
-Epic 03 limitation:
+The live probe is a bounded HTTP health request to the repo-local service.
 
-- until the repo-local HTTP service exists, `codenexus status` only has a bounded TCP port probe
-- because that probe cannot prove repo identity on its own, a live configured port with missing `runtime.json` is reported as indexed state plus `runtime_metadata_stale`
-- Epic 03 only reports `serving_current` or `serving_stale` when the live probe and runtime metadata agree on the same repo-local service boundary
+Serving states require:
+
+- a successful service-identity response from `/api/health`
+- matching repo root, worktree root, and configured port
+
+An unrelated process listening on the configured port must not produce `serving_current` or `serving_stale`.
 
 ## Canonical Base States
 

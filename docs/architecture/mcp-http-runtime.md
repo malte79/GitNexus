@@ -4,11 +4,6 @@
 
 This document defines the v1 repo-local MCP-over-HTTP service contract for one CodeNexus repo boundary.
 
-Epic 04 note:
-
-- `codenexus serve` is now the final user-facing command shape
-- the actual runtime lifecycle described below is still an Epic 05 delivery
-
 ## Runtime Scope
 
 - one running service corresponds to one repo boundary
@@ -42,6 +37,10 @@ Only `codenexus serve` owns `runtime.json` writes in v1.
 
 `codenexus status` may read and compare runtime metadata, but it must not rewrite it.
 
+On graceful shutdown, `codenexus serve` removes `.codenexus/runtime.json`.
+
+If the process crashes or is killed before cleanup runs, `runtime.json` may remain behind as stale advisory state until the next live probe or serve attempt corrects it.
+
 V1 does not define live service hot-reload behavior when `codenexus index` rewrites on-disk index state. A refreshed on-disk index does not by itself imply that an already-running service has re-opened or adopted that index without restart.
 
 ## Health Model
@@ -53,11 +52,20 @@ The service health contract is:
 - stale or missing `runtime.json` must not outweigh a successful live probe
 - failed live probes with stale `runtime.json` must be reported as runtime metadata stale
 
-Epic 03 limitation:
+The live probe is a service-specific HTTP endpoint:
 
-- until the repo-local HTTP service exists, `codenexus status` only has a bounded TCP probe rather than a service-specific health endpoint
-- because that probe cannot prove repo identity on its own, a reachable configured port with missing `runtime.json` is reported as indexed state plus `runtime_metadata_stale`, not as a confirmed serving state
-- confirmed `serving_current` or `serving_stale` requires both a live probe and matching runtime metadata in Epic 03
+- `GET /api/health`
+
+The health payload must prove service identity for the current repo boundary by returning:
+
+- service name
+- PID
+- configured port
+- repo root
+- worktree root
+- service start time
+
+Raw port reachability is never enough to claim a live CodeNexus service.
 
 ## Startup Contract
 
@@ -72,6 +80,26 @@ If the index is current, the service starts in a non-degraded state.
 ### Stale Index
 
 If the index is stale, the service may still start, but it must report degraded or stale status explicitly. It must not silently auto-refresh.
+
+## Shutdown And Crash Recovery
+
+### Graceful Shutdown
+
+When the service exits through its normal shutdown path:
+
+- the HTTP listener is closed
+- MCP session state is torn down
+- the bound backend disconnects
+- `.codenexus/runtime.json` is removed
+
+### Crash Or Forced Termination
+
+If the process dies before graceful shutdown completes:
+
+- `.codenexus/runtime.json` may remain
+- later `codenexus status` calls must prefer live `/api/health` results over the stale file
+- if no live matching service answers, status must report `runtime_metadata_stale`
+- a later `codenexus serve` attempt may recover by overwriting stale runtime metadata only after it proves no live matching service exists
 
 ## Duplicate Serve Behavior
 
@@ -102,6 +130,7 @@ Clients may rely on:
 - one configured port per repo boundary
 - explicit degraded reporting for stale service state
 - one service speaking only for the repo boundary in which it was started
+- a repo-identity health endpoint at `/api/health`
 
 Clients must not rely on:
 

@@ -1,9 +1,9 @@
 /**
  * MCP over HTTP
  *
- * Mounts the GitNexus MCP server on Express using StreamableHTTP transport.
+ * Mounts the CodeNexus MCP server on Express using StreamableHTTP transport.
  * Each connecting client gets its own stateful session; the LocalBackend
- * is shared across all sessions (thread-safe — lazy KuzuDB per repo).
+ * is shared across all sessions for one bound repo.
  *
  * Sessions are cleaned up on explicit close or after SESSION_TTL_MS of inactivity
  * (guards against network drops that never trigger onclose).
@@ -15,6 +15,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { createMCPServer } from '../mcp/server.js';
 import type { LocalBackend } from '../mcp/local/local-backend.js';
 import { randomUUID } from 'crypto';
+import type { ServiceHealth } from '../storage/repo-manager.js';
 
 interface MCPSession {
   server: Server;
@@ -27,7 +28,15 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 /** Cleanup sweep runs every 5 minutes */
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
-export function mountMCPEndpoints(app: Express, backend: LocalBackend): () => Promise<void> {
+export interface MCPHttpOptions {
+  healthProvider?: () => Promise<ServiceHealth> | ServiceHealth;
+}
+
+export function mountMCPEndpoints(
+  app: Express,
+  backend: LocalBackend,
+  options: MCPHttpOptions = {},
+): () => Promise<void> {
   const sessions = new Map<string, MCPSession>();
 
   // Periodic cleanup of idle sessions (guards against network drops)
@@ -83,6 +92,22 @@ export function mountMCPEndpoints(app: Express, backend: LocalBackend): () => Pr
     }
   };
 
+  app.get('/api/health', (req: Request, res: Response) => {
+    void (async () => {
+      if (!options.healthProvider) {
+        res.status(503).json({ error: 'Health provider is not configured.' });
+        return;
+      }
+
+      const health = await options.healthProvider();
+      res.json(health);
+    })().catch((err: any) => {
+      console.error('Health request failed:', err);
+      if (res.headersSent) return;
+      res.status(500).json({ error: 'Internal health check error' });
+    });
+  });
+
   app.all('/api/mcp', (req: Request, res: Response) => {
     void handleMcpRequest(req, res).catch((err: any) => {
       console.error('MCP HTTP request failed:', err);
@@ -106,6 +131,6 @@ export function mountMCPEndpoints(app: Express, backend: LocalBackend): () => Pr
     await Promise.allSettled(closers);
   };
 
-  console.log('MCP HTTP endpoints mounted at /api/mcp');
+  console.log('CodeNexus HTTP endpoints mounted at /api/mcp and /api/health');
   return cleanup;
 }

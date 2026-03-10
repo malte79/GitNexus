@@ -1,6 +1,6 @@
 import { realpathSync } from 'fs';
 import fs from 'fs/promises';
-import net from 'net';
+import http from 'http';
 import path from 'path';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { getCurrentBranch, getCurrentCommit, getGitRoot, isWorkingTreeDirty } from './git.js';
@@ -46,6 +46,16 @@ export interface RepoMeta {
 
 export interface RuntimeMeta {
   version: 1;
+  pid: number;
+  port: number;
+  started_at: string;
+  repo_root: string;
+  worktree_root: string;
+}
+
+export interface ServiceHealth {
+  version: 1;
+  service: 'codenexus';
   pid: number;
   port: number;
   started_at: string;
@@ -111,35 +121,6 @@ function normalizePath(value: string): string {
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function isPortReachable(port: number, host = '127.0.0.1', timeoutMs = 150): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    let settled = false;
-
-    const finish = (reachable: boolean) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(reachable);
-    };
-
-    socket.setTimeout(timeoutMs);
-    socket.once('connect', () => finish(true));
-    socket.once('timeout', () => finish(false));
-    socket.once('error', () => finish(false));
-    socket.connect(port, host);
-  });
-}
-
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
     return true;
   } catch {
     return false;
@@ -235,6 +216,43 @@ function validateRuntime(raw: unknown): RuntimeMeta {
   };
 }
 
+function validateServiceHealth(raw: unknown): ServiceHealth {
+  if (!isRecord(raw)) {
+    throw new Error('Service health payload must be an object');
+  }
+  if (raw.version !== 1) {
+    throw new Error('Service health version must be 1');
+  }
+  if (raw.service !== 'codenexus') {
+    throw new Error('Service health service must be codenexus');
+  }
+  if (!Number.isInteger(raw.pid)) {
+    throw new Error('Service health pid is required');
+  }
+  if (!isPositivePort(raw.port)) {
+    throw new Error('Service health port is required');
+  }
+  if (typeof raw.started_at !== 'string' || !raw.started_at) {
+    throw new Error('Service health started_at is required');
+  }
+  if (typeof raw.repo_root !== 'string' || !raw.repo_root) {
+    throw new Error('Service health repo_root is required');
+  }
+  if (typeof raw.worktree_root !== 'string' || !raw.worktree_root) {
+    throw new Error('Service health worktree_root is required');
+  }
+
+  return {
+    version: 1,
+    service: 'codenexus',
+    pid: raw.pid as number,
+    port: raw.port,
+    started_at: raw.started_at,
+    repo_root: normalizePath(raw.repo_root),
+    worktree_root: normalizePath(raw.worktree_root),
+  };
+}
+
 export function getStoragePath(repoPath: string): string {
   return path.join(path.resolve(repoPath), CODENEXUS_DIR);
 }
@@ -320,6 +338,52 @@ export async function saveRuntimeMeta(storagePath: string, runtime: RuntimeMeta)
   await fs.writeFile(runtimePath, JSON.stringify(runtime, null, 2), 'utf-8');
 }
 
+export async function removeRuntimeMeta(storagePath: string): Promise<void> {
+  const runtimePath = path.join(storagePath, 'runtime.json');
+  await fs.rm(runtimePath, { force: true });
+}
+
+export async function probeServiceHealth(port: number, timeoutMs = 1000): Promise<ServiceHealth | null> {
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/api/health',
+        method: 'GET',
+        timeout: timeoutMs,
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          resolve(null);
+          return;
+        }
+
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve(validateServiceHealth(JSON.parse(body)));
+          } catch {
+            resolve(null);
+          }
+        });
+      },
+    );
+
+    req.once('timeout', () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.once('error', () => resolve(null));
+    req.end();
+  });
+}
+
 export async function hasIndex(repoPath: string): Promise<boolean> {
   const { storagePath, kuzuPath } = getStoragePaths(repoPath);
   const meta = await loadMeta(storagePath);
@@ -358,10 +422,18 @@ export async function findRepo(startPath: string): Promise<IndexedRepo | null> {
   return loadRepo(boundary.repoRoot);
 }
 
-export async function getRepoState(startPath: string): Promise<RepoStateSnapshot | null> {
-  const boundary = resolveRepoBoundary(startPath);
-  if (!boundary) return null;
+interface IndexedStateResult {
+  baseState: 'uninitialized' | 'invalid_config' | 'initialized_unindexed' | 'indexed_current' | 'indexed_stale';
+  detailFlags: RepoDetailFlag[];
+  config: CodeNexusConfig | null;
+  meta: RepoMeta | null;
+  runtime: RuntimeMeta | null;
+  currentHead: string;
+  currentBranch: string;
+  configError?: string;
+}
 
+async function evaluateIndexedState(boundary: RepoBoundary): Promise<IndexedStateResult> {
   const { repoRoot, worktreeRoot } = boundary;
   const { storagePath, configPath, kuzuPath } = getStoragePaths(repoRoot);
   const detailFlags: RepoDetailFlag[] = [];
@@ -373,9 +445,6 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
   const configExists = await pathExists(configPath);
   if (!configExists) {
     return {
-      repoRoot,
-      worktreeRoot,
-      storagePath,
       baseState: 'uninitialized',
       detailFlags,
       config: null,
@@ -396,9 +465,6 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
 
   if (!config) {
     return {
-      repoRoot,
-      worktreeRoot,
-      storagePath,
       baseState: 'invalid_config',
       detailFlags,
       config: null,
@@ -418,9 +484,6 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
 
   if (!meta || !kuzuExists) {
     return {
-      repoRoot,
-      worktreeRoot,
-      storagePath,
       baseState: 'initialized_unindexed',
       detailFlags,
       config,
@@ -442,25 +505,54 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     currentBranch !== meta.indexed_branch ||
     normalizePath(meta.worktree_root) !== worktreeRoot;
 
-  const livePortReachable = await isPortReachable(config.port);
-  const runtimeMatchesBoundary = runtime
-    ? runtime.repo_root === repoRoot &&
-      runtime.worktree_root === worktreeRoot &&
-      runtime.port === config.port
-    : false;
-  const runtimeProcessAlive = runtime ? isPidAlive(runtime.pid) : false;
-  const liveServiceDetected = livePortReachable && runtimeMatchesBoundary && runtimeProcessAlive;
-  const runtimeMetadataStale =
-    (livePortReachable && (!runtime || !runtimeMatchesBoundary || !runtimeProcessAlive)) ||
-    (!!runtime && (!runtimeMatchesBoundary || !runtimeProcessAlive || !livePortReachable));
+  return {
+    baseState: stale ? 'indexed_stale' : 'indexed_current',
+    detailFlags,
+    config,
+    meta,
+    runtime,
+    currentHead,
+    currentBranch,
+  };
+}
 
-  if (runtimeMetadataStale) {
+export async function getRepoState(startPath: string): Promise<RepoStateSnapshot | null> {
+  const boundary = resolveRepoBoundary(startPath);
+  if (!boundary) return null;
+
+  const { repoRoot, worktreeRoot } = boundary;
+  const { storagePath } = getStoragePaths(repoRoot);
+  const indexedState = await evaluateIndexedState(boundary);
+  const detailFlags = [...indexedState.detailFlags];
+
+  const liveHealth = indexedState.config ? await probeServiceHealth(indexedState.config.port) : null;
+  const liveServiceDetected =
+    !!liveHealth &&
+    liveHealth.repo_root === repoRoot &&
+    liveHealth.worktree_root === worktreeRoot &&
+    liveHealth.port === indexedState.config?.port;
+
+  const runtimeMatchesLive =
+    !!indexedState.runtime &&
+    !!liveHealth &&
+    indexedState.runtime.repo_root === liveHealth.repo_root &&
+    indexedState.runtime.worktree_root === liveHealth.worktree_root &&
+    indexedState.runtime.port === liveHealth.port &&
+    indexedState.runtime.pid === liveHealth.pid;
+
+  const runtimeMetadataStale = liveServiceDetected
+    ? !indexedState.runtime || !runtimeMatchesLive
+    : !!indexedState.runtime;
+
+  if (runtimeMetadataStale && !detailFlags.includes('runtime_metadata_stale')) {
     detailFlags.push('runtime_metadata_stale');
   }
 
-  const baseState: RepoBaseState = liveServiceDetected
-    ? (stale ? 'serving_stale' : 'serving_current')
-    : (stale ? 'indexed_stale' : 'indexed_current');
+  const baseState: RepoBaseState =
+    liveServiceDetected &&
+    (indexedState.baseState === 'indexed_current' || indexedState.baseState === 'indexed_stale')
+      ? (indexedState.baseState === 'indexed_stale' ? 'serving_stale' : 'serving_current')
+      : indexedState.baseState;
 
   return {
     repoRoot,
@@ -468,10 +560,11 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     storagePath,
     baseState,
     detailFlags,
-    config,
-    meta,
-    runtime,
-    currentHead,
-    currentBranch,
+    config: indexedState.config,
+    meta: indexedState.meta,
+    runtime: indexedState.runtime,
+    currentHead: indexedState.currentHead,
+    currentBranch: indexedState.currentBranch,
+    configError: indexedState.configError,
   };
 }

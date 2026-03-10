@@ -1,9 +1,9 @@
 /**
  * MCP Server
  *
- * Model Context Protocol server that runs on stdio.
- * This remains as the current agent-facing seam while the repo-local
- * HTTP runtime is built in later epics.
+ * Model Context Protocol server factory.
+ * The repo-local HTTP runtime is now the primary service surface; stdio
+ * remains only as an internal compatibility transport helper.
  */
 
 import { createRequire } from 'module';
@@ -71,7 +71,7 @@ export function createMCPServer(backend: LocalBackend): Server {
   const pkgVersion: string = require('../../package.json').version;
   const server = new Server(
     {
-      name: 'gitnexus',
+      name: 'codenexus',
       version: pkgVersion,
     },
     {
