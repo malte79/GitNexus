@@ -41,69 +41,52 @@ This was the real pivot:
 - single-repo backend binding
 - retained `gitnexus` shims now run on the repo-local model
 
-## Remaining Epic Sequence
-
 ### 04. CLI Reshape
 
-Turn the now-correct architecture into the actual CodeNexus CLI product surface.
+Completed.
 
-Primary goals:
+This turned the architecture into the actual CodeNexus CLI product surface:
 
-- add the `codenexus` executable as the canonical command
-- implement `codenexus init`
-- rename the indexing surface to `codenexus index`
-- align `codenexus status` with the already-locked repo-state model
-- establish the `codenexus serve` command surface that Epic 05 will complete
+- `codenexus` is now the only user-facing executable
+- `codenexus init`, `codenexus index`, `codenexus status`, and `codenexus serve` are the active command surface
+- repo activation is explicit and repo-owned
+- the inherited `gitnexus` CLI surface is no longer the product face
 
-What this brings:
+### 05. Repo-Local HTTP Service
 
-- closes the intentional usability gap left after Epic 03
-- makes CodeNexus operable without relying on transitional `gitnexus` commands
-- makes activation explicit and repo-owned
+Completed.
 
-Important note:
+This made the runtime real:
 
-- Epic 04 should fully own `codenexus init`, `codenexus index`, and `codenexus status`
-- it should establish the `codenexus serve` command shape
-- but the actual repo-local HTTP service lifecycle still belongs to Epic 05
+- `codenexus serve` now starts a real repo-local HTTP service
+- `.codenexus/runtime.json` is now owned by the live service lifecycle
+- `/api/health` provides repo-identity-aware service health
+- `codenexus status` now reflects the real live runtime model instead of placeholder heuristics
+- duplicate serve and stale runtime handling are now part of the real runtime path
 
-### 05. Repo-Local MCP HTTP Service
-
-Build the real repo-local MCP-over-HTTP service on top of the single-repo architecture from Epic 03 and the CLI surface from Epic 04.
-
-Primary goals:
-
-- make `codenexus serve` real
-- bind one repo to one configured port
-- own `.codenexus/runtime.json` through the actual service lifecycle
-- expose the MCP tool surface over HTTP as the primary agent interface
-
-What this brings:
-
-- the repo-local agent service model becomes real, not just specified
-- agents can target one long-lived repo service directly
-- the temporary stdio-focused transition can stop being the main story
+## Remaining Epic Sequence
 
 ### 06. Index Freshness And Manual Refresh Semantics
 
-Tighten the operational behavior around current versus stale indexes now that the repo-local service and CLI exist.
+Tighten the operational model now that the repo-local service and CLI are real.
 
 Primary goals:
 
 - make manual refresh behavior explicit and durable
 - tighten stale/current reporting across CLI and service
 - define what happens operationally when code changes under an existing index
+- decide what `status` and the live service should report when on-disk index state changes during service uptime
 
 What this brings:
 
 - clearer operator and agent behavior
 - fewer ambiguous stale-state edge cases
-- a stable base before more advanced update logic is added
+- a stable base before smarter update logic is added
 
 Important note:
 
-- this is still the manual/explicit freshness epic
-- smarter delta refresh remains later work unless pulled forward deliberately
+- this is still the manual and explicit freshness epic
+- the service already exists, so this epic is about behavior and contract tightening, not introducing runtime primitives
 
 ### 07. Luau Core Support
 
@@ -120,6 +103,7 @@ What this brings:
 
 - CodeNexus can index Luau repos at the language level
 - Roblox-specific support has a real foundation instead of special cases on top of unsupported code
+- the runtime and CLI are already in place, so this becomes pure language-engine work rather than product-surface work
 
 Important note:
 
@@ -144,6 +128,7 @@ What this brings:
 
 - CodeNexus becomes genuinely useful on Rojo Roblox game repos
 - agents stop paying the manual “Roblox tax” of reconstructing module and instance relationships by grep
+- the value here now compounds on top of the already-real local service, which means agents can use the new Roblox-aware capabilities immediately through the existing runtime
 
 Important note:
 
@@ -159,13 +144,13 @@ Primary goals:
 - detect branch changes cleanly
 - refine stale-state behavior across branches
 - decide whether separate per-branch indexes are required
-- make repo-state reporting less naive over time
+- make repo-state and runtime reporting less naive over time
 
 What this brings:
 
 - fewer surprises when switching branches
 - a path toward branch-aware index management
-- a more durable repo-local operating model for real day-to-day use
+- a more durable repo-local operating model for real day-to-day use now that service state and CLI state are already established
 
 ### 10. Deferred Intelligence Upgrades
 
@@ -182,20 +167,15 @@ Likely contents:
 What this brings:
 
 - deeper agent leverage after the product is already solid
-- differentiating intelligence features without destabilizing the core roadmap too early
+- differentiating intelligence features without destabilizing the now-working core product too early
 
 ## Why The Remaining Order Looks Like This
 
-The next two epics finish making CodeNexus a usable product:
-
-- Epic 04: CLI Reshape
-- Epic 05: Repo-Local MCP HTTP Service
-
-Then the next epic stabilizes operation:
+The product and runtime core now exist. The next epic stabilizes operation:
 
 - Epic 06: Index Freshness And Manual Refresh Semantics
 
-Then the next two epics make the product useful for the target Roblox/Luau domain:
+Then the next two epics make the existing product useful for the target Roblox/Luau domain:
 
 - Epic 07: Luau Core Support
 - Epic 08: Roblox And Rojo Resolution
@@ -207,7 +187,7 @@ Then the final two deepen robustness and intelligence:
 
 ## Planning Notes
 
-The roadmap is now past the foundational and architectural pivot work. Remaining epics should avoid reopening settled decisions from Epics 00-03 unless implementation reveals a real contradiction.
+The roadmap is now past the foundational, architectural, CLI, and initial runtime work. Remaining epics should avoid reopening settled decisions from Epics 00-05 unless implementation reveals a real contradiction.
 
 When actual epics are created, each one should answer:
 

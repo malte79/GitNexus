@@ -40,6 +40,13 @@ async function createHealthServer(health: {
   started_at: string;
   repo_root: string;
   worktree_root: string;
+  loaded_index: {
+    indexed_head: string;
+    indexed_branch: string;
+    indexed_at: string;
+    indexed_dirty: boolean;
+    worktree_root: string;
+  };
 }): Promise<{ server: http.Server; port: number }> {
   let boundPort = 0;
   const server = http.createServer((req, res) => {
@@ -71,6 +78,23 @@ async function createHealthServer(health: {
   boundPort = address.port;
 
   return { server, port: address.port };
+}
+
+function buildLoadedIndex(repoPath: string, overrides: Partial<{
+  indexed_head: string;
+  indexed_branch: string;
+  indexed_at: string;
+  indexed_dirty: boolean;
+  worktree_root: string;
+}> = {}) {
+  return {
+    indexed_head: execSync('git rev-parse HEAD', { cwd: repoPath }).toString().trim(),
+    indexed_branch: execSync('git branch --show-current', { cwd: repoPath }).toString().trim(),
+    indexed_at: new Date().toISOString(),
+    indexed_dirty: false,
+    worktree_root: repoPath,
+    ...overrides,
+  };
 }
 
 async function createUnrelatedServer(): Promise<{ server: http.Server; port: number }> {
@@ -216,22 +240,20 @@ describe('repo-local state', () => {
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
     const startedAt = new Date().toISOString();
+    const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
       pid: process.pid,
       started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
     });
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
       version: 1,
-      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
-      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
-      indexed_at: new Date().toISOString(),
-      indexed_dirty: false,
-      worktree_root: repo.dbPath,
+      ...loadedIndex,
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
@@ -240,6 +262,7 @@ describe('repo-local state', () => {
       started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
     });
 
     const state = await getRepoState(repo.dbPath);
@@ -255,22 +278,20 @@ describe('repo-local state', () => {
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
     const startedAt = new Date().toISOString();
+    const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
       pid: process.pid,
       started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
     });
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
       version: 1,
-      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
-      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
-      indexed_at: new Date().toISOString(),
-      indexed_dirty: false,
-      worktree_root: repo.dbPath,
+      ...loadedIndex,
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
@@ -279,6 +300,7 @@ describe('repo-local state', () => {
       started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
     });
     await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'changed\n', 'utf-8');
 
@@ -301,11 +323,7 @@ describe('repo-local state', () => {
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
       version: 1,
-      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
-      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
-      indexed_at: new Date().toISOString(),
-      indexed_dirty: false,
-      worktree_root: repo.dbPath,
+      ...buildLoadedIndex(repo.dbPath),
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
@@ -314,6 +332,7 @@ describe('repo-local state', () => {
       started_at: new Date().toISOString(),
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: buildLoadedIndex(repo.dbPath),
     });
 
     const state = await getRepoState(repo.dbPath);
@@ -333,11 +352,7 @@ describe('repo-local state', () => {
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
       version: 1,
-      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
-      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
-      indexed_at: new Date().toISOString(),
-      indexed_dirty: false,
-      worktree_root: repo.dbPath,
+      ...buildLoadedIndex(repo.dbPath),
     });
 
     const state = await getRepoState(repo.dbPath);
@@ -352,22 +367,20 @@ describe('repo-local state', () => {
     const repo = await createGitRepo('repo-manager-missing-runtime-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
+    const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
       pid: process.pid,
       started_at: new Date().toISOString(),
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
     });
 
     await saveConfig(storagePath, { version: 1, port });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
       version: 1,
-      indexed_head: execSync('git rev-parse HEAD', { cwd: repo.dbPath }).toString().trim(),
-      indexed_branch: execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim(),
-      indexed_at: new Date().toISOString(),
-      indexed_dirty: false,
-      worktree_root: repo.dbPath,
+      ...loadedIndex,
     });
 
     const state = await getRepoState(repo.dbPath);
@@ -381,16 +394,61 @@ describe('repo-local state', () => {
   it('can probe a live CodeNexus service identity payload', async () => {
     const repo = await createGitRepo('repo-manager-health-probe-');
     const startedAt = new Date().toISOString();
+    const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
       pid: process.pid,
       started_at: startedAt,
       repo_root: repo.dbPath,
       worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
     });
 
     const health = await probeServiceHealth(port);
     expect(health?.service).toBe('codenexus');
     expect(health?.repo_root).toBe(realpathSync(repo.dbPath));
+    expect(health?.loaded_index.indexed_head).toBe(loadedIndex.indexed_head);
+
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await repo.cleanup();
+  });
+
+  it('reports serving_stale and service_restart_required when disk index is refreshed while service still serves an older loaded index', async () => {
+    const repo = await createGitRepo('repo-manager-service-restart-required-');
+    await ignoreCodeNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const loadedIndex = buildLoadedIndex(repo.dbPath, { indexed_at: '2026-03-09T00:00:00.000Z' });
+    const { server, port } = await createHealthServer({
+      pid: process.pid,
+      started_at: new Date().toISOString(),
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
+    });
+
+    await saveConfig(storagePath, { version: 1, port });
+    await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+    await saveMeta(storagePath, {
+      version: 1,
+      ...loadedIndex,
+    });
+    await saveRuntimeMeta(storagePath, {
+      version: 1,
+      pid: process.pid,
+      port,
+      started_at: new Date().toISOString(),
+      repo_root: repo.dbPath,
+      worktree_root: repo.dbPath,
+      loaded_index: loadedIndex,
+    });
+
+    await saveMeta(storagePath, {
+      version: 1,
+      ...buildLoadedIndex(repo.dbPath, { indexed_at: '2026-03-09T00:05:00.000Z' }),
+    });
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('serving_stale');
+    expect(state?.detailFlags).toContain('service_restart_required');
 
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await repo.cleanup();

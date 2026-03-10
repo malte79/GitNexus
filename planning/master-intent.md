@@ -93,6 +93,12 @@ Automatic freshness should not be overpromised at the start. Manual refresh is a
 
 The v1 repo-state model uses a finite base-state set with detail flags rather than pretending the runtime is fully self-healing. Durable freshness and state-transition rules live in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
 
+Manual refresh in v1 is explicit:
+
+- `codenexus index` refreshes the on-disk index
+- a running service may continue serving an older loaded index
+- restarting `codenexus serve` is required before the live service adopts the refreshed index
+
 ## Scope And Priorities
 
 - The tool is explicitly meant to be a backend utility for AI agents to understand and navigate codebases faster and with less brute-force searching

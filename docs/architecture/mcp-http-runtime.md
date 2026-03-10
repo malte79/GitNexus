@@ -43,6 +43,12 @@ If the process crashes or is killed before cleanup runs, `runtime.json` may rema
 
 V1 does not define live service hot-reload behavior when `codenexus index` rewrites on-disk index state. A refreshed on-disk index does not by itself imply that an already-running service has re-opened or adopted that index without restart.
 
+If `codenexus index` refreshes on-disk index state while the service remains live:
+
+- the running service may continue serving its older loaded index
+- the service must report degraded or stale serving state until restarted
+- users must restart `codenexus serve` to make the live service adopt the refreshed on-disk index
+
 ## Health Model
 
 The service health contract is:
@@ -64,8 +70,11 @@ The health payload must prove service identity for the current repo boundary by 
 - repo root
 - worktree root
 - service start time
+- loaded index identity captured at service startup
 
 Raw port reachability is never enough to claim a live CodeNexus service.
+
+The live health payload is authoritative for loaded-index identity. Advisory `runtime.json` should persist the same loaded-index identity for stale-runtime recovery and operator inspection, but it must never outweigh a successful health probe.
 
 ## Startup Contract
 
@@ -99,6 +108,7 @@ If the process dies before graceful shutdown completes:
 - `.codenexus/runtime.json` may remain
 - later `codenexus status` calls must prefer live `/api/health` results over the stale file
 - if no live matching service answers, status must report `runtime_metadata_stale`
+- if live health and `runtime.json` disagree about loaded-index identity, live health wins and runtime metadata is stale
 - a later `codenexus serve` attempt may recover by overwriting stale runtime metadata only after it proves no live matching service exists
 
 ## Duplicate Serve Behavior

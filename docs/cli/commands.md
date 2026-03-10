@@ -67,6 +67,7 @@ Contract:
 - it must not rewrite `config.toml`
 - it must not mutate files outside `.codenexus/`
 - it may run on a dirty working tree, but v1 freshness remains conservative and may still classify the resulting index as stale
+- if a service is already running, `codenexus index` refreshes on-disk state only and must tell the operator when a restart is required for the service to adopt that refreshed index
 
 Failure cases:
 
@@ -81,6 +82,7 @@ State transitions:
 - `indexed_stale -> indexed_current` when refresh clears stale conditions
 - `indexed_current -> indexed_stale` when refreshed while stale conditions remain
 - when a service is already running, `codenexus index` refreshes on-disk index state only; v1 does not promise live service reload semantics
+- when a service is already running on an older loaded index, `codenexus index` must tell the operator to restart `codenexus serve`
 
 ## `codenexus status`
 
@@ -116,6 +118,7 @@ Reporting expectations:
 - applicable detail flags
 - current configured port when available
 - whether live service information overrode stale runtime metadata
+- whether a running service must be restarted to adopt a refreshed on-disk index when that is true
 
 ## `codenexus serve`
 
@@ -142,6 +145,7 @@ Contract:
 - no silent auto-refresh is allowed on serve
 - `codenexus serve` must not rewrite `config.toml`
 - live service identity is proven through a repo-specific HTTP health endpoint, not raw port reachability
+- the live service health endpoint must expose the loaded index identity the service is actually serving
 
 Failure cases:
 

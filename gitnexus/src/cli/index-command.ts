@@ -17,7 +17,7 @@ import {
   closeKuzu,
   createFTSIndex,
 } from '../core/kuzu/kuzu-adapter.js';
-import { getStoragePaths, saveMeta, loadConfig, loadMeta } from '../storage/repo-manager.js';
+import { getStoragePaths, saveMeta, loadConfig, loadMeta, getRepoState } from '../storage/repo-manager.js';
 import { getCurrentBranch, getCurrentCommit, isGitRepo, getGitRoot, isWorkingTreeDirty } from '../storage/git.js';
 
 const HEAP_MB = 8192;
@@ -262,6 +262,15 @@ export const indexCommand = async (
   );
   console.log(`  KuzuDB ${kuzuTime}s | FTS ${ftsTime}s`);
   console.log(`  ${repoPath}`);
+
+  const stateAfterIndex = await getRepoState(repoPath);
+  if (stateAfterIndex?.detailFlags.includes('service_restart_required')) {
+    console.log('  Note: A live CodeNexus service is still serving an older loaded index.');
+    console.log('  Restart `codenexus serve` to serve this refreshed on-disk index.');
+  } else if (stateAfterIndex?.baseState === 'serving_stale') {
+    console.log('  Note: A live CodeNexus service is running in degraded stale mode.');
+    console.log('  Run `codenexus index` again if the repo changes, then restart `codenexus serve` to adopt the refreshed index.');
+  }
 
   if (options?.indexOnly) {
     console.log('  Note: --index-only is satisfied by default; codenexus index no longer mutates repo files outside .codenexus.');
