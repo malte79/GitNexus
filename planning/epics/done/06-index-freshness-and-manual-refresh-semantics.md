@@ -2,7 +2,7 @@ Title: Index Freshness And Manual Refresh Semantics
 
 Assigned to: Agent 1
 Lane: Runtime
-Status: doing
+Status: done
 Objective: Lock and implement the explicit freshness and manual-refresh behavior for CodeNexus now that the CLI and repo-local HTTP service are real, so `codenexus index`, `codenexus status`, and the live service all report and react to stale/current index state consistently.
 In scope: defining and implementing the operational contract for stale versus current index state after repo changes; tightening how `codenexus index`, `codenexus status`, and `codenexus serve` interact with on-disk freshness; explicit manual-refresh behavior; live-service reporting when the on-disk index changes after startup; stale-state detail flags and operator-facing messaging; tests and docs for those behaviors.
 Out of scope: automatic refresh, delta indexing, filesystem watchers, branch-aware indexing, separate per-branch indexes, Luau/Roblox support, world projection, CLI renaming, or transport/runtime redesign.
