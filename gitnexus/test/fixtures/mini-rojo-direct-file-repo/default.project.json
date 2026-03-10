@@ -1,0 +1,15 @@
+{
+  "name": "MiniDirectFile",
+  "tree": {
+    "$className": "DataModel",
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Main": {
+          "$path": "src/client/Main.client.lua"
+        }
+      }
+    }
+  }
+}

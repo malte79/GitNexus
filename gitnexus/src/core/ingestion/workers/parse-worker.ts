@@ -23,6 +23,8 @@ try { Swift = _require('tree-sitter-swift'); } catch {}
 import { findSiblingChild, getLanguageFromFilename } from '../utils.js';
 import { detectFrameworkFromAST } from '../framework-detection.js';
 import { generateId } from '../../../lib/utils.js';
+import { extractLuauRobloxAliasesAndImports } from '../roblox/luau-resolution.js';
+import type { RobloxPathSpec } from '../roblox/types.js';
 
 // ============================================================================
 // Types for serializable results
@@ -41,6 +43,7 @@ interface ParsedNode {
     astFrameworkMultiplier?: number;
     astFrameworkReason?: string;
     description?: string;
+    runtimeArea?: 'shared' | 'client' | 'server' | 'other';
   };
 }
 
@@ -62,8 +65,9 @@ interface ParsedSymbol {
 
 export interface ExtractedImport {
   filePath: string;
-  rawImportPath: string;
   language: string;
+  rawImportPath?: string;
+  robloxPath?: RobloxPathSpec;
 }
 
 export interface ExtractedCall {
@@ -1183,7 +1187,7 @@ const processFileGroup = (
 
       // Extract import paths before skipping
       if (captureMap['import'] && captureMap['import.source']) {
-        if (language === SupportedLanguages.Luau && captureMap['import.name']?.text !== 'require') {
+        if (language === SupportedLanguages.Luau) {
           continue;
         }
         const rawImportPath = language === SupportedLanguages.Kotlin
@@ -1308,6 +1312,10 @@ const processFileGroup = (
     if (language === SupportedLanguages.PHP && (file.path.includes('/routes/') || file.path.startsWith('routes/')) && file.path.endsWith('.php')) {
       const extractedRoutes = extractLaravelRoutes(tree, file.path);
       result.routes.push(...extractedRoutes);
+    }
+
+    if (language === SupportedLanguages.Luau) {
+      result.imports.push(...extractLuauRobloxAliasesAndImports(tree.rootNode, file.path));
     }
   }
 };

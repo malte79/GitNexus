@@ -188,12 +188,20 @@ The implementation order remains deliberate:
 - Epic 07 adds Luau as a real indexed language through the existing CodeNexus engine
 - Epic 08 adds Roblox- and Rojo-specific semantics on top of that language support
 
-For Roblox projects, CodeNexus should eventually understand:
+For Rojo-based Roblox projects, CodeNexus now understands:
 
 - Luau source structure
-- Rojo project structure
-- Roblox-aware module resolution patterns such as `game:GetService(...)`, `script.Parent`, and `WaitForChild(...)`
+- `default.project.json` project structure
+- Roblox-aware static module resolution patterns such as `game:GetService(...)`, `script.Parent`, and `WaitForChild(...)`
 - client/shared/server boundaries common in Rojo-based games
+
+The current Roblox support remains intentionally conservative:
+
+- Rojo-first only
+- shallow syntax-local alias handling only
+- no Studio inspection
+- no dynamic instance-tree inference
+- no world projection yet
 
 ## World Projection Direction
 
