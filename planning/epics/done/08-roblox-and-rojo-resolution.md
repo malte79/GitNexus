@@ -2,7 +2,7 @@ Title: Roblox And Rojo Resolution
 
 Assigned to: Agent 1
 Lane: Domain
-Status: doing
+Status: done
 Objective: Make CodeNexus genuinely useful on Rojo-based Roblox projects by layering Roblox- and Rojo-aware resolution on top of the now-working Luau language support, so imports, module relationships, and code navigation reflect Roblox project structure instead of only plain filesystem-level Luau semantics. This epic should ground itself in official Rojo project rules, use Rojo sourcemap output as a correctness oracle where useful, and validate against both small fixture repos and at least one real Rojo-style project.
 In scope: Rojo project discovery; `default.project.json` parsing; filesystem-to-DataModel path mapping; a dedicated Roblox/Rojo resolution seam in the indexing layer; Roblox-aware resolution of static patterns such as `game:GetService(...)`, `script.Parent`, and chained `WaitForChild(...)`; simple alias tracking for those patterns; Roblox-aware import resolution for `require(...)`; client/shared/server boundary modeling for Rojo-mapped repos; tests, fixtures, docs, and real-product proof on Rojo-style projects.
 Out of scope: non-Rojo Roblox projects; project-file formats beyond `default.project.json` unless explicitly added later by contract update; live Studio inspection; world projection ingestion; dynamic DataModel mutation tracking; full type-aware Roblox API semantics; branch/index redesign; automatic refresh; general Lua/Luau parser redesign; broad data-flow analysis for arbitrary alias propagation.

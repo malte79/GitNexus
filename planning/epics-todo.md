@@ -101,7 +101,25 @@ This made the existing Luau support materially useful for real Rojo-based Roblox
 - client/shared/server runtime areas are now reflected in the graph and surfaced through query results
 - the real `codenexus` product has been manually validated against `/Users/alex/Projects/roblox/dancegame-agent-1`
 
-### 09. Branch And Repo State Intelligence
+### 09. Roblox Query Ergonomics
+
+Improve the usefulness of the new Luau/Roblox support for real agent workflows.
+
+Primary goals:
+
+- make returned Luau module tables first-class symbols
+- improve ranking for exact and near-exact Roblox/Luau concepts
+- enrich query/context results with concise Roblox-aware summaries
+- prove those improvements on a real Rojo repo, not just fixtures
+
+What this brings:
+
+- better lookup for module-style symbols like `SpotlightRegistry`
+- less noisy broad queries like `lighting show service`
+- more agent-friendly summaries using module name, runtime area, and Rojo context
+- a cleaner product experience before moving on to longer-horizon robustness work
+
+### 10. Branch And Repo State Intelligence
 
 Teach the repo-local system to reason about branch changes and longer-lived repo state.
 
@@ -118,7 +136,7 @@ What this brings:
 - a path toward branch-aware index management
 - a more durable repo-local operating model for real day-to-day use now that service state, CLI state, and freshness semantics are all already established
 
-### 10. Deferred Intelligence Upgrades
+### 11. Deferred Intelligence Upgrades
 
 This remains the intentionally late bucket for higher-end capabilities once the core product is stable.
 
@@ -145,10 +163,11 @@ The next completed epics made the existing product useful for the target Roblox/
 - Epic 07: Luau Core Support
 - Epic 08: Roblox And Rojo Resolution
 
-The final two deepen robustness and intelligence:
+The final three deepen ergonomics, robustness, and intelligence:
 
-- Epic 09: Branch And Repo State Intelligence
-- Epic 10: Deferred Intelligence Upgrades
+- Epic 09: Roblox Query Ergonomics
+- Epic 10: Branch And Repo State Intelligence
+- Epic 11: Deferred Intelligence Upgrades
 
 ## Planning Notes
 
