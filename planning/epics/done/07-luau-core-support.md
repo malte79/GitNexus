@@ -2,7 +2,7 @@ Title: Luau Core Support
 
 Assigned to: Agent 1
 Lane: Language
-Status: doing
+Status: done
 Objective: Add Luau as a first-class language in the CodeNexus indexing engine so `codenexus index`, `codenexus status`, and the live repo-local service can index and query Luau code at the language level, without yet adding Roblox- or Rojo-specific semantics.
 In scope: adding Luau to the supported-language model; mapping `.lua` and `.luau` files; loading a Tree-sitter Luau grammar; adding Luau language queries; extracting Luau definitions, calls, and basic `require(...)` imports; aligning import/call processing enough for filesystem-level Luau modules; tests and docs for Luau indexing/query behavior; using `luau-lsp` only as a semantic/reference aid for coverage and test-shape decisions.
 Out of scope: Rojo project parsing; Roblox instance-tree semantics; `game:GetService(...)`; `script.Parent`; `WaitForChild(...)`; DataModel path resolution; broad Lua ecosystem support beyond what is needed for Luau indexing; editor/LSP integration; integrating `luau-lsp` as a dependency or runtime component; type-checking or editor-grade semantic analysis.

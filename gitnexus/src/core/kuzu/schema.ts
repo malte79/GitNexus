@@ -38,6 +38,7 @@ CREATE NODE TABLE File (
   id STRING,
   name STRING,
   filePath STRING,
+  runtimeArea STRING,
   content STRING,
   PRIMARY KEY (id)
 )`;
@@ -47,6 +48,7 @@ CREATE NODE TABLE Folder (
   id STRING,
   name STRING,
   filePath STRING,
+  runtimeArea STRING,
   PRIMARY KEY (id)
 )`;
 
@@ -58,6 +60,7 @@ CREATE NODE TABLE Function (
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
+  runtimeArea STRING,
   content STRING,
   description STRING,
   PRIMARY KEY (id)
@@ -71,6 +74,7 @@ CREATE NODE TABLE Class (
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
+  runtimeArea STRING,
   content STRING,
   description STRING,
   PRIMARY KEY (id)
@@ -84,6 +88,7 @@ CREATE NODE TABLE Interface (
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
+  runtimeArea STRING,
   content STRING,
   description STRING,
   PRIMARY KEY (id)
@@ -97,6 +102,7 @@ CREATE NODE TABLE Method (
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
+  runtimeArea STRING,
   content STRING,
   description STRING,
   PRIMARY KEY (id)
@@ -110,6 +116,7 @@ CREATE NODE TABLE CodeElement (
   startLine INT64,
   endLine INT64,
   isExported BOOLEAN,
+  runtimeArea STRING,
   content STRING,
   description STRING,
   PRIMARY KEY (id)
@@ -162,6 +169,7 @@ CREATE NODE TABLE \`${name}\` (
   filePath STRING,
   startLine INT64,
   endLine INT64,
+  runtimeArea STRING,
   content STRING,
   description STRING,
   PRIMARY KEY (id)

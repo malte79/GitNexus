@@ -9,6 +9,9 @@ import { generateId } from '../../lib/utils.js';
 import { getLanguageFromFilename, yieldToEventLoop } from './utils.js';
 import { SupportedLanguages } from '../../config/supported-languages.js';
 import type { ExtractedImport } from './workers/parse-worker.js';
+import { loadRojoProjectIndex } from './roblox/rojo-project.js';
+import type { RojoProjectIndex, RobloxPathSpec } from './roblox/types.js';
+import { extractLuauRobloxAliasesAndImports } from './roblox/luau-resolution.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -158,6 +161,41 @@ interface SwiftPackageConfig {
   /** Map of target name -> source directory path (e.g., "SiuperModel" -> "Package/Sources/SiuperModel") */
   targets: Map<string, string>;
 }
+
+const applyRojoRuntimeAreas = (graph: KnowledgeGraph, rojoProject: RojoProjectIndex) => {
+  graph.forEachNode(node => {
+    const filePath = node.properties.filePath;
+    if (!filePath) return;
+    const runtimeArea = rojoProject.getRuntimeAreaForPath(filePath);
+    if (runtimeArea) {
+      node.properties.runtimeArea = runtimeArea;
+    }
+  });
+};
+
+const resolveRobloxImportSpec = (
+  filePath: string,
+  robloxPath: RobloxPathSpec,
+  rojoProject: RojoProjectIndex,
+): string[] => {
+  if (robloxPath.rootKind === 'service') {
+    if (!robloxPath.serviceName) return [];
+    return rojoProject.resolveDataModelSegments([robloxPath.serviceName, ...robloxPath.segments]);
+  }
+
+  const currentTargets = rojoProject.getTargetsForFile(filePath);
+  const resolved = new Set<string>();
+  for (const target of currentTargets) {
+    const parentDepth = robloxPath.parentDepth ?? 0;
+    if (parentDepth > target.dataModelSegments.length) continue;
+    const baseSegments = target.dataModelSegments.slice(0, Math.max(0, target.dataModelSegments.length - parentDepth));
+    const candidates = rojoProject.resolveDataModelSegments([...baseSegments, ...robloxPath.segments]);
+    for (const candidate of candidates) {
+      resolved.add(candidate);
+    }
+  }
+  return [...resolved];
+};
 
 async function loadSwiftPackageConfig(repoRoot: string): Promise<SwiftPackageConfig | null> {
   // Swift imports are module-name based (e.g., `import SiuperModel`)
@@ -751,6 +789,10 @@ export const processImports = async (
   const goModule = await loadGoModulePath(effectiveRoot);
   const composerConfig = await loadComposerConfig(effectiveRoot);
   const swiftPackageConfig = await loadSwiftPackageConfig(effectiveRoot);
+  const rojoProject = effectiveRoot ? await loadRojoProjectIndex(effectiveRoot, allFileList) : null;
+  if (rojoProject) {
+    applyRojoRuntimeAreas(graph, rojoProject);
+  }
 
   // Helper: add an IMPORTS edge + update import map
   const addImportEdge = (filePath: string, resolvedPath: string) => {
@@ -832,6 +874,9 @@ export const processImports = async (
       match.captures.forEach(c => captureMap[c.name] = c.node);
 
       if (captureMap['import']) {
+        if (language === SupportedLanguages.Luau) {
+          return;
+        }
         const sourceNode = captureMap['import.source'];
         if (!sourceNode) {
           if (isDev) {
@@ -938,6 +983,39 @@ export const processImports = async (
       }
     });
 
+    if (language === SupportedLanguages.Luau) {
+      const luauImports = extractLuauRobloxAliasesAndImports(tree.rootNode, file.path);
+      for (const luauImport of luauImports) {
+        totalImportsFound++;
+        if (luauImport.robloxPath) {
+          if (!rojoProject) continue;
+          const resolvedPaths = resolveRobloxImportSpec(file.path, luauImport.robloxPath, rojoProject);
+          for (const resolvedPath of resolvedPaths) {
+            addImportEdge(file.path, resolvedPath);
+          }
+          continue;
+        }
+
+        const rawImportPath = luauImport.rawImportPath;
+        if (!rawImportPath) continue;
+        const resolvedPath = resolveImportPath(
+          file.path,
+          rawImportPath,
+          allFilePaths,
+          allFileList,
+          normalizedFileList,
+          resolveCache,
+          language,
+          tsconfigPaths,
+          index,
+        );
+
+        if (resolvedPath) {
+          addImportEdge(file.path, resolvedPath);
+        }
+      }
+    }
+
     // Tree is now owned by the LRU cache — no manual delete needed
   }
 
@@ -970,6 +1048,10 @@ export const processImportsFromExtracted = async (
   const goModule = await loadGoModulePath(effectiveRoot);
   const composerConfig = await loadComposerConfig(effectiveRoot);
   const swiftPackageConfig = await loadSwiftPackageConfig(effectiveRoot);
+  const rojoProject = effectiveRoot ? await loadRojoProjectIndex(effectiveRoot, allFileList) : null;
+  if (rojoProject) {
+    applyRojoRuntimeAreas(graph, rojoProject);
+  }
 
   const addImportEdge = (filePath: string, resolvedPath: string) => {
     const sourceId = generateId('File', filePath);
@@ -1029,8 +1111,21 @@ export const processImportsFromExtracted = async (
       await yieldToEventLoop();
     }
 
-    for (const { rawImportPath, language } of fileImports) {
+    for (const { rawImportPath, language, robloxPath } of fileImports) {
       totalImportsFound++;
+
+      if (language === SupportedLanguages.Luau && robloxPath) {
+        if (!rojoProject) continue;
+        const resolvedPaths = resolveRobloxImportSpec(filePath, robloxPath, rojoProject);
+        for (const resolvedPath of resolvedPaths) {
+          addImportEdge(filePath, resolvedPath);
+        }
+        continue;
+      }
+
+      if (!rawImportPath) {
+        continue;
+      }
 
       // Check resolve cache first
       const cacheKey = `${filePath}::${rawImportPath}`;

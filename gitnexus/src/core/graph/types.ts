@@ -42,6 +42,7 @@ export type NodeProperties = {
   endLine?: number,
   language?: string,
   isExported?: boolean,
+  runtimeArea?: 'shared' | 'client' | 'server' | 'other',
   // Optional AST-derived framework hint (e.g. @Controller, @GetMapping)
   astFrameworkMultiplier?: number,
   astFrameworkReason?: string,

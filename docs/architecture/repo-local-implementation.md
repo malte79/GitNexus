@@ -96,4 +96,13 @@ The same core seams remain responsible:
 - [tree-sitter-queries.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/tree-sitter-queries.ts) owns language capture definitions
 - [import-processor.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/import-processor.ts) and [call-processor.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/call-processor.ts) own graph linking
 
-Epic 07 adds Luau to those existing seams only. Roblox- and Rojo-specific semantics remain deferred to Epic 08.
+Epic 07 adds Luau to those existing seams only.
+
+Epic 08 layers Roblox- and Rojo-specific semantics on top through a dedicated domain helper under [gitnexus/src/core/ingestion/roblox](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/roblox):
+
+- `default.project.json` is parsed into a deterministic filesystem-to-DataModel mapping
+- static Roblox path forms such as `game:GetService(...)`, `script.Parent`, and chained `WaitForChild(...)` are resolved conservatively
+- shallow syntax-local aliases of those rooted paths are supported
+- runtime-area tagging (`shared`, `client`, `server`, `other`) is carried into the indexed graph and surfaced through query results
+
+This keeps the Roblox specialization isolated from the generic Luau parser and graph seams while making the existing product genuinely useful on Rojo-based Roblox repos.

@@ -76,54 +76,30 @@ This tightened the post-Epic-05 operating model:
 - restart-required behavior after reindex while serving is now explicit
 - the freshness model has been proven against a real installed package and live service run
 
-## Remaining Epic Sequence
-
 ### 07. Luau Core Support
 
-Add Luau to the language engine itself, on top of the now-working installable CLI and live repo-local service.
+Completed.
 
-Primary goals:
+This added real language-level Luau support on top of the working local product:
 
-- parser integration
-- symbol extraction
-- graph extraction
-- baseline search/query/index support for Luau code
+- `.lua` and `.luau` are now recognized and parsed
+- Luau definitions, calls, and basic string-based `require(...)` edges are now indexed
+- end-to-end Luau indexing/query support has been proven through the real `codenexus` product surface
+- Roblox and Rojo semantics remain deferred to Epic 08
 
-What this brings:
-
-- CodeNexus can index Luau repos at the language level instead of only the currently supported languages
-- Roblox-specific support gets a real language-engine foundation instead of heuristics layered on unsupported code
-- because the CLI, repo-local index, and live service already work, new Luau support becomes usable through the existing product immediately
-
-Important note:
-
-- this is language support first
-- Roblox semantics and Rojo resolution still belong to Epic 08
+## Remaining Epic Sequence
 
 ### 08. Roblox And Rojo Resolution
 
-Make Luau support actually useful for real Roblox projects, specifically Rojo-based ones.
+Completed.
 
-Primary goals:
+This made the existing Luau support materially useful for real Rojo-based Roblox repos:
 
-- read Rojo project structure
-- resolve Roblox module paths and instance-tree patterns
-- understand common static patterns like:
-  - `game:GetService(...)`
-  - `script.Parent`
-  - `WaitForChild(...)`
-- model client/shared/server boundaries correctly
-
-What this brings:
-
-- CodeNexus becomes genuinely useful on Rojo Roblox game repos
-- agents stop paying the manual “Roblox tax” of reconstructing module and instance relationships by grep
-- the value compounds on top of the already-real local service and freshness model, so agents can use the new Roblox-aware capabilities immediately through the existing runtime
-
-Important note:
-
-- Rojo-first remains the intended initial scope
-- broad Roblox support beyond Rojo is still out of scope for the early product
+- `default.project.json` is now parsed into a deterministic filesystem-to-DataModel mapping
+- Roblox-rooted static path forms such as `game:GetService(...)`, `script.Parent`, and chained `WaitForChild(...)` now resolve conservatively
+- shallow syntax-local alias handling now supports common Rojo module access patterns
+- client/shared/server runtime areas are now reflected in the graph and surfaced through query results
+- the real `codenexus` product has been manually validated against `/Users/alex/Projects/roblox/dancegame-agent-1`
 
 ### 09. Branch And Repo State Intelligence
 
@@ -164,12 +140,12 @@ What this brings:
 
 The product and runtime core now exist and have been proven in a real installed run against a live repo-local service.
 
-The next two epics make the existing product useful for the target Roblox/Luau domain:
+The next completed epics made the existing product useful for the target Roblox/Luau domain:
 
 - Epic 07: Luau Core Support
 - Epic 08: Roblox And Rojo Resolution
 
-Then the final two deepen robustness and intelligence:
+The final two deepen robustness and intelligence:
 
 - Epic 09: Branch And Repo State Intelligence
 - Epic 10: Deferred Intelligence Upgrades

@@ -84,7 +84,7 @@ Epic 07 does not include:
 - `WaitForChild(...)`
 - client/server/shared Roblox boundary modeling
 
-Those are owned by Epic 08.
+Those are owned by Epic 08, which now implements the Rojo-first Roblox layer in [roblox-rojo-resolution.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/roblox-rojo-resolution.md).
 
 ## Reference Material
 

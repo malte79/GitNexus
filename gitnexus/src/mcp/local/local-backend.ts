@@ -263,6 +263,7 @@ export class LocalBackend {
           name: sym.name,
           type: sym.type || 'File',
           filePath: sym.filePath,
+          ...(sym.runtimeArea ? { runtimeArea: sym.runtimeArea } : {}),
         });
         continue;
       }
@@ -312,6 +313,7 @@ export class LocalBackend {
         filePath: sym.filePath,
         startLine: sym.startLine,
         endLine: sym.endLine,
+        ...(sym.runtimeArea ? { runtimeArea: sym.runtimeArea } : {}),
         ...(module ? { module } : {}),
         ...(includeContent && content ? { content } : {}),
       };
@@ -416,7 +418,7 @@ export class LocalBackend {
         const symbols = await executeParameterized(repo.id, `
           MATCH (n)
           WHERE n.filePath = $filePath
-          RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine
+          RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea
           LIMIT 3
         `, { filePath: fullPath });
         
@@ -429,6 +431,7 @@ export class LocalBackend {
               filePath: sym.filePath || sym[3],
               startLine: sym.startLine || sym[4],
               endLine: sym.endLine || sym[5],
+              runtimeArea: sym.runtimeArea || sym[6],
               bm25Score: bm25Result.score,
             });
           }
@@ -632,7 +635,7 @@ export class LocalBackend {
     if (uid) {
       symbols = await executeParameterized(repo.id, `
         MATCH (n {id: $uid})
-        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine${include_content ? ', n.content AS content' : ''}
+        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea${include_content ? ', n.content AS content' : ''}
         LIMIT 1
       `, { uid });
     } else {
@@ -653,7 +656,7 @@ export class LocalBackend {
 
       symbols = await executeParameterized(repo.id, `
         MATCH (n) ${whereClause}
-        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine${include_content ? ', n.content AS content' : ''}
+        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea${include_content ? ', n.content AS content' : ''}
         LIMIT 10
       `, queryParams);
     }
@@ -673,6 +676,7 @@ export class LocalBackend {
           kind: s.type || s[2],
           filePath: s.filePath || s[3],
           line: s.startLine || s[4],
+          ...(s.runtimeArea || s[6] ? { runtimeArea: s.runtimeArea || s[6] } : {}),
         })),
       };
     }
@@ -732,7 +736,8 @@ export class LocalBackend {
         filePath: sym.filePath || sym[3],
         startLine: sym.startLine || sym[4],
         endLine: sym.endLine || sym[5],
-        ...(include_content && (sym.content || sym[6]) ? { content: sym.content || sym[6] } : {}),
+        ...(sym.runtimeArea || sym[6] ? { runtimeArea: sym.runtimeArea || sym[6] } : {}),
+        ...(include_content && (sym.content || sym[7]) ? { content: sym.content || sym[7] } : {}),
       },
       incoming: categorize(incomingRows),
       outgoing: categorize(outgoingRows),
