@@ -52,4 +52,48 @@ describe('Roblox Rojo indexing end-to-end', () => {
       target: 'src/server/WorldReady.lua',
     });
   });
+
+  it('creates first-class module symbols for representative Rojo Luau modules', async () => {
+    const result = await runPipelineFromRepo(MINI_ROJO_REPO, () => {});
+
+    const modules = new Map<string, { filePath: string; description: string; runtimeArea?: string }>();
+    const moduleDefines = new Set<string>();
+
+    result.graph.forEachNode(node => {
+      if (node.label !== 'Module') return;
+      modules.set(node.properties.name, {
+        filePath: node.properties.filePath,
+        description: node.properties.description || '',
+        runtimeArea: node.properties.runtimeArea,
+      });
+    });
+
+    for (const rel of result.graph.iterRelationships()) {
+      if (rel.type !== 'DEFINES') continue;
+      const source = result.graph.getNode(rel.sourceId);
+      const target = result.graph.getNode(rel.targetId);
+      if (!source || !target || source.label !== 'Module' || target.label !== 'Method') continue;
+      moduleDefines.add(`${source.properties.name}->${target.properties.name}`);
+    }
+
+    expect(modules.get('UIService')).toMatchObject({
+      filePath: 'src/client/UI/UIService.lua',
+      description: 'luau-module:strong:named-return-table',
+      runtimeArea: 'client',
+    });
+    expect(modules.get('WorldReady')).toMatchObject({
+      filePath: 'src/server/WorldReady.lua',
+      description: 'luau-module:strong:named-return-table',
+      runtimeArea: 'server',
+    });
+    expect(modules.get('Log')).toMatchObject({
+      filePath: 'src/shared/Log/init.lua',
+      description: 'luau-module:strong:named-return-table',
+      runtimeArea: 'shared',
+    });
+
+    expect(moduleDefines).toContain('UIService->render');
+    expect(moduleDefines).toContain('WorldReady->markReady');
+    expect(moduleDefines).toContain('Log->info');
+  });
 });

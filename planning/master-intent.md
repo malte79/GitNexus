@@ -203,6 +203,12 @@ The current Roblox support remains intentionally conservative:
 - no dynamic instance-tree inference
 - no world projection yet
 
+On top of that correctness layer, CodeNexus is now improving Luau and Roblox query ergonomics:
+
+- common returned Luau module tables are treated as first-class symbols where the pattern is deterministic
+- Roblox and Luau ranking is improved through deterministic signals such as exact module names, file basenames, split-word service aliases, `runtimeArea`, and Rojo path context
+- query and context responses can surface concise Roblox-aware summary facts such as module symbol, runtime area, DataModel path, and key boundary-crossing imports
+
 ## World Projection Direction
 
 - The SQLite world projection concept remains part of long-term intent

@@ -86,6 +86,8 @@ Epic 07 does not include:
 
 Those are owned by Epic 08, which now implements the Rojo-first Roblox layer in [roblox-rojo-resolution.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/roblox-rojo-resolution.md).
 
+Epic 09 then improves the agent ergonomics on top of those foundations by turning common returned module tables into stronger first-class symbols and by improving deterministic ranking and summaries for Roblox-oriented queries. That layer is documented in [roblox-query-ergonomics.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/roblox-query-ergonomics.md).
+
 ## Reference Material
 
 `luau-lsp` is reference material only.

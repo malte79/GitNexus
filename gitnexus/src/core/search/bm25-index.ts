@@ -8,7 +8,14 @@
 import { queryFTS } from '../kuzu/kuzu-adapter.js';
 
 export interface BM25SearchResult {
+  nodeId: string;
+  name: string;
+  type: string;
   filePath: string;
+  startLine?: number;
+  endLine?: number;
+  runtimeArea?: string;
+  description?: string;
   score: number;
   rank: number;
 }
@@ -23,21 +30,36 @@ async function queryFTSViaExecutor(
   indexName: string,
   query: string,
   limit: number,
-): Promise<Array<{ filePath: string; score: number }>> {
+): Promise<Array<Omit<BM25SearchResult, 'rank'>>> {
   const escapedQuery = query.replace(/'/g, "''");
   const cypher = `
     CALL QUERY_FTS_INDEX('${tableName}', '${indexName}', '${escapedQuery}', conjunctive := false)
-    RETURN node, score
+    RETURN
+      node.id AS nodeId,
+      node.name AS name,
+      labels(node)[0] AS type,
+      node.filePath AS filePath,
+      node.startLine AS startLine,
+      node.endLine AS endLine,
+      node.runtimeArea AS runtimeArea,
+      node.description AS description,
+      score
     ORDER BY score DESC
     LIMIT ${limit}
   `;
   try {
     const rows = await executor(cypher);
     return rows.map((row: any) => {
-      const node = row.node || row[0] || {};
-      const score = row.score ?? row[1] ?? 0;
+      const score = row.score ?? row[8] ?? 0;
       return {
-        filePath: node.filePath || '',
+        nodeId: row.nodeId ?? row[0] ?? '',
+        name: row.name ?? row[1] ?? '',
+        type: row.type ?? row[2] ?? tableName,
+        filePath: row.filePath ?? row[3] ?? '',
+        startLine: row.startLine ?? row[4] ?? undefined,
+        endLine: row.endLine ?? row[5] ?? undefined,
+        runtimeArea: row.runtimeArea ?? row[6] ?? undefined,
+        description: row.description ?? row[7] ?? undefined,
         score: typeof score === 'number' ? score : parseFloat(score) || 0,
       };
     });
@@ -58,7 +80,7 @@ async function queryFTSViaExecutor(
  * @returns Ranked search results from FTS indexes
  */
 export const searchFTSFromKuzu = async (query: string, limit: number = 20, repoId?: string): Promise<BM25SearchResult[]> => {
-  let fileResults: any[], functionResults: any[], classResults: any[], methodResults: any[], interfaceResults: any[];
+  let fileResults: any[], functionResults: any[], classResults: any[], methodResults: any[], interfaceResults: any[], moduleResults: any[];
 
   if (repoId) {
     // Use MCP connection pool via dynamic import
@@ -71,6 +93,7 @@ export const searchFTSFromKuzu = async (query: string, limit: number = 20, repoI
     classResults = await queryFTSViaExecutor(executor, 'Class', 'class_fts', query, limit);
     methodResults = await queryFTSViaExecutor(executor, 'Method', 'method_fts', query, limit);
     interfaceResults = await queryFTSViaExecutor(executor, 'Interface', 'interface_fts', query, limit);
+    moduleResults = await queryFTSViaExecutor(executor, 'Module', 'module_fts', query, limit);
   } else {
     // Use core kuzu adapter (CLI / pipeline context) — also sequential for safety
     fileResults = await queryFTS('File', 'file_fts', query, limit, false).catch(() => []);
@@ -78,36 +101,53 @@ export const searchFTSFromKuzu = async (query: string, limit: number = 20, repoI
     classResults = await queryFTS('Class', 'class_fts', query, limit, false).catch(() => []);
     methodResults = await queryFTS('Method', 'method_fts', query, limit, false).catch(() => []);
     interfaceResults = await queryFTS('Interface', 'interface_fts', query, limit, false).catch(() => []);
+    moduleResults = await queryFTS('Module', 'module_fts', query, limit, false).catch(() => []);
   }
-  
-  // Merge results by filePath, summing scores for same file
-  const merged = new Map<string, { filePath: string; score: number }>();
-  
-  const addResults = (results: any[]) => {
-    for (const r of results) {
-      const existing = merged.get(r.filePath);
-      if (existing) {
-        existing.score += r.score;
-      } else {
-        merged.set(r.filePath, { filePath: r.filePath, score: r.score });
+
+  const normalizeLegacyRows = (results: any[], tableName: string): Array<Omit<BM25SearchResult, 'rank'>> => {
+    return results.map((row: any) => {
+      if ('nodeId' in row || 'name' in row || 'type' in row) {
+        return row;
       }
-    }
+      const node = row.node || row[0] || {};
+      const score = row.score ?? row[1] ?? 0;
+      return {
+        nodeId: node.id || '',
+        name: node.name || '',
+        type: tableName,
+        filePath: node.filePath || '',
+        startLine: node.startLine,
+        endLine: node.endLine,
+        runtimeArea: node.runtimeArea,
+        description: node.description,
+        score: typeof score === 'number' ? score : parseFloat(score) || 0,
+      };
+    });
   };
-  
-  addResults(fileResults);
-  addResults(functionResults);
-  addResults(classResults);
-  addResults(methodResults);
-  addResults(interfaceResults);
-  
-  // Sort by score descending and add rank
-  const sorted = Array.from(merged.values())
+
+  const merged = [
+    ...normalizeLegacyRows(fileResults, 'File'),
+    ...normalizeLegacyRows(functionResults, 'Function'),
+    ...normalizeLegacyRows(classResults, 'Class'),
+    ...normalizeLegacyRows(methodResults, 'Method'),
+    ...normalizeLegacyRows(interfaceResults, 'Interface'),
+    ...normalizeLegacyRows(moduleResults, 'Module'),
+  ];
+
+  const deduped = new Map<string, Omit<BM25SearchResult, 'rank'>>();
+  for (const row of merged) {
+    const key = row.nodeId || `${row.type}:${row.filePath}:${row.name}`;
+    const existing = deduped.get(key);
+    if (!existing || row.score > existing.score) {
+      deduped.set(key, row);
+    }
+  }
+
+  return Array.from(deduped.values())
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-  
-  return sorted.map((r, index) => ({
-    filePath: r.filePath,
-    score: r.score,
-    rank: index + 1,
-  }));
+    .slice(0, limit)
+    .map((r, index) => ({
+      ...r,
+      rank: index + 1,
+    }));
 };

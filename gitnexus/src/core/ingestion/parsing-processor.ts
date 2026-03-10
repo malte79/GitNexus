@@ -7,6 +7,7 @@ import { SymbolTable } from './symbol-table.js';
 import { ASTCache } from './ast-cache.js';
 import { findSiblingChild, getLanguageFromFilename, yieldToEventLoop } from './utils.js';
 import { detectFrameworkFromAST } from './framework-detection.js';
+import { extractLuauModuleSymbolCandidates } from './luau-module-symbols.js';
 import { WorkerPool } from './workers/worker-pool.js';
 import type { ParseWorkerResult, ParseWorkerInput, ExtractedImport, ExtractedCall, ExtractedHeritage, ExtractedRoute } from './workers/parse-worker.js';
 
@@ -431,6 +432,53 @@ const processParsingSequential = async (
 
       graph.addRelationship(relationship);
     });
+
+    if (language === 'luau') {
+      const candidates = extractLuauModuleSymbolCandidates(tree.rootNode, file.path);
+      for (const candidate of candidates) {
+        const moduleId = generateId('Module', `${file.path}:${candidate.name}:${candidate.startLine}`);
+        if (graph.getNode(moduleId)) continue;
+
+        const moduleNode: GraphNode = {
+          id: moduleId,
+          label: 'Module',
+          properties: {
+            name: candidate.name,
+            filePath: file.path,
+            startLine: candidate.startLine,
+            endLine: candidate.endLine,
+            language,
+            isExported: candidate.isExported,
+            description: candidate.description,
+          },
+        };
+        graph.addNode(moduleNode);
+        symbolTable.add(file.path, candidate.name, moduleId, 'Module');
+
+        const fileId = generateId('File', file.path);
+        graph.addRelationship({
+          id: generateId('DEFINES', `${fileId}->${moduleId}`),
+          sourceId: fileId,
+          targetId: moduleId,
+          type: 'DEFINES',
+          confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
+          reason: candidate.description,
+        });
+
+        for (const methodRef of candidate.methodRefs) {
+          const methodId = generateId(methodRef.label, `${file.path}:${methodRef.name}:${methodRef.startLine}`);
+          if (!graph.getNode(methodId)) continue;
+          graph.addRelationship({
+            id: generateId('DEFINES', `${moduleId}->${methodId}`),
+            sourceId: moduleId,
+            targetId: methodId,
+            type: 'DEFINES',
+            confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
+            reason: candidate.description,
+          });
+        }
+      }
+    }
   }
 };
 

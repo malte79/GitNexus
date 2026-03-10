@@ -23,6 +23,7 @@ try { Swift = _require('tree-sitter-swift'); } catch {}
 import { findSiblingChild, getLanguageFromFilename } from '../utils.js';
 import { detectFrameworkFromAST } from '../framework-detection.js';
 import { generateId } from '../../../lib/utils.js';
+import { extractLuauModuleSymbolCandidates } from '../luau-module-symbols.js';
 import { extractLuauRobloxAliasesAndImports } from '../roblox/luau-resolution.js';
 import type { RobloxPathSpec } from '../roblox/types.js';
 
@@ -568,6 +569,71 @@ const getDefinitionNodeFromCaptures = (captureMap: Record<string, any>): any | n
     if (captureMap[key]) return captureMap[key];
   }
   return null;
+};
+
+const appendLuauModuleSymbols = (
+  result: ParseWorkerResult,
+  rootNode: any,
+  filePath: string,
+): void => {
+  const candidates = extractLuauModuleSymbolCandidates(rootNode, filePath);
+  if (candidates.length === 0) return;
+
+  const existingIds = new Set(result.symbols
+    .filter(sym => sym.filePath === filePath)
+    .map(sym => sym.nodeId));
+
+  for (const candidate of candidates) {
+    const moduleId = generateId('Module', `${filePath}:${candidate.name}:${candidate.startLine}`);
+    if (existingIds.has(moduleId)) continue;
+
+    result.nodes.push({
+      id: moduleId,
+      label: 'Module',
+      properties: {
+        name: candidate.name,
+        filePath,
+        startLine: candidate.startLine,
+        endLine: candidate.endLine,
+        language: SupportedLanguages.Luau,
+        isExported: candidate.isExported,
+        description: candidate.description,
+      },
+    });
+
+    result.symbols.push({
+      filePath,
+      name: candidate.name,
+      nodeId: moduleId,
+      type: 'Module',
+    });
+
+    const fileId = generateId('File', filePath);
+    result.relationships.push({
+      id: generateId('DEFINES', `${fileId}->${moduleId}`),
+      sourceId: fileId,
+      targetId: moduleId,
+      type: 'DEFINES',
+      confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
+      reason: candidate.description,
+    });
+
+    existingIds.add(moduleId);
+
+    for (const methodRef of candidate.methodRefs) {
+      const methodId = generateId(methodRef.label, `${filePath}:${methodRef.name}:${methodRef.startLine}`);
+      if (!existingIds.has(methodId)) continue;
+
+      result.relationships.push({
+        id: generateId('DEFINES', `${moduleId}->${methodId}`),
+        sourceId: moduleId,
+        targetId: methodId,
+        type: 'DEFINES',
+        confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
+        reason: candidate.description,
+      });
+    }
+  }
 };
 
 /**
@@ -1315,6 +1381,7 @@ const processFileGroup = (
     }
 
     if (language === SupportedLanguages.Luau) {
+      appendLuauModuleSymbols(result, tree.rootNode, file.path);
       result.imports.push(...extractLuauRobloxAliasesAndImports(tree.rootNode, file.path));
     }
   }
