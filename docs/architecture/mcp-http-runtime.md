@@ -82,6 +82,10 @@ The health payload must also expose:
 - service mode (`foreground` or `background`)
 - current loaded-index generation
 - optional reload failure information when the service is still serving an older loaded index
+- background auto-index status when running in detached mode:
+  - whether auto-index is enabled
+  - configured interval in seconds
+  - last attempt, success, failure, and active backoff when present
 
 ## Startup Contract
 
@@ -108,6 +112,22 @@ If the index is stale, the service may still start, but it must report degraded 
 - `restart` performs a deterministic stop/start cycle
 
 Detached mode is per-repo only. There is no global service registry.
+
+Only detached background mode owns automatic freshness polling in v1.
+
+- `codenexus serve` does not start background auto-index behavior
+- `codenexus start` and `codenexus restart` run the same service with background auto-index enabled when config allows it
+- auto-index checks use the same repo-state freshness inputs as `codenexus status`
+- branch switches are just normal repo divergence; there is no branch-specific index mode
+- auto-index attempts are serialized with live reload and must not overlap another `codenexus index` run
+- repeated auto-index failures back off rather than retrying aggressively
+
+When detached background auto-index is enabled and the repo diverges from the indexed state:
+
+- the running service records an auto-index attempt
+- it triggers the normal `codenexus index` command path in a child process
+- on success, the existing live-reload path adopts the rebuilt index
+- on failure, the service keeps serving the previous loaded index and reports failure details through health and status
 
 ## Shutdown And Crash Recovery
 

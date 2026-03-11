@@ -17,7 +17,15 @@ import {
   closeKuzu,
   createFTSIndex,
 } from '../core/kuzu/kuzu-adapter.js';
-import { computeIndexGeneration, getStoragePaths, saveMeta, loadConfig, loadMeta, getRepoState } from '../storage/repo-manager.js';
+import {
+  acquireIndexLock,
+  computeIndexGeneration,
+  getStoragePaths,
+  saveMeta,
+  loadConfig,
+  loadMeta,
+  getRepoState,
+} from '../storage/repo-manager.js';
 import { getCurrentBranch, getCurrentCommit, isGitRepo, getGitRoot, isWorkingTreeDirty } from '../storage/git.js';
 
 const HEAP_MB = 8192;
@@ -105,25 +113,30 @@ export const indexCommand = async (
     return;
   }
 
-  const currentCommit = getCurrentCommit(repoPath);
-  const currentBranch = getCurrentBranch(repoPath);
-  const currentDirty = isWorkingTreeDirty(repoPath);
-  const existingMeta = await loadMeta(storagePath);
+  const releaseIndexLock = await acquireIndexLock(
+    storagePath,
+    process.env.CODENEXUS_INDEX_REASON === 'auto' ? 'auto' : 'manual',
+  );
 
-  if (
-    existingMeta &&
-    !options?.force &&
-    !currentDirty &&
-    existingMeta.indexed_head === currentCommit &&
-    existingMeta.indexed_branch === currentBranch &&
-    existingMeta.worktree_root === repoPath &&
-    !existingMeta.indexed_dirty
-  ) {
-    console.log('  Already up to date\n');
-    return;
-  }
+  try {
+    const currentCommit = getCurrentCommit(repoPath);
+    const currentBranch = getCurrentBranch(repoPath);
+    const currentDirty = isWorkingTreeDirty(repoPath);
+    const existingMeta = await loadMeta(storagePath);
 
-  const bar = new cliProgress.SingleBar({
+    if (
+      existingMeta &&
+      !options?.force &&
+      existingMeta.indexed_head === currentCommit &&
+      existingMeta.indexed_branch === currentBranch &&
+      existingMeta.worktree_root === repoPath &&
+      existingMeta.indexed_dirty === currentDirty
+    ) {
+      console.log('  Already up to date\n');
+      return;
+    }
+
+    const bar = new cliProgress.SingleBar({
     format: '  {bar} {percentage}% | {phase}',
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
@@ -134,71 +147,71 @@ export const indexCommand = async (
     stopOnComplete: false,
   }, cliProgress.Presets.shades_grey);
 
-  bar.start(100, 0, { phase: 'Initializing...' });
+    bar.start(100, 0, { phase: 'Initializing...' });
 
-  let aborted = false;
-  const sigintHandler = () => {
-    if (aborted) process.exit(1);
-    aborted = true;
-    bar.stop();
-    console.log('\n  Interrupted — cleaning up...');
-    closeKuzu().catch(() => {}).finally(() => process.exit(130));
-  };
-  process.on('SIGINT', sigintHandler);
+    let aborted = false;
+    const sigintHandler = () => {
+      if (aborted) process.exit(1);
+      aborted = true;
+      bar.stop();
+      console.log('\n  Interrupted — cleaning up...');
+      closeKuzu().catch(() => {}).finally(() => process.exit(130));
+    };
+    process.on('SIGINT', sigintHandler);
 
-  const origLog = console.log.bind(console);
-  const origWarn = console.warn.bind(console);
-  const origError = console.error.bind(console);
-  const barLog = (...args: any[]) => {
-    process.stdout.write('\x1b[2K\r');
-    origLog(args.map(a => (typeof a === 'string' ? a : String(a))).join(' '));
-  };
-  console.log = barLog;
-  console.warn = barLog;
-  console.error = barLog;
+    const origLog = console.log.bind(console);
+    const origWarn = console.warn.bind(console);
+    const origError = console.error.bind(console);
+    const barLog = (...args: any[]) => {
+      process.stdout.write('\x1b[2K\r');
+      origLog(args.map(a => (typeof a === 'string' ? a : String(a))).join(' '));
+    };
+    console.log = barLog;
+    console.warn = barLog;
+    console.error = barLog;
 
-  let lastPhaseLabel = 'Initializing...';
-  let phaseStart = Date.now();
+    let lastPhaseLabel = 'Initializing...';
+    let phaseStart = Date.now();
 
-  const updateBar = (value: number, phaseLabel: string) => {
-    if (phaseLabel !== lastPhaseLabel) {
-      lastPhaseLabel = phaseLabel;
-      phaseStart = Date.now();
+    const updateBar = (value: number, phaseLabel: string) => {
+      if (phaseLabel !== lastPhaseLabel) {
+        lastPhaseLabel = phaseLabel;
+        phaseStart = Date.now();
+      }
+      const elapsed = Math.round((Date.now() - phaseStart) / 1000);
+      const display = elapsed >= 3 ? `${phaseLabel} (${elapsed}s)` : phaseLabel;
+      bar.update(value, { phase: display });
+    };
+
+    const elapsedTimer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - phaseStart) / 1000);
+      if (elapsed >= 3) {
+        bar.update({ phase: `${lastPhaseLabel} (${elapsed}s)` });
+      }
+    }, 1000);
+
+    const t0Global = Date.now();
+
+    const pipelineResult = await runPipelineFromRepo(repoPath, (progress) => {
+      const phaseLabel = PHASE_LABELS[progress.phase] || progress.phase;
+      const scaled = Math.round(progress.percent * 0.6);
+      updateBar(scaled, phaseLabel);
+    });
+
+    updateBar(60, 'Loading into KuzuDB...');
+
+    await closeKuzu();
+    const kuzuFiles = [kuzuPath, `${kuzuPath}.wal`, `${kuzuPath}.lock`];
+    for (const f of kuzuFiles) {
+      try {
+        await fs.rm(f, { recursive: true, force: true });
+      } catch {}
     }
-    const elapsed = Math.round((Date.now() - phaseStart) / 1000);
-    const display = elapsed >= 3 ? `${phaseLabel} (${elapsed}s)` : phaseLabel;
-    bar.update(value, { phase: display });
-  };
 
-  const elapsedTimer = setInterval(() => {
-    const elapsed = Math.round((Date.now() - phaseStart) / 1000);
-    if (elapsed >= 3) {
-      bar.update({ phase: `${lastPhaseLabel} (${elapsed}s)` });
-    }
-  }, 1000);
-
-  const t0Global = Date.now();
-
-  const pipelineResult = await runPipelineFromRepo(repoPath, (progress) => {
-    const phaseLabel = PHASE_LABELS[progress.phase] || progress.phase;
-    const scaled = Math.round(progress.percent * 0.6);
-    updateBar(scaled, phaseLabel);
-  });
-
-  updateBar(60, 'Loading into KuzuDB...');
-
-  await closeKuzu();
-  const kuzuFiles = [kuzuPath, `${kuzuPath}.wal`, `${kuzuPath}.lock`];
-  for (const f of kuzuFiles) {
-    try {
-      await fs.rm(f, { recursive: true, force: true });
-    } catch {}
-  }
-
-  const t0Kuzu = Date.now();
-  await initKuzu(kuzuPath);
-  let kuzuMsgCount = 0;
-  const kuzuResult = await loadGraphToKuzu(
+    const t0Kuzu = Date.now();
+    await initKuzu(kuzuPath);
+    let kuzuMsgCount = 0;
+    const kuzuResult = await loadGraphToKuzu(
     pipelineResult.graph,
     pipelineResult.repoPath,
     storagePath,
@@ -208,16 +221,16 @@ export const indexCommand = async (
       updateBar(progress, msg);
     },
   );
-  const kuzuTime = ((Date.now() - t0Kuzu) / 1000).toFixed(1);
-  const kuzuWarnings = kuzuResult.warnings;
+    const kuzuTime = ((Date.now() - t0Kuzu) / 1000).toFixed(1);
+    const kuzuWarnings = kuzuResult.warnings;
 
-  updateBar(85, 'Creating search indexes...');
-  const t0Fts = Date.now();
-  try {
-    await createFTSIndex('File', 'file_fts', ['name', 'content']);
-    await createFTSIndex('Function', 'function_fts', ['name', 'content']);
-    await createFTSIndex('Class', 'class_fts', ['name', 'content']);
-    await createFTSIndex('Method', 'method_fts', ['name', 'content']);
+    updateBar(85, 'Creating search indexes...');
+    const t0Fts = Date.now();
+    try {
+      await createFTSIndex('File', 'file_fts', ['name', 'content']);
+      await createFTSIndex('Function', 'function_fts', ['name', 'content']);
+      await createFTSIndex('Class', 'class_fts', ['name', 'content']);
+      await createFTSIndex('Method', 'method_fts', ['name', 'content']);
     await createFTSIndex('Interface', 'interface_fts', ['name', 'content']);
     await createFTSIndex('Module', 'module_fts', ['name', 'description']);
   } catch {}
@@ -304,5 +317,9 @@ export const indexCommand = async (
   }
 
   console.log('');
-  process.exit(0);
+  process.exitCode = 0;
+  return;
+  } finally {
+    await releaseIndexLock();
+  }
 };

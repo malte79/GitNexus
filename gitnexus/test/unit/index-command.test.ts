@@ -27,8 +27,10 @@ const loadMeta = vi.fn();
 const getStoragePaths = vi.fn();
 const getRepoState = vi.fn();
 const computeIndexGeneration = vi.fn(() => 'gen-new');
+const acquireIndexLock = vi.fn(async () => async () => {});
 
 vi.mock('../../src/storage/repo-manager.js', () => ({
+  acquireIndexLock,
   computeIndexGeneration,
   getStoragePaths,
   saveMeta: vi.fn(),
@@ -66,6 +68,7 @@ describe('indexCommand', () => {
     loadConfig.mockResolvedValue(null);
     loadMeta.mockResolvedValue(null);
     getRepoState.mockResolvedValue(null);
+    acquireIndexLock.mockResolvedValue(async () => {});
     runPipelineFromRepo.mockResolvedValue({
       graph: {},
       repoPath: '/repo',

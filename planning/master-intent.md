@@ -105,6 +105,13 @@ Manual refresh in v1 is explicit:
 - a running service adopts the rebuilt index automatically in the normal path
 - if live reload fails, the service keeps serving the previous loaded index until recovered
 
+Background mode now adds a bounded convenience layer on top of that manual model:
+
+- `codenexus start` may auto-index on a repo-local interval when the repo diverges from the indexed snapshot
+- auto-index remains repo-local and uses the same deterministic freshness inputs as normal repo-state evaluation
+- foreground `codenexus serve` remains the debugging path and does not auto-index
+- manual `codenexus index` remains the immediate override when certainty is needed
+
 ## Scope And Priorities
 
 - The tool is explicitly meant to be a backend utility for AI agents to understand and navigate codebases faster and with less brute-force searching

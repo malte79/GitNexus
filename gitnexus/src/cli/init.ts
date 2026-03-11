@@ -17,6 +17,8 @@ import {
 const DEFAULT_CONFIG: CodeNexusConfig = {
   version: 1,
   port: 4747,
+  auto_index: true,
+  auto_index_interval_seconds: 300,
 };
 
 async function fileExists(targetPath: string): Promise<boolean> {
@@ -45,6 +47,9 @@ export const initCommand = async () => {
       console.log(`CodeNexus is already initialized for ${repoRoot}`);
       console.log(`Config: ${configPath}`);
       console.log(`Port: ${existing.port}`);
+      console.log(
+        `Auto-index: ${existing.auto_index ? 'enabled' : 'disabled'} (${existing.auto_index_interval_seconds}s interval)`,
+      );
       return;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -61,4 +66,7 @@ export const initCommand = async () => {
   console.log(`Initialized CodeNexus for ${repoRoot}`);
   console.log(`Created ${configPath}`);
   console.log(`Port: ${DEFAULT_CONFIG.port}`);
+  console.log(
+    `Auto-index: ${DEFAULT_CONFIG.auto_index ? 'enabled' : 'disabled'} (${DEFAULT_CONFIG.auto_index_interval_seconds}s interval)`,
+  );
 };

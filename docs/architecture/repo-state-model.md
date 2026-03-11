@@ -13,6 +13,7 @@ This document defines the v1 `.codenexus/` layout, config and runtime ownership,
 | `.codenexus/meta.json` | derived index metadata | `codenexus index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
 | `.codenexus/kuzu/` | derived index state | `codenexus index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |
 | `.codenexus/runtime.json` | advisory runtime state | `codenexus serve` | Last known local HTTP service facts | Yes, but service discovery falls back to live checks only |
+| `.codenexus/index.lock` | advisory index lock | `codenexus index` | Serialize manual and background index runs for one repo boundary | Yes, but only when no index is active |
 
 V1 creates no placeholder directories or reserved future paths beyond the paths above.
 
@@ -43,12 +44,16 @@ Required fields:
 |---|---|---|
 | `version` | integer | Config schema version. V1 value: `1` |
 | `port` | integer | Repo-local MCP HTTP port for this repo boundary |
+| `auto_index` | boolean | Whether detached background mode should auto-index when the repo diverges. Default: `true` |
+| `auto_index_interval_seconds` | integer | Poll interval for detached background auto-index. Default: `300` |
 
 Example:
 
 ```toml
 version = 1
 port = 4747
+auto_index = true
+auto_index_interval_seconds = 300
 ```
 
 ### Config Rewrite Rules
@@ -98,6 +103,19 @@ Required fields:
 | `worktree_root` | string | Absolute worktree path for the service boundary |
 | `loaded_index` | object | Identity of the index metadata the live service loaded at startup |
 | `reload_error` | string? | Last live-reload failure message when the service stayed on the previous loaded index |
+| `auto_index` | object? | Background auto-index status when the service is running |
+
+When present, `auto_index` contains:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `enabled` | boolean | Whether background auto-index is enabled for this service |
+| `interval_seconds` | integer | Configured background polling interval |
+| `last_attempt_at` | string? | ISO-8601 timestamp of the last background auto-index attempt |
+| `last_succeeded_at` | string? | ISO-8601 timestamp of the last successful background auto-index |
+| `last_failed_at` | string? | ISO-8601 timestamp of the last failed background auto-index |
+| `last_error` | string? | Last background auto-index failure message |
+| `backoff_until` | string? | ISO-8601 timestamp before which background auto-index must not retry |
 
 ### Runtime Precedence
 
@@ -154,7 +172,7 @@ An index is `current` only when all of the following are true:
 - current HEAD equals `indexed_head`
 - current branch equals `indexed_branch`
 - current worktree root equals `worktree_root`
-- working tree is clean
+- current working-tree dirty state matches `indexed_dirty`
 
 ### Stale
 
@@ -163,10 +181,10 @@ An index is `stale` when any of the following are true:
 - HEAD changed
 - branch changed
 - worktree root changed
-- working tree is dirty
+- current working-tree dirty state differs from `indexed_dirty`
 - required index files are present but internally inconsistent
 
-V1 freshness is intentionally conservative. Dirty working trees are stale even if `codenexus index` was just run.
+V1 freshness is intentionally deterministic. A dirty worktree can still be current when the on-disk index was built from that same dirty snapshot, but any later dirty-state flip makes the index stale again.
 
 If required index artifacts are missing entirely, the repo falls back to `initialized_unindexed` rather than `indexed_stale`.
 
@@ -186,6 +204,15 @@ When a service is already running:
 - while live adoption is still in progress, status may report `serving_stale` with `service_restart_required`
 - if live reload fails, the service continues serving the previous loaded index until the operator recovers it
 
+In detached background mode:
+
+- background auto-index is controlled by `config.toml`
+- only background mode may trigger automatic reindex attempts
+- background auto-index uses the same freshness inputs as the canonical repo-state evaluation
+- background auto-index skips while another index is already running or a live reload is still in progress
+- successful background auto-index still relies on the normal live-reload path for adoption
+- repeated failures enter temporary backoff and must be surfaced through `runtime.json`, live health, and `codenexus status`
+
 ## State Transition Matrix
 
 | From | Trigger | To |
@@ -200,6 +227,7 @@ When a service is already running:
 | `indexed_stale` | `codenexus index` completes and freshness is current | `indexed_current` |
 | `indexed_current` | `codenexus serve` starts successfully | `serving_current` |
 | `indexed_stale` | `codenexus serve` starts successfully | `serving_stale` |
+| `serving_stale` | detached background auto-index completes and live adoption catches up | `serving_current` |
 | `serving_current` | live service stops | `indexed_current` |
 | `serving_current` | freshness becomes stale while service remains live | `serving_stale` |
 | `serving_stale` | live service stops | `indexed_stale` |

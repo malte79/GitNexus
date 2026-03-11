@@ -1,16 +1,21 @@
 import express from 'express';
 import http from 'http';
+import { spawn } from 'child_process';
+import { resolveCliInvocation } from '../cli/entrypoint-path.js';
 import { LocalBackend } from '../mcp/local/local-backend.js';
 import { mountMCPEndpoints } from './mcp-http.js';
 import {
   extractLoadedIndexIdentity,
   getRepoState,
+  getOnDiskRepoState,
   getStoragePaths,
+  isIndexLocked,
   loadMeta,
   probeServiceHealth,
   removeRuntimeMeta,
   resolveRepoBoundary,
   saveRuntimeMeta,
+  type AutoIndexStatus,
   type CodeNexusConfig,
   type LoadedIndexIdentity,
   type RepoStateSnapshot,
@@ -46,6 +51,7 @@ function buildHealthPayload(
   startedAt: string,
   state: RepoStateSnapshot,
   mode: ServiceMode,
+  autoIndex: AutoIndexStatus,
   reloadError?: string,
 ): ServiceHealth {
   if (!state.meta) {
@@ -63,7 +69,29 @@ function buildHealthPayload(
     worktree_root: worktreeRoot,
     loaded_index: extractLoadedIndexIdentity(state.meta),
     reload_error: reloadError,
+    auto_index: autoIndex,
   };
+}
+
+const AUTO_INDEX_FAILURE_BACKOFF_MULTIPLIER = 2;
+const AUTO_INDEX_MAX_FAILURE_EXPONENT = 3;
+
+function buildAutoIndexStatus(config: CodeNexusConfig): AutoIndexStatus {
+  return {
+    enabled: config.auto_index,
+    interval_seconds: config.auto_index_interval_seconds,
+  };
+}
+
+function buildAutoIndexBackoffUntil(
+  now: Date,
+  intervalSeconds: number,
+  failureCount: number,
+): string {
+  const exponent = Math.min(failureCount - 1, AUTO_INDEX_MAX_FAILURE_EXPONENT);
+  const seconds =
+    intervalSeconds * Math.pow(AUTO_INDEX_FAILURE_BACKOFF_MULTIPLIER, exponent);
+  return new Date(now.getTime() + seconds * 1000).toISOString();
 }
 
 function requireStartableState(state: RepoStateSnapshot): void {
@@ -215,7 +243,8 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
 
   const backend = await createBoundBackend(repoRoot);
   const startedAt = new Date().toISOString();
-  let health = buildHealthPayload(repoRoot, worktreeRoot, state.config, startedAt, state, mode);
+  let autoIndexStatus = buildAutoIndexStatus(state.config);
+  let health = buildHealthPayload(repoRoot, worktreeRoot, state.config, startedAt, state, mode, autoIndexStatus);
 
   const app = express();
   app.disable('x-powered-by');
@@ -257,6 +286,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
       worktree_root: worktreeRoot,
       loaded_index: health.loaded_index,
       reload_error: health.reload_error,
+      auto_index: autoIndexStatus,
     };
     await saveRuntimeMeta(storagePath, runtimeMeta);
   };
@@ -274,6 +304,8 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
   let closed = false;
   let reloadPromise: Promise<void> | null = null;
   let lastFailedGeneration: string | null = null;
+  let autoIndexPromise: Promise<void> | null = null;
+  let autoIndexFailureCount = 0;
   let resolveClosed!: () => void;
   const closedPromise = new Promise<void>((resolve) => {
     resolveClosed = resolve;
@@ -293,10 +325,16 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
     reloadPromise = (async () => {
       try {
         await backend.reload();
+        autoIndexStatus = {
+          ...autoIndexStatus,
+          last_error: undefined,
+          backoff_until: undefined,
+        };
         health = {
           ...health,
           loaded_index: extractLoadedIndexIdentity(meta),
           reload_error: undefined,
+          auto_index: autoIndexStatus,
         };
         lastFailedGeneration = null;
         await persistRuntime();
@@ -305,6 +343,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
         health = {
           ...health,
           reload_error: message,
+          auto_index: autoIndexStatus,
         };
         lastFailedGeneration = meta.index_generation;
         await persistRuntime();
@@ -321,16 +360,132 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
   }, 1000);
   reloadTimer.unref?.();
 
+  const runAutoIndex = async () => {
+    if (closed || autoIndexPromise || !state.config.auto_index || mode !== 'background') {
+      return;
+    }
+
+    const now = new Date();
+    if (autoIndexStatus.backoff_until && new Date(autoIndexStatus.backoff_until) > now) {
+      return;
+    }
+
+    const onDiskState = await getOnDiskRepoState(repoRoot);
+    if (!onDiskState || onDiskState.baseState !== 'indexed_stale') {
+      return;
+    }
+
+    if (reloadPromise || (await isIndexLocked(storagePath))) {
+      return;
+    }
+
+    autoIndexStatus = {
+      ...autoIndexStatus,
+      last_attempt_at: now.toISOString(),
+    };
+    health = {
+      ...health,
+      auto_index: autoIndexStatus,
+    };
+    await persistRuntime();
+
+    autoIndexPromise = (async () => {
+      const cliInvocation = resolveCliInvocation(['index', repoRoot]);
+      const child = spawn(cliInvocation.command, cliInvocation.args, {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          CODENEXUS_INDEX_REASON: 'auto',
+        },
+        stdio: 'ignore',
+        detached: false,
+      });
+
+      const exitCode = await new Promise<number | null>((resolve, reject) => {
+        child.once('error', reject);
+        child.once('exit', (code) => resolve(code));
+      });
+
+      const finishedAt = new Date();
+      if (exitCode === 0) {
+        autoIndexFailureCount = 0;
+        autoIndexStatus = {
+          ...autoIndexStatus,
+          last_succeeded_at: finishedAt.toISOString(),
+          last_failed_at: undefined,
+          last_error: undefined,
+          backoff_until: undefined,
+        };
+      } else {
+        autoIndexFailureCount += 1;
+        autoIndexStatus = {
+          ...autoIndexStatus,
+          last_failed_at: finishedAt.toISOString(),
+          last_error: `Auto-index exited with code ${exitCode ?? 'unknown'}`,
+          backoff_until: buildAutoIndexBackoffUntil(
+            finishedAt,
+            state.config.auto_index_interval_seconds,
+            autoIndexFailureCount,
+          ),
+        };
+      }
+
+      health = {
+        ...health,
+        auto_index: autoIndexStatus,
+      };
+      await persistRuntime();
+    })()
+      .catch(async (error) => {
+        autoIndexFailureCount += 1;
+        const failedAt = new Date();
+        autoIndexStatus = {
+          ...autoIndexStatus,
+          last_failed_at: failedAt.toISOString(),
+          last_error: error instanceof Error ? error.message : String(error),
+          backoff_until: buildAutoIndexBackoffUntil(
+            failedAt,
+            state.config.auto_index_interval_seconds,
+            autoIndexFailureCount,
+          ),
+        };
+        health = {
+          ...health,
+          auto_index: autoIndexStatus,
+        };
+        await persistRuntime();
+      })
+      .finally(() => {
+        autoIndexPromise = null;
+      });
+
+    await autoIndexPromise;
+  };
+
+  const autoIndexTimer =
+    mode === 'background' && state.config.auto_index
+      ? setInterval(() => {
+          void runAutoIndex();
+        }, state.config.auto_index_interval_seconds * 1000)
+      : null;
+  autoIndexTimer?.unref?.();
+
   const close = async () => {
     if (closed) return;
     closed = true;
     clearInterval(reloadTimer);
+    if (autoIndexTimer) {
+      clearInterval(autoIndexTimer);
+    }
 
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
 
     if (reloadPromise) {
       await reloadPromise.catch(() => {});
+    }
+    if (autoIndexPromise) {
+      await autoIndexPromise.catch(() => {});
     }
 
     await new Promise<void>((resolve) => {

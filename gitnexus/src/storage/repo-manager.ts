@@ -36,6 +36,8 @@ export interface LoadedIndexIdentity {
 export interface CodeNexusConfig {
   version: 1;
   port: number;
+  auto_index: boolean;
+  auto_index_interval_seconds: number;
 }
 
 export interface RepoMeta {
@@ -65,6 +67,7 @@ export interface RuntimeMeta {
   worktree_root: string;
   loaded_index: LoadedIndexIdentity;
   reload_error?: string;
+  auto_index?: AutoIndexStatus;
 }
 
 export interface ServiceHealth {
@@ -78,6 +81,24 @@ export interface ServiceHealth {
   worktree_root: string;
   loaded_index: LoadedIndexIdentity;
   reload_error?: string;
+  auto_index?: AutoIndexStatus;
+}
+
+export interface AutoIndexStatus {
+  enabled: boolean;
+  interval_seconds: number;
+  last_attempt_at?: string;
+  last_succeeded_at?: string;
+  last_failed_at?: string;
+  last_error?: string;
+  backoff_until?: string;
+}
+
+interface IndexLock {
+  version: 1;
+  pid: number;
+  reason: 'manual' | 'auto';
+  started_at: string;
 }
 
 export interface RepoBoundary {
@@ -91,6 +112,7 @@ export interface RepoPaths {
   metaPath: string;
   kuzuPath: string;
   runtimePath: string;
+  indexLockPath: string;
 }
 
 export interface IndexedRepo {
@@ -171,9 +193,69 @@ function validateConfig(raw: unknown): CodeNexusConfig {
   if (!isPositivePort(raw.port)) {
     throw new Error('Config port must be an integer between 1 and 65535');
   }
+  const autoIndex =
+    raw.auto_index === undefined
+      ? true
+      : typeof raw.auto_index === 'boolean'
+        ? raw.auto_index
+        : (() => {
+            throw new Error('Config auto_index must be a boolean');
+          })();
+  const autoIndexInterval =
+    raw.auto_index_interval_seconds === undefined
+      ? 300
+      : Number.isInteger(raw.auto_index_interval_seconds) &&
+          typeof raw.auto_index_interval_seconds === 'number' &&
+          raw.auto_index_interval_seconds > 0
+        ? raw.auto_index_interval_seconds
+        : (() => {
+            throw new Error('Config auto_index_interval_seconds must be a positive integer');
+          })();
   return {
     version: 1,
     port: raw.port,
+    auto_index: autoIndex,
+    auto_index_interval_seconds: autoIndexInterval,
+  };
+}
+
+function validateAutoIndexStatus(raw: unknown): AutoIndexStatus {
+  if (!isRecord(raw)) {
+    throw new Error('Auto-index status must be an object');
+  }
+  if (typeof raw.enabled !== 'boolean') {
+    throw new Error('Auto-index status enabled must be a boolean');
+  }
+  if (
+    !Number.isInteger(raw.interval_seconds) ||
+    typeof raw.interval_seconds !== 'number' ||
+    raw.interval_seconds <= 0
+  ) {
+    throw new Error('Auto-index status interval_seconds must be a positive integer');
+  }
+  const validateOptionalDate = (value: unknown, field: string): string | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || !value) {
+      throw new Error(`Auto-index status ${field} must be a non-empty string`);
+    }
+    return value;
+  };
+  const validateOptionalString = (value: unknown, field: string): string | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || !value) {
+      throw new Error(`Auto-index status ${field} must be a non-empty string`);
+    }
+    return value;
+  };
+
+  return {
+    enabled: raw.enabled,
+    interval_seconds: raw.interval_seconds,
+    last_attempt_at: validateOptionalDate(raw.last_attempt_at, 'last_attempt_at'),
+    last_succeeded_at: validateOptionalDate(raw.last_succeeded_at, 'last_succeeded_at'),
+    last_failed_at: validateOptionalDate(raw.last_failed_at, 'last_failed_at'),
+    last_error: validateOptionalString(raw.last_error, 'last_error'),
+    backoff_until: validateOptionalDate(raw.backoff_until, 'backoff_until'),
   };
 }
 
@@ -307,6 +389,7 @@ function validateRuntime(raw: unknown): RuntimeMeta {
     worktree_root: normalizePath(raw.worktree_root),
     loaded_index: loadedIndex,
     reload_error: typeof raw.reload_error === 'string' && raw.reload_error ? raw.reload_error : undefined,
+    auto_index: raw.auto_index === undefined ? undefined : validateAutoIndexStatus(raw.auto_index),
   };
 }
 
@@ -351,6 +434,31 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
     worktree_root: normalizePath(raw.worktree_root),
     loaded_index: loadedIndex,
     reload_error: typeof raw.reload_error === 'string' && raw.reload_error ? raw.reload_error : undefined,
+    auto_index: raw.auto_index === undefined ? undefined : validateAutoIndexStatus(raw.auto_index),
+  };
+}
+
+function validateIndexLock(raw: unknown): IndexLock {
+  if (!isRecord(raw)) {
+    throw new Error('Index lock must be an object');
+  }
+  if (raw.version !== 1) {
+    throw new Error('Index lock version must be 1');
+  }
+  if (!Number.isInteger(raw.pid)) {
+    throw new Error('Index lock pid is required');
+  }
+  if (raw.reason !== 'manual' && raw.reason !== 'auto') {
+    throw new Error('Index lock reason must be manual or auto');
+  }
+  if (typeof raw.started_at !== 'string' || !raw.started_at) {
+    throw new Error('Index lock started_at is required');
+  }
+  return {
+    version: 1,
+    pid: raw.pid as number,
+    reason: raw.reason,
+    started_at: raw.started_at,
   };
 }
 
@@ -388,6 +496,7 @@ export function getStoragePaths(repoPath: string): RepoPaths {
     metaPath: path.join(storagePath, 'meta.json'),
     kuzuPath: path.join(storagePath, 'kuzu'),
     runtimePath: path.join(storagePath, 'runtime.json'),
+    indexLockPath: path.join(storagePath, 'index.lock'),
   };
 }
 
@@ -459,6 +568,93 @@ export async function saveRuntimeMeta(storagePath: string, runtime: RuntimeMeta)
   await fs.mkdir(storagePath, { recursive: true });
   const runtimePath = path.join(storagePath, 'runtime.json');
   await fs.writeFile(runtimePath, JSON.stringify(runtime, null, 2), 'utf-8');
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    return nodeError.code === 'EPERM';
+  }
+}
+
+export async function loadIndexLock(storagePath: string): Promise<IndexLock | null> {
+  try {
+    const { indexLockPath } = getStoragePaths(storagePath.endsWith(CODENEXUS_DIR) ? path.dirname(storagePath) : storagePath);
+    const raw = await fs.readFile(indexLockPath, 'utf-8');
+    return validateIndexLock(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+async function getIndexLockPath(storagePath: string): Promise<string> {
+  return path.join(storagePath, 'index.lock');
+}
+
+export async function releaseIndexLock(storagePath: string): Promise<void> {
+  const indexLockPath = await getIndexLockPath(storagePath);
+  await fs.rm(indexLockPath, { force: true });
+}
+
+export async function isIndexLocked(storagePath: string): Promise<boolean> {
+  const indexLockPath = await getIndexLockPath(storagePath);
+  try {
+    const raw = await fs.readFile(indexLockPath, 'utf-8');
+    const lock = validateIndexLock(JSON.parse(raw));
+    if (isProcessAlive(lock.pid)) {
+      return true;
+    }
+    await fs.rm(indexLockPath, { force: true });
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function acquireIndexLock(
+  storagePath: string,
+  reason: 'manual' | 'auto',
+): Promise<() => Promise<void>> {
+  await fs.mkdir(storagePath, { recursive: true });
+  const indexLockPath = await getIndexLockPath(storagePath);
+  const payload: IndexLock = {
+    version: 1,
+    pid: process.pid,
+    reason,
+    started_at: new Date().toISOString(),
+  };
+
+  const writeLock = async () => {
+    await fs.writeFile(indexLockPath, JSON.stringify(payload, null, 2), {
+      encoding: 'utf-8',
+      flag: 'wx',
+    });
+  };
+
+  try {
+    await writeLock();
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code !== 'EEXIST') {
+      throw error;
+    }
+
+    if (await isIndexLocked(storagePath)) {
+      throw new Error('Another CodeNexus index is already running for this repo.');
+    }
+
+    await writeLock();
+  }
+
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    await releaseIndexLock(storagePath);
+  };
 }
 
 export async function removeRuntimeMeta(storagePath: string): Promise<void> {
@@ -623,7 +819,7 @@ async function evaluateIndexedState(boundary: RepoBoundary): Promise<IndexedStat
   if (normalizePath(meta.worktree_root) !== worktreeRoot) detailFlags.push('wrong_worktree');
 
   const stale =
-    workingTreeDirty ||
+    workingTreeDirty !== meta.indexed_dirty ||
     currentHead !== meta.indexed_head ||
     currentBranch !== meta.indexed_branch ||
     normalizePath(meta.worktree_root) !== worktreeRoot;
@@ -713,6 +909,30 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     meta: indexedState.meta,
     runtime: indexedState.runtime,
     liveHealth: liveServiceDetected ? liveHealth : null,
+    currentHead: indexedState.currentHead,
+    currentBranch: indexedState.currentBranch,
+    configError: indexedState.configError,
+  };
+}
+
+export async function getOnDiskRepoState(startPath: string): Promise<RepoStateSnapshot | null> {
+  const boundary = resolveRepoBoundary(startPath);
+  if (!boundary) return null;
+
+  const { repoRoot, worktreeRoot } = boundary;
+  const { storagePath } = getStoragePaths(repoRoot);
+  const indexedState = await evaluateIndexedState(boundary);
+
+  return {
+    repoRoot,
+    worktreeRoot,
+    storagePath,
+    baseState: indexedState.baseState,
+    detailFlags: [...indexedState.detailFlags],
+    config: indexedState.config,
+    meta: indexedState.meta,
+    runtime: indexedState.runtime,
+    liveHealth: null,
     currentHead: indexedState.currentHead,
     currentBranch: indexedState.currentBranch,
     configError: indexedState.configError,

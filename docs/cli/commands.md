@@ -32,6 +32,7 @@ Side effects:
 - create `.codenexus/` if missing
 - create `.codenexus/config.toml` if missing
 - initial v1 config uses port `4747`
+- initial v1 config enables background auto-index with a `300` second interval
 
 Contract:
 
@@ -70,7 +71,8 @@ Contract:
 - `codenexus index` is both the initial build and the manual refresh command in v1
 - it must not rewrite `config.toml`
 - it must not mutate files outside `.codenexus/`
-- it may run on a dirty working tree, but v1 freshness remains conservative and may still classify the resulting index as stale
+- it owns `.codenexus/index.lock` while an index run is active so overlapping manual and background index attempts do not race
+- it may run on a dirty working tree; the resulting index is current only while HEAD, branch, worktree root, and dirty-state still match the indexed snapshot
 - if a service is already running, `codenexus index` refreshes on-disk state and the live service adopts the rebuilt index automatically in the normal path
 - if live reload fails, `codenexus index` must tell the operator how to recover the affected service
 
@@ -122,9 +124,11 @@ Reporting expectations:
 - the canonical base state
 - applicable detail flags
 - current configured port when available
+- background auto-index config when available
 - whether live service information overrode stale runtime metadata
 - whether a running service is foreground or background
 - whether live service information shows adoption in progress or a reload failure
+- background auto-index attempt, success, failure, and backoff details when available
 
 ## `codenexus serve`
 
@@ -149,6 +153,7 @@ Contract:
 - no silent port reassignment is allowed
 - stale indexes may be served only with explicit degraded reporting
 - a running service may adopt a rebuilt on-disk index automatically in the normal path
+- foreground `codenexus serve` must not run background auto-index polling
 - `codenexus serve` must not rewrite `config.toml`
 - live service identity is proven through a repo-specific HTTP health endpoint, not raw port reachability
 - the live service health endpoint must expose the loaded index identity the service is actually serving
@@ -190,6 +195,10 @@ Contract:
 - `codenexus start` is the background lifecycle command
 - it must fail loudly if the repo-local service is already running
 - it must use the same runtime implementation and health contract as foreground `serve`
+- when `auto_index = true`, it polls for repo divergence every `auto_index_interval_seconds`
+- branch switches and dirty-state flips are treated as ordinary repo divergence, not as a separate branch-index mode
+- it must not trigger auto-index while another `codenexus index` run or live reload is already in flight
+- repeated auto-index failures must back off and remain visible through `codenexus status`
 
 ## `codenexus stop`
 
@@ -255,9 +264,10 @@ Contract:
   - `codenexus status`
   - `codenexus serve`
   - `codenexus start`
-  - `codenexus stop`
-  - `codenexus restart`
+- `codenexus stop`
+- `codenexus restart`
 - it explains automatic live index adoption in the normal path and recovery guidance when live reload fails
+- it explains that detached background mode usually keeps the repo fresh automatically while manual `codenexus index` remains the immediate certainty path
 - it includes a suggested `AGENTS.md` snippet
 - it includes workflow guidance for planning, implementing, and refactoring
 

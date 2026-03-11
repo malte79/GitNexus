@@ -24,7 +24,7 @@ describe('statusCommand', () => {
       repoRoot: '/repo',
       baseState: 'indexed_stale',
       detailFlags: ['head_changed'],
-      config: { version: 1, port: 4747 },
+      config: { version: 1, port: 4747, auto_index: true, auto_index_interval_seconds: 300 },
       meta: {
         version: 1,
         index_generation: 'gen-current',
@@ -58,7 +58,7 @@ describe('statusCommand', () => {
       repoRoot: '/repo',
       baseState: 'serving_stale',
       detailFlags: ['service_restart_required'],
-      config: { version: 1, port: 4747 },
+      config: { version: 1, port: 4747, auto_index: true, auto_index_interval_seconds: 300 },
       meta: {
         version: 1,
         index_generation: 'gen-new',
@@ -86,6 +86,12 @@ describe('statusCommand', () => {
           indexed_dirty: false,
           worktree_root: '/repo',
         },
+        auto_index: {
+          enabled: true,
+          interval_seconds: 300,
+          last_attempt_at: '2026-03-09T00:04:00.000Z',
+          last_succeeded_at: '2026-03-09T00:04:02.000Z',
+        },
       },
       currentHead: 'abcdef123456',
       currentBranch: 'main',
@@ -102,6 +108,8 @@ describe('statusCommand', () => {
     expect(output).toContain('Reload action: the live service is still adopting the refreshed on-disk index.');
     expect(output).toContain('Loaded service commit: abcdef1');
     expect(output).toContain('Service mode: background');
+    expect(output).toContain('Auto-index: enabled (300s interval)');
+    expect(output).toContain('Background freshness: automatic reindex runs on the configured interval');
 
     logSpy.mockRestore();
   });
@@ -111,7 +119,7 @@ describe('statusCommand', () => {
       repoRoot: '/repo',
       baseState: 'serving_stale',
       detailFlags: ['service_restart_required'],
-      config: { version: 1, port: 4747 },
+      config: { version: 1, port: 4747, auto_index: true, auto_index_interval_seconds: 300 },
       meta: {
         version: 1,
         index_generation: 'gen-new',
@@ -140,6 +148,13 @@ describe('statusCommand', () => {
           worktree_root: '/repo',
         },
         reload_error: 'reload failed',
+        auto_index: {
+          enabled: true,
+          interval_seconds: 300,
+          last_failed_at: '2026-03-09T00:06:00.000Z',
+          last_error: 'Auto-index exited with code 1',
+          backoff_until: '2026-03-09T00:11:00.000Z',
+        },
       },
       currentHead: 'abcdef123456',
       currentBranch: 'main',
@@ -155,6 +170,8 @@ describe('statusCommand', () => {
     const output = logSpy.mock.calls.flat().join(' ');
     expect(output).toContain('Reload error: reload failed');
     expect(output).toContain('Reload action: run `codenexus restart` to recover from the last live-reload failure.');
+    expect(output).toContain('Auto-index error: Auto-index exited with code 1');
+    expect(output).toContain('Auto-index backoff until:');
 
     logSpy.mockRestore();
   });
