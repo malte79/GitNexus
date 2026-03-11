@@ -38,6 +38,11 @@ export function buildProgram(): Command {
     .description('Start the repo-local CodeNexus service')
     .action(createLazyAction(() => import('./serve.js'), 'serveCommand'));
 
+  program
+    .command('info')
+    .description('Print lifecycle and usage guidance for CodeNexus')
+    .action(createLazyAction(() => import('./info.js'), 'infoCommand'));
+
   return program;
 }
 

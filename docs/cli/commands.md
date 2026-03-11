@@ -8,6 +8,7 @@ This document defines the v1 user-facing contract for:
 - `codenexus index`
 - `codenexus status`
 - `codenexus serve`
+- `codenexus info`
 
 All commands resolve the nearest enclosing git root as the active repo boundary.
 
@@ -172,3 +173,34 @@ If a command is run:
 - from inside a worktree, that worktree boundary applies
 
 No command may silently target a parent repo when a nearer git root exists.
+
+## `codenexus info`
+
+Print Markdown guidance for installing and using CodeNexus.
+
+Preconditions:
+
+- none
+
+Side effects:
+
+- none
+
+Contract:
+
+- `codenexus info` is read-only
+- it prints Markdown only
+- it presents CodeNexus as expected operational guidance for agents working in repos that use it
+- it explains the full CodeNexus lifecycle:
+  - install
+  - `codenexus init`
+  - `codenexus index`
+  - `codenexus status`
+  - `codenexus serve`
+- it includes restart-after-reindex guidance for the live service
+- it includes a suggested `AGENTS.md` snippet
+- it includes workflow guidance for planning, implementing, and refactoring
+
+Failure cases:
+
+- none beyond ordinary CLI process failures

@@ -9,6 +9,9 @@ vi.mock('../../src/cli/index-command.js', () => ({
 vi.mock('../../src/cli/serve.js', () => ({
   serveCommand: vi.fn(),
 }));
+vi.mock('../../src/cli/info.js', () => ({
+  infoCommand: vi.fn(),
+}));
 
 describe('CLI commands', () => {
   describe('version', () => {
@@ -52,6 +55,7 @@ describe('CLI commands', () => {
         'index',
         'status',
         'serve',
+        'info',
       ]);
     });
 
@@ -64,6 +68,7 @@ describe('CLI commands', () => {
       expect(help).toContain('index');
       expect(help).toContain('status');
       expect(help).toContain('serve');
+      expect(help).toContain('info');
       expect(help).not.toContain('analyze');
       expect(help).not.toContain('\nmcp');
       expect(help).not.toContain('gitnexus');
@@ -88,6 +93,13 @@ describe('CLI commands', () => {
     it('is a function', async () => {
       const { serveCommand } = await import('../../src/cli/serve.js');
       expect(typeof serveCommand).toBe('function');
+    });
+  });
+
+  describe('infoCommand', () => {
+    it('is a function', async () => {
+      const { infoCommand } = await import('../../src/cli/info.js');
+      expect(typeof infoCommand).toBe('function');
     });
   });
 });
