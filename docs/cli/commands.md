@@ -8,6 +8,9 @@ This document defines the v1 user-facing contract for:
 - `codenexus index`
 - `codenexus status`
 - `codenexus serve`
+- `codenexus start`
+- `codenexus stop`
+- `codenexus restart`
 - `codenexus info`
 
 All commands resolve the nearest enclosing git root as the active repo boundary.
@@ -68,7 +71,8 @@ Contract:
 - it must not rewrite `config.toml`
 - it must not mutate files outside `.codenexus/`
 - it may run on a dirty working tree, but v1 freshness remains conservative and may still classify the resulting index as stale
-- if a service is already running, `codenexus index` refreshes on-disk state only and must tell the operator when a restart is required for the service to adopt that refreshed index
+- if a service is already running, `codenexus index` refreshes on-disk state and the live service adopts the rebuilt index automatically in the normal path
+- if live reload fails, `codenexus index` must tell the operator how to recover the affected service
 
 Failure cases:
 
@@ -82,8 +86,8 @@ State transitions:
 - `initialized_unindexed -> indexed_stale` when freshness is stale
 - `indexed_stale -> indexed_current` when refresh clears stale conditions
 - `indexed_current -> indexed_stale` when refreshed while stale conditions remain
-- when a service is already running, `codenexus index` refreshes on-disk index state only; v1 does not promise live service reload semantics
-- when a service is already running on an older loaded index, `codenexus index` must tell the operator to restart `codenexus serve`
+- when a service is already running, `codenexus index` refreshes on-disk index state and the live service should adopt the rebuilt index automatically
+- when a service is already running on an older loaded index, `codenexus index` must tell the operator whether adoption is still in progress or whether reload failed and recovery is required
 
 ## `codenexus status`
 
@@ -119,7 +123,8 @@ Reporting expectations:
 - applicable detail flags
 - current configured port when available
 - whether live service information overrode stale runtime metadata
-- whether a running service must be restarted to adopt a refreshed on-disk index when that is true
+- whether a running service is foreground or background
+- whether live service information shows adoption in progress or a reload failure
 
 ## `codenexus serve`
 
@@ -143,7 +148,7 @@ Contract:
 - different worktrees using the same configured port fail loudly
 - no silent port reassignment is allowed
 - stale indexes may be served only with explicit degraded reporting
-- no silent auto-refresh is allowed on serve
+- a running service may adopt a rebuilt on-disk index automatically in the normal path
 - `codenexus serve` must not rewrite `config.toml`
 - live service identity is proven through a repo-specific HTTP health endpoint, not raw port reachability
 - the live service health endpoint must expose the loaded index identity the service is actually serving
@@ -162,8 +167,60 @@ State transitions:
 - `indexed_current -> serving_current`
 - `indexed_stale -> serving_stale`
 - `serving_current -> indexed_current` when the live service stops cleanly
+- `serving_current -> serving_stale` when loaded-index adoption falls behind or reload fails
 - `serving_stale -> indexed_stale` when the live service stops cleanly
+- `serving_stale -> serving_current` when live adoption catches up to the refreshed on-disk index
 - no transition on failed duplicate-serve attempts or port conflicts
+
+## `codenexus start`
+
+Start the repo-local MCP HTTP service in detached background mode.
+
+Preconditions:
+
+- same as `codenexus serve`
+
+Side effects:
+
+- starts the same repo-local service implementation as `codenexus serve`
+- writes `.codenexus/runtime.json` on successful startup
+
+Contract:
+
+- `codenexus start` is the background lifecycle command
+- it must fail loudly if the repo-local service is already running
+- it must use the same runtime implementation and health contract as foreground `serve`
+
+## `codenexus stop`
+
+Stop the repo-local background service for the active repo boundary.
+
+Preconditions:
+
+- repo boundary must exist
+
+Side effects:
+
+- stops the matching background service when one exists
+- removes `.codenexus/runtime.json` on graceful shutdown
+
+Contract:
+
+- `codenexus stop` targets only the matching repo-local service
+- it must not stop unrelated processes or services for other repos
+
+## `codenexus restart`
+
+Restart the repo-local background service for the active repo boundary.
+
+Preconditions:
+
+- same as `codenexus start`
+
+Side effects:
+
+- stops the matching background service when present
+- starts the same detached runtime as `codenexus start`
 
 ## Wrong-Context Behavior
 
@@ -197,7 +254,10 @@ Contract:
   - `codenexus index`
   - `codenexus status`
   - `codenexus serve`
-- it includes restart-after-reindex guidance for the live service
+  - `codenexus start`
+  - `codenexus stop`
+  - `codenexus restart`
+- it explains automatic live index adoption in the normal path and recovery guidance when live reload fails
 - it includes a suggested `AGENTS.md` snippet
 - it includes workflow guidance for planning, implementing, and refactoring
 

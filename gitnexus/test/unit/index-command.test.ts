@@ -26,8 +26,10 @@ const loadConfig = vi.fn();
 const loadMeta = vi.fn();
 const getStoragePaths = vi.fn();
 const getRepoState = vi.fn();
+const computeIndexGeneration = vi.fn(() => 'gen-new');
 
 vi.mock('../../src/storage/repo-manager.js', () => ({
+  computeIndexGeneration,
   getStoragePaths,
   saveMeta: vi.fn(),
   loadConfig,
@@ -89,11 +91,28 @@ describe('indexCommand', () => {
     logSpy.mockRestore();
   });
 
-  it('tells the operator to restart a running service after reindexing', async () => {
+  it('tells the operator the live service is still adopting the refreshed index', async () => {
     loadConfig.mockResolvedValue({ version: 1, port: 4747 });
     getRepoState.mockResolvedValue({
       baseState: 'serving_stale',
       detailFlags: ['service_restart_required'],
+      liveHealth: {
+        service: 'codenexus',
+        mode: 'background',
+        pid: 1234,
+        port: 4747,
+        started_at: new Date().toISOString(),
+        repo_root: '/repo',
+        worktree_root: '/repo',
+        loaded_index: {
+          indexed_head: 'abc123',
+          indexed_branch: 'main',
+          indexed_at: '2026-03-09T01:00:00.000Z',
+          indexed_dirty: false,
+          worktree_root: '/repo',
+          index_generation: 'gen-old',
+        },
+      },
     });
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -103,7 +122,46 @@ describe('indexCommand', () => {
     await indexCommand('/repo');
 
     const output = logSpy.mock.calls.flat().join(' ');
-    expect(output).toContain('Restart `codenexus serve` to serve this refreshed on-disk index.');
+    expect(output).toContain('Note: A live CodeNexus service is still adopting the refreshed on-disk index.');
+
+    exitSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it('tells the operator to restart the background service when live reload failed', async () => {
+    loadConfig.mockResolvedValue({ version: 1, port: 4747 });
+    getRepoState.mockResolvedValue({
+      baseState: 'serving_stale',
+      detailFlags: ['service_restart_required'],
+      liveHealth: {
+        service: 'codenexus',
+        mode: 'background',
+        pid: 1234,
+        port: 4747,
+        started_at: new Date().toISOString(),
+        repo_root: '/repo',
+        worktree_root: '/repo',
+        reload_error: 'reload failed',
+        loaded_index: {
+          indexed_head: 'abc123',
+          indexed_branch: 'main',
+          indexed_at: '2026-03-09T01:00:00.000Z',
+          indexed_dirty: false,
+          worktree_root: '/repo',
+          index_generation: 'gen-old',
+        },
+      },
+    });
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { indexCommand } = await import('../../src/cli/index-command.js');
+
+    await indexCommand('/repo');
+
+    const output = logSpy.mock.calls.flat().join(' ');
+    expect(output).toContain('Note: A live CodeNexus service failed to adopt the refreshed on-disk index automatically.');
+    expect(output).toContain('Run `codenexus restart` to recover the background service.');
 
     exitSpy.mockRestore();
     logSpy.mockRestore();

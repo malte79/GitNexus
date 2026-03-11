@@ -9,6 +9,15 @@ vi.mock('../../src/cli/index-command.js', () => ({
 vi.mock('../../src/cli/serve.js', () => ({
   serveCommand: vi.fn(),
 }));
+vi.mock('../../src/cli/start.js', () => ({
+  startCommand: vi.fn(),
+}));
+vi.mock('../../src/cli/stop.js', () => ({
+  stopCommand: vi.fn(),
+}));
+vi.mock('../../src/cli/restart.js', () => ({
+  restartCommand: vi.fn(),
+}));
 vi.mock('../../src/cli/info.js', () => ({
   infoCommand: vi.fn(),
 }));
@@ -55,6 +64,9 @@ describe('CLI commands', () => {
         'index',
         'status',
         'serve',
+        'start',
+        'stop',
+        'restart',
         'info',
       ]);
     });
@@ -68,6 +80,9 @@ describe('CLI commands', () => {
       expect(help).toContain('index');
       expect(help).toContain('status');
       expect(help).toContain('serve');
+      expect(help).toContain('start');
+      expect(help).toContain('stop');
+      expect(help).toContain('restart');
       expect(help).toContain('info');
       expect(help).not.toContain('analyze');
       expect(help).not.toContain('\nmcp');
@@ -93,6 +108,27 @@ describe('CLI commands', () => {
     it('is a function', async () => {
       const { serveCommand } = await import('../../src/cli/serve.js');
       expect(typeof serveCommand).toBe('function');
+    });
+  });
+
+  describe('startCommand', () => {
+    it('is a function', async () => {
+      const { startCommand } = await import('../../src/cli/start.js');
+      expect(typeof startCommand).toBe('function');
+    });
+  });
+
+  describe('stopCommand', () => {
+    it('is a function', async () => {
+      const { stopCommand } = await import('../../src/cli/stop.js');
+      expect(typeof stopCommand).toBe('function');
+    });
+  });
+
+  describe('restartCommand', () => {
+    it('is a function', async () => {
+      const { restartCommand } = await import('../../src/cli/restart.js');
+      expect(typeof restartCommand).toBe('function');
     });
   });
 

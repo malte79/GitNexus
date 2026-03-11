@@ -39,15 +39,16 @@ Only `codenexus serve` owns `runtime.json` writes in v1.
 
 On graceful shutdown, `codenexus serve` removes `.codenexus/runtime.json`.
 
-If the process crashes or is killed before cleanup runs, `runtime.json` may remain behind as stale advisory state until the next live probe or serve attempt corrects it.
+If the process crashes or is killed before cleanup runs, `runtime.json` may remain behind as stale advisory state until the next live probe or lifecycle command corrects it.
 
-V1 does not define live service hot-reload behavior when `codenexus index` rewrites on-disk index state. A refreshed on-disk index does not by itself imply that an already-running service has re-opened or adopted that index without restart.
+The runtime owns automatic live adoption of rebuilt on-disk indexes. When `codenexus index` rewrites `.codenexus/meta.json`:
 
-If `codenexus index` refreshes on-disk index state while the service remains live:
+- the running service detects a changed loaded-index generation
+- it prepares a fresh backend against the rebuilt index
+- it atomically swaps only after the new backend is ready
+- it keeps serving the previous loaded index if reload fails
 
-- the running service may continue serving its older loaded index
-- the service must report degraded or stale serving state until restarted
-- users must restart `codenexus serve` to make the live service adopt the refreshed on-disk index
+Reload attempts are serialized. Overlapping rebuild or reload events must not race into double-swap behavior.
 
 ## Health Model
 
@@ -76,6 +77,12 @@ Raw port reachability is never enough to claim a live CodeNexus service.
 
 The live health payload is authoritative for loaded-index identity. Advisory `runtime.json` should persist the same loaded-index identity for stale-runtime recovery and operator inspection, but it must never outweigh a successful health probe.
 
+The health payload must also expose:
+
+- service mode (`foreground` or `background`)
+- current loaded-index generation
+- optional reload failure information when the service is still serving an older loaded index
+
 ## Startup Contract
 
 ### Missing Index
@@ -89,6 +96,18 @@ If the index is current, the service starts in a non-degraded state.
 ### Stale Index
 
 If the index is stale, the service may still start, but it must report degraded or stale status explicitly. It must not silently auto-refresh.
+
+## Detached Lifecycle
+
+`codenexus serve` remains the foreground and debugging path.
+
+`codenexus start`, `codenexus stop`, and `codenexus restart` manage the same repo-local service implementation in detached background mode.
+
+- `start` launches the repo-local service in background mode
+- `stop` terminates only the matching repo-local service
+- `restart` performs a deterministic stop/start cycle
+
+Detached mode is per-repo only. There is no global service registry.
 
 ## Shutdown And Crash Recovery
 
@@ -110,6 +129,16 @@ If the process dies before graceful shutdown completes:
 - if no live matching service answers, status must report `runtime_metadata_stale`
 - if live health and `runtime.json` disagree about loaded-index identity, live health wins and runtime metadata is stale
 - a later `codenexus serve` attempt may recover by overwriting stale runtime metadata only after it proves no live matching service exists
+
+## Live Reload Failure
+
+If a running service detects rebuilt on-disk index state but cannot prepare or swap to the new backend:
+
+- the previous loaded index remains active
+- the service reports stale or degraded serving state
+- health includes reload failure details
+- background service recovery uses `codenexus restart`
+- foreground service recovery uses stop and rerun of `codenexus serve`
 
 ## Duplicate Serve Behavior
 

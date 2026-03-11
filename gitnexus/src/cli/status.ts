@@ -30,8 +30,12 @@ export const statusCommand = async () => {
   }
   if (state.liveHealth) {
     console.log(`Service: running (pid ${state.liveHealth.pid} on port ${state.liveHealth.port})`);
+    console.log(`Service mode: ${state.liveHealth.mode}`);
     if (state.liveHealth.loaded_index.indexed_head) {
       console.log(`Loaded service commit: ${state.liveHealth.loaded_index.indexed_head.slice(0, 7)}`);
+    }
+    if (state.liveHealth.reload_error) {
+      console.log(`Reload error: ${state.liveHealth.reload_error}`);
     }
   }
   if (state.meta) {
@@ -53,10 +57,16 @@ export const statusCommand = async () => {
     console.log('Refresh action: run `codenexus index` to refresh the on-disk index.');
   }
   if (state.baseState === 'serving_stale') {
-    if (state.detailFlags.includes('service_restart_required')) {
-      console.log('Refresh action: restart `codenexus serve` to load the refreshed on-disk index.');
+    if (state.liveHealth?.reload_error) {
+      if (state.liveHealth.mode === 'background') {
+        console.log('Reload action: run `codenexus restart` to recover from the last live-reload failure.');
+      } else {
+        console.log('Reload action: stop and rerun `codenexus serve` to recover from the last live-reload failure.');
+      }
+    } else if (state.detailFlags.includes('service_restart_required')) {
+      console.log('Reload action: the live service is still adopting the refreshed on-disk index. Check `codenexus status` again shortly.');
     } else {
-      console.log('Refresh action: run `codenexus index` to refresh the on-disk index, then restart `codenexus serve` to adopt it.');
+      console.log('Refresh action: run `codenexus index` to refresh the on-disk index. The live service will adopt the refreshed index automatically.');
     }
   }
   if (state.detailFlags.includes('runtime_metadata_stale') && state.liveHealth) {

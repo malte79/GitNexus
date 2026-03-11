@@ -75,6 +75,7 @@ Required fields:
 | `indexed_at` | string | ISO-8601 timestamp of the completed index |
 | `indexed_dirty` | boolean | Whether the worktree was dirty when the index completed |
 | `worktree_root` | string | Absolute path of the worktree used for indexing |
+| `index_generation` | string | Deterministic identity for the built on-disk index generation |
 
 ## Runtime Metadata Contract
 
@@ -92,9 +93,11 @@ Required fields:
 | `pid` | integer | Last known MCP service process ID |
 | `port` | integer | Port the service attempted to bind |
 | `started_at` | string | ISO-8601 timestamp for service start |
+| `mode` | string | Service mode: `foreground` or `background` |
 | `repo_root` | string | Absolute repo root for the service boundary |
 | `worktree_root` | string | Absolute worktree path for the service boundary |
 | `loaded_index` | object | Identity of the index metadata the live service loaded at startup |
+| `reload_error` | string? | Last live-reload failure message when the service stayed on the previous loaded index |
 
 ### Runtime Precedence
 
@@ -178,9 +181,10 @@ V1 does not define a separate `codenexus refresh`.
 
 When a service is already running:
 
-- `codenexus index` refreshes on-disk index state only
-- the running service may continue serving its older loaded index
-- restarting `codenexus serve` is required before the service adopts the refreshed index
+- `codenexus index` refreshes on-disk index state
+- the running service should adopt the rebuilt index automatically in the normal path
+- while live adoption is still in progress, status may report `serving_stale` with `service_restart_required`
+- if live reload fails, the service continues serving the previous loaded index until the operator recovers it
 
 ## State Transition Matrix
 
@@ -199,7 +203,7 @@ When a service is already running:
 | `serving_current` | live service stops | `indexed_current` |
 | `serving_current` | freshness becomes stale while service remains live | `serving_stale` |
 | `serving_stale` | live service stops | `indexed_stale` |
-| `serving_stale` | `codenexus index` completes and freshness becomes current while service remains live | `serving_stale` plus `service_restart_required` until the service restarts |
+| `serving_stale` | `codenexus index` completes and freshness becomes current while service remains live | `serving_stale` plus `service_restart_required` until live adoption completes or reload failure is recovered |
 
 ## Status Precedence
 

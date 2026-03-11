@@ -12,6 +12,7 @@ export const serveCommand = async () => {
     const runtime = await startRepoLocalService(process.cwd());
 
     console.log(`CodeNexus service started for ${runtime.repoRoot}`);
+    console.log(`Mode: ${runtime.mode}`);
     console.log(`Listening on http://127.0.0.1:${runtime.port}`);
     if (runtime.degraded) {
       console.warn('Service started in degraded mode because the local index is stale.');

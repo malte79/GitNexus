@@ -27,6 +27,9 @@ interface PoolEntry {
   waiters: Array<(conn: kuzu.Connection) => void>;
   lastUsed: number;
   dbPath: string;
+  reloadBarrier: Promise<void> | null;
+  releaseReloadBarrier: (() => void) | null;
+  idleWaiters: Array<() => void>;
 }
 
 const pool = new Map<string, PoolEntry>();
@@ -129,6 +132,7 @@ const WAITER_TIMEOUT_MS = 15_000;
 
 const LOCK_RETRY_ATTEMPTS = 3;
 const LOCK_RETRY_DELAY_MS = 2000;
+const reloads = new Map<string, Promise<void>>();
 
 /**
  * Initialize (or reuse) a Database + connection pool for a specific repo.
@@ -171,7 +175,17 @@ export const initKuzu = async (repoId: string, dbPath: string): Promise<void> =>
         available.push(createConnection(db));
       }
 
-      pool.set(repoId, { db, available, checkedOut: 0, waiters: [], lastUsed: Date.now(), dbPath });
+      pool.set(repoId, {
+        db,
+        available,
+        checkedOut: 0,
+        waiters: [],
+        lastUsed: Date.now(),
+        dbPath,
+        reloadBarrier: null,
+        releaseReloadBarrier: null,
+        idleWaiters: [],
+      });
       ensureIdleTimer();
       return;
     } catch (err: any) {
@@ -237,7 +251,64 @@ function checkin(entry: PoolEntry, conn: kuzu.Connection): void {
   } else {
     entry.checkedOut--;
     entry.available.push(conn);
+    if (entry.checkedOut === 0 && entry.idleWaiters.length > 0) {
+      const idleWaiters = [...entry.idleWaiters];
+      entry.idleWaiters.length = 0;
+      for (const resolve of idleWaiters) resolve();
+    }
   }
+}
+
+async function waitForReadyEntry(repoId: string): Promise<PoolEntry> {
+  while (true) {
+    const entry = pool.get(repoId);
+    if (!entry) {
+      throw new Error(`KuzuDB not initialized for repo "${repoId}". Call initKuzu first.`);
+    }
+    if (!entry.reloadBarrier) {
+      return entry;
+    }
+    await entry.reloadBarrier;
+  }
+}
+
+async function waitForIdle(entry: PoolEntry): Promise<void> {
+  if (entry.checkedOut === 0) return;
+  await new Promise<void>((resolve) => {
+    entry.idleWaiters.push(resolve);
+  });
+}
+
+async function openDatabase(dbPath: string): Promise<{ db: kuzu.Database; available: kuzu.Connection[] }> {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= LOCK_RETRY_ATTEMPTS; attempt++) {
+    silenceStdout();
+    try {
+      const db = new kuzu.Database(
+        dbPath,
+        0,
+        false,
+        true,
+      );
+      restoreStdout();
+      const available: kuzu.Connection[] = [];
+      for (let i = 0; i < INITIAL_CONNS_PER_REPO; i++) {
+        available.push(createConnection(db));
+      }
+      return { db, available };
+    } catch (err: any) {
+      restoreStdout();
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const isLockError = lastError.message.includes('Could not set lock')
+        || lastError.message.includes('lock');
+      if (!isLockError || attempt === LOCK_RETRY_ATTEMPTS) break;
+      await new Promise(resolve => setTimeout(resolve, LOCK_RETRY_DELAY_MS * attempt));
+    }
+  }
+  throw new Error(
+    `KuzuDB unavailable. Another process may be rebuilding the index. ` +
+    `Retry later. (${lastError?.message || 'unknown error'})`
+  );
 }
 
 /**
@@ -254,11 +325,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 export const executeQuery = async (repoId: string, cypher: string): Promise<any[]> => {
-  const entry = pool.get(repoId);
-  if (!entry) {
-    throw new Error(`KuzuDB not initialized for repo "${repoId}". Call initKuzu first.`);
-  }
-
+  const entry = await waitForReadyEntry(repoId);
   entry.lastUsed = Date.now();
 
   const conn = await checkout(entry);
@@ -281,11 +348,7 @@ export const executeParameterized = async (
   cypher: string,
   params: Record<string, any>,
 ): Promise<any[]> => {
-  const entry = pool.get(repoId);
-  if (!entry) {
-    throw new Error(`KuzuDB not initialized for repo "${repoId}". Call initKuzu first.`);
-  }
-
+  const entry = await waitForReadyEntry(repoId);
   entry.lastUsed = Date.now();
 
   const conn = await checkout(entry);
@@ -329,3 +392,70 @@ export const closeKuzu = async (repoId?: string): Promise<void> => {
  * Check if a specific repo's pool is active
  */
 export const isKuzuReady = (repoId: string): boolean => pool.has(repoId);
+
+export const reloadKuzu = async (repoId: string, dbPath: string): Promise<void> => {
+  const active = reloads.get(repoId);
+  if (active) {
+    return active;
+  }
+
+  const reload = (async () => {
+    const entry = pool.get(repoId);
+    if (!entry) {
+      await initKuzu(repoId, dbPath);
+      return;
+    }
+
+    let releaseBarrier!: () => void;
+    entry.reloadBarrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve;
+    });
+    entry.releaseReloadBarrier = releaseBarrier;
+
+    try {
+      await waitForIdle(entry);
+      for (const conn of entry.available) {
+        try { conn.close(); } catch (e) { console.error('CodeNexus [pool:reload-close-conn]:', e instanceof Error ? e.message : e); }
+      }
+      try { entry.db.close(); } catch (e) { console.error('CodeNexus [pool:reload-close-db]:', e instanceof Error ? e.message : e); }
+
+      const reopened = await openDatabase(dbPath);
+      pool.set(repoId, {
+        db: reopened.db,
+        available: reopened.available,
+        checkedOut: 0,
+        waiters: [],
+        lastUsed: Date.now(),
+        dbPath,
+        reloadBarrier: null,
+        releaseReloadBarrier: null,
+        idleWaiters: [],
+      });
+    } catch (error) {
+      try {
+        const reopened = await openDatabase(entry.dbPath);
+        pool.set(repoId, {
+          db: reopened.db,
+          available: reopened.available,
+          checkedOut: 0,
+          waiters: [],
+          lastUsed: Date.now(),
+          dbPath: entry.dbPath,
+          reloadBarrier: null,
+          releaseReloadBarrier: null,
+          idleWaiters: [],
+        });
+      } catch (reopenError) {
+        console.error('CodeNexus [pool:reload-restore-failed]:', reopenError instanceof Error ? reopenError.message : reopenError);
+        pool.delete(repoId);
+      }
+      throw error;
+    } finally {
+      releaseBarrier();
+      reloads.delete(repoId);
+    }
+  })();
+
+  reloads.set(repoId, reload);
+  return reload;
+};
