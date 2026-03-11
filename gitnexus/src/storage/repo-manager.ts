@@ -25,6 +25,7 @@ export type RepoDetailFlag =
   | 'service_restart_required';
 
 export interface LoadedIndexIdentity {
+  index_generation: string;
   indexed_head: string;
   indexed_branch: string;
   indexed_at: string;
@@ -39,6 +40,7 @@ export interface CodeNexusConfig {
 
 export interface RepoMeta {
   version: 1;
+  index_generation: string;
   indexed_head: string;
   indexed_branch: string;
   indexed_at: string;
@@ -57,10 +59,12 @@ export interface RuntimeMeta {
   version: 1;
   pid: number;
   port: number;
+  mode: 'foreground' | 'background';
   started_at: string;
   repo_root: string;
   worktree_root: string;
   loaded_index: LoadedIndexIdentity;
+  reload_error?: string;
 }
 
 export interface ServiceHealth {
@@ -68,10 +72,12 @@ export interface ServiceHealth {
   service: 'codenexus';
   pid: number;
   port: number;
+  mode: 'foreground' | 'background';
   started_at: string;
   repo_root: string;
   worktree_root: string;
   loaded_index: LoadedIndexIdentity;
+  reload_error?: string;
 }
 
 export interface RepoBoundary {
@@ -130,6 +136,22 @@ function normalizePath(value: string): string {
   }
 }
 
+export function computeIndexGeneration(parts: {
+  indexed_head: string;
+  indexed_branch: string;
+  indexed_at: string;
+  indexed_dirty: boolean;
+  worktree_root: string;
+}): string {
+  return [
+    parts.indexed_head,
+    parts.indexed_branch,
+    parts.indexed_at,
+    parts.indexed_dirty ? 'dirty' : 'clean',
+    normalizePath(parts.worktree_root),
+  ].join('::');
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -177,14 +199,26 @@ function validateMeta(raw: unknown): RepoMeta {
   if (typeof raw.worktree_root !== 'string' || !raw.worktree_root) {
     throw new Error('Index metadata worktree_root is required');
   }
+  const normalizedWorktreeRoot = normalizePath(raw.worktree_root);
+  const indexGeneration =
+    typeof raw.index_generation === 'string' && raw.index_generation
+      ? raw.index_generation
+      : computeIndexGeneration({
+          indexed_head: raw.indexed_head,
+          indexed_branch: raw.indexed_branch,
+          indexed_at: raw.indexed_at,
+          indexed_dirty: raw.indexed_dirty,
+          worktree_root: normalizedWorktreeRoot,
+        });
 
   return {
     version: 1,
+    index_generation: indexGeneration,
     indexed_head: raw.indexed_head,
     indexed_branch: raw.indexed_branch,
     indexed_at: raw.indexed_at,
     indexed_dirty: raw.indexed_dirty,
-    worktree_root: normalizePath(raw.worktree_root),
+    worktree_root: normalizedWorktreeRoot,
     stats: isRecord(raw.stats) ? {
       files: typeof raw.stats.files === 'number' ? raw.stats.files : undefined,
       nodes: typeof raw.stats.nodes === 'number' ? raw.stats.nodes : undefined,
@@ -214,13 +248,25 @@ function validateLoadedIndexIdentity(raw: unknown): LoadedIndexIdentity {
   if (typeof raw.worktree_root !== 'string' || !raw.worktree_root) {
     throw new Error('Loaded index identity worktree_root is required');
   }
+  const normalizedWorktreeRoot = normalizePath(raw.worktree_root);
+  const indexGeneration =
+    typeof raw.index_generation === 'string' && raw.index_generation
+      ? raw.index_generation
+      : computeIndexGeneration({
+          indexed_head: raw.indexed_head,
+          indexed_branch: raw.indexed_branch,
+          indexed_at: raw.indexed_at,
+          indexed_dirty: raw.indexed_dirty,
+          worktree_root: normalizedWorktreeRoot,
+        });
 
   return {
+    index_generation: indexGeneration,
     indexed_head: raw.indexed_head,
     indexed_branch: raw.indexed_branch,
     indexed_at: raw.indexed_at,
     indexed_dirty: raw.indexed_dirty,
-    worktree_root: normalizePath(raw.worktree_root),
+    worktree_root: normalizedWorktreeRoot,
   };
 }
 
@@ -237,6 +283,9 @@ function validateRuntime(raw: unknown): RuntimeMeta {
   if (!isPositivePort(raw.port)) {
     throw new Error('Runtime metadata port is required');
   }
+  if (raw.mode !== 'foreground' && raw.mode !== 'background') {
+    throw new Error('Runtime metadata mode must be foreground or background');
+  }
   if (typeof raw.started_at !== 'string' || !raw.started_at) {
     throw new Error('Runtime metadata started_at is required');
   }
@@ -252,10 +301,12 @@ function validateRuntime(raw: unknown): RuntimeMeta {
     version: 1,
     pid: raw.pid as number,
     port: raw.port,
+    mode: raw.mode,
     started_at: raw.started_at,
     repo_root: normalizePath(raw.repo_root),
     worktree_root: normalizePath(raw.worktree_root),
     loaded_index: loadedIndex,
+    reload_error: typeof raw.reload_error === 'string' && raw.reload_error ? raw.reload_error : undefined,
   };
 }
 
@@ -275,6 +326,9 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
   if (!isPositivePort(raw.port)) {
     throw new Error('Service health port is required');
   }
+  if (raw.mode !== 'foreground' && raw.mode !== 'background') {
+    throw new Error('Service health mode must be foreground or background');
+  }
   if (typeof raw.started_at !== 'string' || !raw.started_at) {
     throw new Error('Service health started_at is required');
   }
@@ -291,15 +345,18 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
     service: 'codenexus',
     pid: raw.pid as number,
     port: raw.port,
+    mode: raw.mode,
     started_at: raw.started_at,
     repo_root: normalizePath(raw.repo_root),
     worktree_root: normalizePath(raw.worktree_root),
     loaded_index: loadedIndex,
+    reload_error: typeof raw.reload_error === 'string' && raw.reload_error ? raw.reload_error : undefined,
   };
 }
 
 export function extractLoadedIndexIdentity(meta: RepoMeta): LoadedIndexIdentity {
   return {
+    index_generation: meta.index_generation,
     indexed_head: meta.indexed_head,
     indexed_branch: meta.indexed_branch,
     indexed_at: meta.indexed_at,
@@ -310,6 +367,7 @@ export function extractLoadedIndexIdentity(meta: RepoMeta): LoadedIndexIdentity 
 
 function loadedIndexMatchesMeta(loadedIndex: LoadedIndexIdentity, meta: RepoMeta): boolean {
   return (
+    loadedIndex.index_generation === meta.index_generation &&
     loadedIndex.indexed_head === meta.indexed_head &&
     loadedIndex.indexed_branch === meta.indexed_branch &&
     loadedIndex.indexed_at === meta.indexed_at &&
@@ -609,9 +667,12 @@ export async function getRepoState(startPath: string): Promise<RepoStateSnapshot
     indexedState.runtime.worktree_root === liveHealth.worktree_root &&
     indexedState.runtime.port === liveHealth.port &&
     indexedState.runtime.pid === liveHealth.pid &&
+    indexedState.runtime.mode === liveHealth.mode &&
     indexedState.runtime.started_at === liveHealth.started_at &&
+    indexedState.runtime.reload_error === liveHealth.reload_error &&
     loadedIndexMatchesMeta(indexedState.runtime.loaded_index, {
       version: 1,
+      index_generation: liveHealth.loaded_index.index_generation,
       ...liveHealth.loaded_index,
     });
 

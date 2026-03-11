@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs/promises';
+import { realpathSync } from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { createTempDir } from '../helpers/test-db.js';
-import { saveConfig, saveMeta, getRepoState, probeServiceHealth, type LoadedIndexIdentity } from '../../src/storage/repo-manager.js';
+import { saveConfig, saveMeta, getRepoState, probeServiceHealth, computeIndexGeneration, type LoadedIndexIdentity } from '../../src/storage/repo-manager.js';
 import { startRepoLocalService, DuplicateServiceError, ServiceStartupError } from '../../src/server/service-runtime.js';
 
 async function createGitRepo(prefix: string) {
@@ -63,6 +64,14 @@ async function reservePort(): Promise<number> {
   return port;
 }
 
+function normalizeRepoPath(value: string): string {
+  try {
+    return realpathSync(value);
+  } catch {
+    return value;
+  }
+}
+
 describe('repo-local HTTP service runtime', () => {
   it('starts a live service for an indexed repo and cleans up runtime metadata on shutdown', async () => {
     const repo = await createGitRepo('service-runtime-live-');
@@ -100,6 +109,24 @@ describe('repo-local HTTP service runtime', () => {
 
     await runtime.close();
     await repo.cleanup();
+  });
+
+  it('fails cleanly when the configured port is already owned by another repo-local service', async () => {
+    const firstRepo = await createGitRepo('service-runtime-foreign-conflict-a-');
+    const secondRepo = await createGitRepo('service-runtime-foreign-conflict-b-');
+    const port = await reservePort();
+    await prepareIndexedRepo(firstRepo.dbPath, port);
+    await prepareIndexedRepo(secondRepo.dbPath, port);
+
+    const runtime = await startRepoLocalService(firstRepo.dbPath);
+
+    await expect(startRepoLocalService(secondRepo.dbPath)).rejects.toThrow(
+      `Configured port ${port} is already in use by CodeNexus for repo ${normalizeRepoPath(firstRepo.dbPath)}.`,
+    );
+
+    await runtime.close();
+    await firstRepo.cleanup();
+    await secondRepo.cleanup();
   });
 
   it('starts in degraded mode when the indexed repo is stale', async () => {
@@ -143,21 +170,40 @@ describe('repo-local HTTP service runtime', () => {
     }
   });
 
-  it('reports serving_stale after manual reindex until the running service is restarted', async () => {
+  it('adopts the rebuilt on-disk index automatically without manual restart', async () => {
     const repo = await createGitRepo('service-runtime-refresh-stale-');
     const port = await reservePort();
     const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
 
     const runtime = await startRepoLocalService(repo.dbPath);
 
-    await saveMeta(storagePath, {
-      version: 1,
-      ...(await buildLoadedIndex(repo.dbPath, { indexed_at: '2026-03-09T01:00:00.000Z' })),
+    const refreshedIdentity = await buildLoadedIndex(repo.dbPath, {
+      indexed_at: '2026-03-09T01:00:00.000Z',
     });
+    const refreshedMeta = {
+      version: 1,
+      ...refreshedIdentity,
+      index_generation: computeIndexGeneration(refreshedIdentity),
+    };
+    await saveMeta(storagePath, refreshedMeta);
+
+    const started = Date.now();
+    while (Date.now() - started < 5_000) {
+      const state = await getRepoState(repo.dbPath);
+      if (
+        state?.baseState === 'serving_current' &&
+        !state.detailFlags.includes('service_restart_required') &&
+        state.liveHealth?.loaded_index.index_generation === refreshedMeta.index_generation
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     const state = await getRepoState(repo.dbPath);
-    expect(state?.baseState).toBe('serving_stale');
-    expect(state?.detailFlags).toContain('service_restart_required');
+    expect(state?.baseState).toBe('serving_current');
+    expect(state?.detailFlags).not.toContain('service_restart_required');
+    expect(state?.liveHealth?.loaded_index.index_generation).toBe(refreshedMeta.index_generation);
 
     await runtime.close();
     await repo.cleanup();

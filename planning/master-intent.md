@@ -60,6 +60,12 @@ HTTP is the chosen transport, not stdio, for the repo-local MCP service. The int
   - serves only that repo
   - listens on the port defined in repo-local config
   - writes advisory runtime metadata under `.codenexus/`
+- `codenexus start`
+  - starts the same repo-local service in detached background mode
+- `codenexus stop`
+  - stops the matching repo-local background service
+- `codenexus restart`
+  - restarts the matching repo-local background service
 - `codenexus status`
   - reports repo config, freshness, and whether the local MCP service is running
 
@@ -96,8 +102,8 @@ The v1 repo-state model uses a finite base-state set with detail flags rather th
 Manual refresh in v1 is explicit:
 
 - `codenexus index` refreshes the on-disk index
-- a running service may continue serving an older loaded index
-- restarting `codenexus serve` is required before the live service adopts the refreshed index
+- a running service adopts the rebuilt index automatically in the normal path
+- if live reload fails, the service keeps serving the previous loaded index until recovered
 
 ## Scope And Priorities
 

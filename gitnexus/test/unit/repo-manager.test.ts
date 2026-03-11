@@ -36,6 +36,7 @@ async function ignoreCodeNexusDir(repoPath: string): Promise<void> {
 }
 
 async function createHealthServer(health: {
+  mode: 'foreground' | 'background';
   pid: number;
   started_at: string;
   repo_root: string;
@@ -242,6 +243,7 @@ describe('repo-local state', () => {
     const startedAt = new Date().toISOString();
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
+      mode: 'foreground',
       pid: process.pid,
       started_at: startedAt,
       repo_root: repo.dbPath,
@@ -257,6 +259,7 @@ describe('repo-local state', () => {
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
+      mode: 'foreground',
       pid: process.pid,
       port,
       started_at: startedAt,
@@ -280,6 +283,7 @@ describe('repo-local state', () => {
     const startedAt = new Date().toISOString();
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
+      mode: 'foreground',
       pid: process.pid,
       started_at: startedAt,
       repo_root: repo.dbPath,
@@ -295,6 +299,7 @@ describe('repo-local state', () => {
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
+      mode: 'foreground',
       pid: process.pid,
       port,
       started_at: startedAt,
@@ -327,6 +332,7 @@ describe('repo-local state', () => {
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
+      mode: 'foreground',
       pid: 999999,
       port,
       started_at: new Date().toISOString(),
@@ -369,6 +375,7 @@ describe('repo-local state', () => {
     const storagePath = path.join(repo.dbPath, '.codenexus');
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
+      mode: 'foreground',
       pid: process.pid,
       started_at: new Date().toISOString(),
       repo_root: repo.dbPath,
@@ -396,6 +403,7 @@ describe('repo-local state', () => {
     const startedAt = new Date().toISOString();
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
+      mode: 'foreground',
       pid: process.pid,
       started_at: startedAt,
       repo_root: repo.dbPath,
@@ -412,12 +420,13 @@ describe('repo-local state', () => {
     await repo.cleanup();
   });
 
-  it('reports serving_stale and service_restart_required when disk index is refreshed while service still serves an older loaded index', async () => {
+  it('reports serving_stale and service_restart_required while a live service still serves an older loaded index', async () => {
     const repo = await createGitRepo('repo-manager-service-restart-required-');
     await ignoreCodeNexusDir(repo.dbPath);
     const storagePath = path.join(repo.dbPath, '.codenexus');
     const loadedIndex = buildLoadedIndex(repo.dbPath, { indexed_at: '2026-03-09T00:00:00.000Z' });
     const { server, port } = await createHealthServer({
+      mode: 'foreground',
       pid: process.pid,
       started_at: new Date().toISOString(),
       repo_root: repo.dbPath,
@@ -433,6 +442,7 @@ describe('repo-local state', () => {
     });
     await saveRuntimeMeta(storagePath, {
       version: 1,
+      mode: 'foreground',
       pid: process.pid,
       port,
       started_at: new Date().toISOString(),

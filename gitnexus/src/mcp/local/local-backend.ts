@@ -8,7 +8,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { initKuzu, executeQuery, executeParameterized, closeKuzu, isKuzuReady } from '../core/kuzu-adapter.js';
+import { initKuzu, executeQuery, executeParameterized, closeKuzu, isKuzuReady, reloadKuzu } from '../core/kuzu-adapter.js';
 import {
   loadRepo,
   resolveRepoBoundary,
@@ -157,6 +157,12 @@ export class LocalBackend {
     }
     if (this.repo) return this.repo;
     throw new Error('No usable local index for the current repo boundary. Create .codenexus/config.toml and run codenexus index.');
+  }
+
+  async reload(): Promise<void> {
+    const repo = await this.resolveRepo();
+    await reloadKuzu(repo.id, repo.kuzuPath);
+    this.initialized = true;
   }
 
   // ─── Lazy KuzuDB Init ────────────────────────────────────────────

@@ -23,6 +23,9 @@ codenexus init
 codenexus index
 codenexus status
 codenexus serve
+codenexus start
+codenexus stop
+codenexus restart
 \`\`\`
 
 What each command does:
@@ -30,13 +33,16 @@ What each command does:
 - \`codenexus init\`: create repo-local CodeNexus config in \`.codenexus/config.toml\`
 - \`codenexus index\`: build or refresh the on-disk index
 - \`codenexus status\`: show repo, index, and live service state
-- \`codenexus serve\`: start the repo-local HTTP service for agent queries
+- \`codenexus serve\`: start the repo-local HTTP service in the foreground
+- \`codenexus start\`: start the repo-local HTTP service in background mode
+- \`codenexus stop\`: stop the repo-local background service
+- \`codenexus restart\`: restart the repo-local background service
 
 ## Freshness
 
 - \`codenexus index\` is the manual refresh path
-- if \`codenexus serve\` is already running, reindexing refreshes disk only
-- restart \`codenexus serve\` after reindexing so the live service uses the refreshed index
+- if a CodeNexus service is already running, reindexing refreshes disk and the live service adopts the rebuilt index automatically in the normal path
+- if live reload fails, use \`codenexus restart\` for a background service or restart foreground \`codenexus serve\` manually
 
 ## Suggested AGENTS.md Snippet
 
@@ -48,12 +54,13 @@ This repo uses CodeNexus for repo-local code intelligence. Agents working here w
 Common workflow:
 - \`codenexus status\`
 - \`codenexus index\`
-- \`codenexus serve\`
+- \`codenexus start\`
 
 Important:
 - \`.codenexus/\` is repo-local state and should usually be gitignored
-- \`codenexus index\` refreshes the on-disk index only
-- if \`codenexus serve\` is running, restart it after reindexing
+- \`codenexus index\` is the manual refresh path
+- a live service adopts rebuilt indexes automatically in the normal path
+- if live reload fails, use \`codenexus restart\` (background) or restart foreground \`codenexus serve\`
 \`\`\`
 
 ## Where CodeNexus Helps Most

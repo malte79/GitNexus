@@ -17,7 +17,7 @@ import {
   closeKuzu,
   createFTSIndex,
 } from '../core/kuzu/kuzu-adapter.js';
-import { getStoragePaths, saveMeta, loadConfig, loadMeta, getRepoState } from '../storage/repo-manager.js';
+import { computeIndexGeneration, getStoragePaths, saveMeta, loadConfig, loadMeta, getRepoState } from '../storage/repo-manager.js';
 import { getCurrentBranch, getCurrentCommit, isGitRepo, getGitRoot, isWorkingTreeDirty } from '../storage/git.js';
 
 const HEAP_MB = 8192;
@@ -226,13 +226,21 @@ export const indexCommand = async (
   updateBar(98, 'Saving metadata...');
   const stats = await getKuzuStats();
 
+  const indexedAt = new Date().toISOString();
   const meta = {
     version: 1 as const,
     indexed_head: currentCommit,
     indexed_branch: currentBranch,
-    indexed_at: new Date().toISOString(),
+    indexed_at: indexedAt,
     indexed_dirty: currentDirty,
     worktree_root: repoPath,
+    index_generation: computeIndexGeneration({
+      indexed_head: currentCommit,
+      indexed_branch: currentBranch,
+      indexed_at: indexedAt,
+      indexed_dirty: currentDirty,
+      worktree_root: repoPath,
+    }),
     stats: {
       files: pipelineResult.totalFileCount,
       nodes: stats.nodes,
@@ -265,12 +273,22 @@ export const indexCommand = async (
   console.log(`  ${repoPath}`);
 
   const stateAfterIndex = await getRepoState(repoPath);
-  if (stateAfterIndex?.detailFlags.includes('service_restart_required')) {
-    console.log('  Note: A live CodeNexus service is still serving an older loaded index.');
-    console.log('  Restart `codenexus serve` to serve this refreshed on-disk index.');
+  if (stateAfterIndex?.liveHealth?.reload_error) {
+    console.log('  Note: A live CodeNexus service failed to adopt the refreshed on-disk index automatically.');
+    if (stateAfterIndex.liveHealth.mode === 'background') {
+      console.log('  Run `codenexus restart` to recover the background service.');
+    } else {
+      console.log('  Stop and rerun `codenexus serve` to recover the foreground service.');
+    }
+  } else if (stateAfterIndex?.detailFlags.includes('service_restart_required')) {
+    console.log('  Note: A live CodeNexus service is still adopting the refreshed on-disk index.');
+    console.log('  Run `codenexus status` again shortly to confirm the new index generation is loaded.');
+  } else if (stateAfterIndex?.liveHealth) {
+    console.log('  Note: A live CodeNexus service is running and will adopt the refreshed on-disk index automatically.');
+    console.log('  Run `codenexus status` to confirm the service has loaded the new index generation.');
   } else if (stateAfterIndex?.baseState === 'serving_stale') {
     console.log('  Note: A live CodeNexus service is running in degraded stale mode.');
-    console.log('  Run `codenexus index` again if the repo changes, then restart `codenexus serve` to adopt the refreshed index.');
+    console.log('  Run `codenexus index` again if the repo changes. The live service will adopt the refreshed index automatically when reload succeeds.');
   }
 
   if (options?.indexOnly) {

@@ -119,7 +119,24 @@ What this brings:
 - more agent-friendly summaries using module name, runtime area, and Rojo context
 - a cleaner product experience before moving on to longer-horizon robustness work
 
-### 10. Branch And Repo State Intelligence
+### 10. Background Service And Live Reload
+
+Add a real detached service lifecycle and automatic live adoption of rebuilt indexes.
+
+Primary goals:
+
+- add `codenexus start`, `codenexus stop`, and `codenexus restart`
+- keep `codenexus serve` as the foreground/debug path
+- let the running service adopt refreshed on-disk indexes without manual restart
+- make runtime metadata and status truthful for both background mode and live reload
+
+What this brings:
+
+- a cleaner day-to-day operator workflow
+- no need to manually restart the service after a normal successful reindex
+- a better foundation for longer-running agent workflows that want CodeNexus always available
+
+### 11. Branch And Repo State Intelligence
 
 Teach the repo-local system to reason about branch changes and longer-lived repo state.
 
@@ -136,7 +153,7 @@ What this brings:
 - a path toward branch-aware index management
 - a more durable repo-local operating model for real day-to-day use now that service state, CLI state, and freshness semantics are all already established
 
-### 11. Deferred Intelligence Upgrades
+### 12. Deferred Intelligence Upgrades
 
 This remains the intentionally late bucket for higher-end capabilities once the core product is stable.
 
@@ -163,11 +180,12 @@ The next completed epics made the existing product useful for the target Roblox/
 - Epic 07: Luau Core Support
 - Epic 08: Roblox And Rojo Resolution
 
-The final three deepen ergonomics, robustness, and intelligence:
+The final four deepen ergonomics, service lifecycle, robustness, and intelligence:
 
 - Epic 09: Roblox Query Ergonomics
-- Epic 10: Branch And Repo State Intelligence
-- Epic 11: Deferred Intelligence Upgrades
+- Epic 10: Background Service And Live Reload
+- Epic 11: Branch And Repo State Intelligence
+- Epic 12: Deferred Intelligence Upgrades
 
 ## Planning Notes
 

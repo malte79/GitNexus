@@ -39,6 +39,21 @@ export function buildProgram(): Command {
     .action(createLazyAction(() => import('./serve.js'), 'serveCommand'));
 
   program
+    .command('start')
+    .description('Start the repo-local CodeNexus service in background mode')
+    .action(createLazyAction(() => import('./start.js'), 'startCommand'));
+
+  program
+    .command('stop')
+    .description('Stop the repo-local CodeNexus background service')
+    .action(createLazyAction(() => import('./stop.js'), 'stopCommand'));
+
+  program
+    .command('restart')
+    .description('Restart the repo-local CodeNexus background service')
+    .action(createLazyAction(() => import('./restart.js'), 'restartCommand'));
+
+  program
     .command('info')
     .description('Print lifecycle and usage guidance for CodeNexus')
     .action(createLazyAction(() => import('./info.js'), 'infoCommand'));
