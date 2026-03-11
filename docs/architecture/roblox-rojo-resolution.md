@@ -99,3 +99,5 @@ Epic 08 should materially improve agent answers on Rojo repos compared with plai
 - correct import edges for Roblox-rooted `require(...)`
 - client/shared/server runtime-area context
 - Rojo-aware module relationships that do not align with plain filesystem-only resolution
+
+Epic 09 builds on that correctness layer by improving module-table symbolization, deterministic ranking, and concise Roblox-aware summaries. Those ergonomics changes are documented in [roblox-query-ergonomics.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/roblox-query-ergonomics.md).

@@ -106,3 +106,11 @@ Epic 08 layers Roblox- and Rojo-specific semantics on top through a dedicated do
 - runtime-area tagging (`shared`, `client`, `server`, `other`) is carried into the indexed graph and surfaced through query results
 
 This keeps the Roblox specialization isolated from the generic Luau parser and graph seams while making the existing product genuinely useful on Rojo-based Roblox repos.
+
+Epic 09 then improves the agent-facing ergonomics on top of that correctness layer:
+
+- common returned Luau module tables become stronger first-class symbols
+- deterministic ranking uses exact module names, file names, split-word service aliases, `runtimeArea`, and Rojo path context
+- query and context responses now surface concise Roblox-aware facts such as module symbol, runtime area, DataModel path, and key boundary-crossing imports
+
+Those ergonomics changes are documented in [roblox-query-ergonomics.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/roblox-query-ergonomics.md).

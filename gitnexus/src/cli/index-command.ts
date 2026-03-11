@@ -219,6 +219,7 @@ export const indexCommand = async (
     await createFTSIndex('Class', 'class_fts', ['name', 'content']);
     await createFTSIndex('Method', 'method_fts', ['name', 'content']);
     await createFTSIndex('Interface', 'interface_fts', ['name', 'content']);
+    await createFTSIndex('Module', 'module_fts', ['name', 'description']);
   } catch {}
   const ftsTime = ((Date.now() - t0Fts) / 1000).toFixed(1);
 

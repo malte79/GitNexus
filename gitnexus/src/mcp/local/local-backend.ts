@@ -77,10 +77,32 @@ interface RepoHandle {
   stats?: RepoMeta['stats'];
 }
 
+interface RojoTargetSummary {
+  dataModelPath: string;
+  runtimeArea: 'shared' | 'client' | 'server' | 'other';
+}
+
+interface RankedSearchResult {
+  nodeId?: string;
+  name: string;
+  type: string;
+  filePath: string;
+  startLine?: number;
+  endLine?: number;
+  runtimeArea?: string;
+  description?: string;
+  bm25Score: number;
+  score: number;
+  moduleSymbol?: string;
+  dataModelPath?: string;
+  boundaryImports?: Array<{ name: string; filePath: string; runtimeArea?: string }>;
+}
+
 export class LocalBackend {
   private repo: RepoHandle | null = null;
   private contextCache: CodebaseContext | null = null;
   private initialized = false;
+  private rojoProjectCache = new Map<string, Promise<any | null>>();
 
   constructor(private readonly startPath = process.cwd()) {}
 
@@ -230,33 +252,14 @@ export class LocalBackend {
     
     // Step 1: Run BM25 search to get matching symbols
     const searchLimit = processLimit * maxSymbolsPerProcess; // fetch enough raw results
-    const bm25Results = await this.bm25Search(repo, searchQuery, searchLimit);
-    
-    // Merge via reciprocal rank fusion
-    const scoreMap = new Map<string, { score: number; data: any }>();
-    
-    for (let i = 0; i < bm25Results.length; i++) {
-      const result = bm25Results[i];
-      const key = result.nodeId || result.filePath;
-      const rrfScore = 1 / (60 + i);
-      const existing = scoreMap.get(key);
-      if (existing) {
-        existing.score += rrfScore;
-      } else {
-        scoreMap.set(key, { score: rrfScore, data: result });
-      }
-    }
-    
-    const merged = Array.from(scoreMap.entries())
-      .sort((a, b) => b[1].score - a[1].score)
-      .slice(0, searchLimit);
+    const bm25Results = await this.bm25Search(repo, searchQuery, searchLimit * 2);
+    const rankedMatches = await this.rankSearchResults(repo, searchQuery, bm25Results, searchLimit);
     
     // Step 2: For each match with a nodeId, trace to process(es)
     const processMap = new Map<string, { id: string; label: string; heuristicLabel: string; processType: string; stepCount: number; totalScore: number; cohesionBoost: number; symbols: any[] }>();
     const definitions: any[] = []; // standalone symbols not in any process
     
-    for (const [_, item] of merged) {
-      const sym = item.data;
+    for (const sym of rankedMatches) {
       if (!sym.nodeId) {
         // File-level results go to definitions
         definitions.push({
@@ -264,6 +267,9 @@ export class LocalBackend {
           type: sym.type || 'File',
           filePath: sym.filePath,
           ...(sym.runtimeArea ? { runtimeArea: sym.runtimeArea } : {}),
+          ...(sym.moduleSymbol ? { module_symbol: sym.moduleSymbol } : {}),
+          ...(sym.dataModelPath ? { data_model_path: sym.dataModelPath } : {}),
+          ...(sym.boundaryImports && sym.boundaryImports.length > 0 ? { boundary_imports: sym.boundaryImports } : {}),
         });
         continue;
       }
@@ -313,10 +319,13 @@ export class LocalBackend {
         filePath: sym.filePath,
         startLine: sym.startLine,
         endLine: sym.endLine,
-        ...(sym.runtimeArea ? { runtimeArea: sym.runtimeArea } : {}),
-        ...(module ? { module } : {}),
-        ...(includeContent && content ? { content } : {}),
-      };
+          ...(sym.runtimeArea ? { runtimeArea: sym.runtimeArea } : {}),
+          ...(module ? { module } : {}),
+          ...(sym.moduleSymbol ? { module_symbol: sym.moduleSymbol } : {}),
+          ...(sym.dataModelPath ? { data_model_path: sym.dataModelPath } : {}),
+          ...(sym.boundaryImports && sym.boundaryImports.length > 0 ? { boundary_imports: sym.boundaryImports } : {}),
+          ...(includeContent && content ? { content } : {}),
+        };
       
       if (processRows.length === 0) {
         // Symbol not in any process — goes to definitions
@@ -345,7 +354,7 @@ export class LocalBackend {
           }
           
           const proc = processMap.get(pid)!;
-          proc.totalScore += item.score;
+          proc.totalScore += sym.score;
           proc.cohesionBoost = Math.max(proc.cohesionBoost, cohesion);
           proc.symbols.push({
             ...symbolEntry,
@@ -409,53 +418,245 @@ export class LocalBackend {
       console.error('CodeNexus: BM25/FTS search failed (FTS indexes may not exist) -', err.message);
       return [];
     }
-    
-    const results: any[] = [];
-    
-    for (const bm25Result of bm25Results) {
-      const fullPath = bm25Result.filePath;
+    return bm25Results.map((bm25Result: any) => ({
+      ...bm25Result,
+      bm25Score: bm25Result.score,
+    }));
+  }
+
+  private normalizeSearchText(value: string): string {
+    return value
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_./-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  private getSplitWordAlias(value: string): string {
+    return this.normalizeSearchText(
+      value
+        .replace(/\.(client|server)$/i, '')
+        .replace(/\.(lua|luau)$/i, ''),
+    );
+  }
+
+  private getCompactSearchText(value: string): string {
+    return this.normalizeSearchText(value).replace(/\s+/g, '');
+  }
+
+  private isBroadSearchQuery(searchQuery: string): boolean {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return false;
+    if (/[\\/]/.test(trimmed)) return false;
+    if (/\.(lua|luau)$/i.test(trimmed)) return false;
+    return this.normalizeSearchText(trimmed).includes(' ');
+  }
+
+  private isRojoMappedResult(rojoProject: any | null, filePath?: string): boolean {
+    if (!rojoProject || !filePath) return false;
+    return (rojoProject.getTargetsForFile(filePath) || []).length > 0;
+  }
+
+  private async getRojoProjectIndex(repo: RepoHandle): Promise<any | null> {
+    let cached = this.rojoProjectCache.get(repo.id);
+    if (!cached) {
+      cached = (async () => {
+        const rows = await executeQuery(repo.id, `
+          MATCH (n:File)
+          RETURN n.filePath AS filePath
+        `);
+        const filePaths = rows
+          .map((row: any) => row.filePath || row[0])
+          .filter(Boolean);
+        const { loadRojoProjectIndex } = await import('../../core/ingestion/roblox/rojo-project.js');
+        return loadRojoProjectIndex(repo.repoPath, filePaths);
+      })();
+      this.rojoProjectCache.set(repo.id, cached);
+    }
+    return cached;
+  }
+
+  private async getPrimaryModuleSymbols(repo: RepoHandle, filePaths: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const filePath of filePaths) {
       try {
-        const symbols = await executeParameterized(repo.id, `
-          MATCH (n)
-          WHERE n.filePath = $filePath
-          RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea
-          LIMIT 3
-        `, { filePath: fullPath });
-        
-        if (symbols.length > 0) {
-          for (const sym of symbols) {
-            results.push({
-              nodeId: sym.id || sym[0],
-              name: sym.name || sym[1],
-              type: sym.type || sym[2],
-              filePath: sym.filePath || sym[3],
-              startLine: sym.startLine || sym[4],
-              endLine: sym.endLine || sym[5],
-              runtimeArea: sym.runtimeArea || sym[6],
-              bm25Score: bm25Result.score,
-            });
-          }
-        } else {
-          const fileName = fullPath.split('/').pop() || fullPath;
-          results.push({
-            name: fileName,
-            type: 'File',
-            filePath: bm25Result.filePath,
-            bm25Score: bm25Result.score,
-          });
+        const rows = await executeParameterized(repo.id, `
+          MATCH (m:Module)
+          WHERE m.filePath = $filePath
+          RETURN m.name AS name, m.description AS description, m.startLine AS startLine
+          ORDER BY CASE
+            WHEN m.description STARTS WITH 'luau-module:strong' THEN 0
+            ELSE 1
+          END, m.startLine ASC
+          LIMIT 1
+        `, { filePath });
+        if (rows.length > 0) {
+          out.set(filePath, rows[0].name || rows[0][0]);
         }
       } catch {
-        const fileName = fullPath.split('/').pop() || fullPath;
-        results.push({
-          name: fileName,
-          type: 'File',
-          filePath: bm25Result.filePath,
-          bm25Score: bm25Result.score,
-        });
+        // ignore enrichment failures
       }
     }
-    
-    return results;
+    return out;
+  }
+
+  private async getBoundaryImports(repo: RepoHandle, filePaths: string[]): Promise<Map<string, Array<{ name: string; filePath: string; runtimeArea?: string }>>> {
+    const out = new Map<string, Array<{ name: string; filePath: string; runtimeArea?: string }>>();
+    for (const filePath of filePaths) {
+      try {
+        const rows = await executeParameterized(repo.id, `
+          MATCH (src {filePath: $filePath})-[r:CodeRelation {type: 'IMPORTS'}]->(dst)
+          WHERE src.runtimeArea IS NOT NULL AND dst.runtimeArea IS NOT NULL AND src.runtimeArea <> dst.runtimeArea
+          RETURN dst.name AS name, dst.filePath AS filePath, dst.runtimeArea AS runtimeArea
+          LIMIT 3
+        `, { filePath });
+        if (rows.length > 0) {
+          out.set(filePath, rows.map((row: any) => ({
+            name: row.name || row[0],
+            filePath: row.filePath || row[1],
+            runtimeArea: row.runtimeArea || row[2] || undefined,
+          })));
+        }
+      } catch {
+        // ignore enrichment failures
+      }
+    }
+    return out;
+  }
+
+  private async getExactAliasCandidates(repo: RepoHandle, searchQuery: string): Promise<any[]> {
+    const compactQuery = this.getCompactSearchText(searchQuery);
+    if (!compactQuery) return [];
+
+    const rows = await executeParameterized(repo.id, `
+      MATCH (n:Module)
+      WHERE lower(n.name) CONTAINS $compactQuery OR lower(n.filePath) CONTAINS $compactQuery
+      RETURN n.id AS nodeId, n.name AS name, 'Module' AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description
+      UNION
+      MATCH (n:File)
+      WHERE lower(n.name) CONTAINS $compactQuery OR lower(n.filePath) CONTAINS $compactQuery
+      RETURN n.id AS nodeId, n.name AS name, 'File' AS type, n.filePath AS filePath,
+             0 AS startLine, 0 AS endLine, n.runtimeArea AS runtimeArea,
+             '' AS description
+    `, { compactQuery });
+
+    return rows
+      .map((row: any) => ({
+        nodeId: row.nodeId || row[0],
+        name: row.name || row[1],
+        type: row.type || row[2],
+        filePath: row.filePath || row[3],
+        startLine: row.startLine || row[4],
+        endLine: row.endLine || row[5],
+        runtimeArea: row.runtimeArea || row[6],
+        description: row.description || row[7],
+        score: 0,
+        bm25Score: 0,
+      }))
+      .filter((row: any) => {
+        const normalizedQuery = this.normalizeSearchText(searchQuery);
+        const compact = this.getCompactSearchText(searchQuery);
+        const fileBase = this.getSplitWordAlias(path.basename(row.filePath || ''));
+        const compactFileBase = this.getCompactSearchText(path.basename(row.filePath || '').replace(/\.(client|server)?\.?luau?$/i, ''));
+        const normalizedName = this.normalizeSearchText(row.name || '');
+        const compactName = this.getCompactSearchText(row.name || '');
+        return (
+          normalizedName === normalizedQuery ||
+          fileBase === normalizedQuery ||
+          compactName === compact ||
+          compactFileBase === compact
+        );
+      });
+  }
+
+  private computeSearchBoost(
+    searchQuery: string,
+    result: { name: string; filePath: string; type: string; runtimeArea?: string; dataModelPath?: string; moduleSymbol?: string; description?: string },
+  ): number {
+    const normalizedQuery = this.normalizeSearchText(searchQuery);
+    const normalizedName = this.normalizeSearchText(result.name);
+    const fileBase = this.getSplitWordAlias(path.basename(result.filePath));
+    const moduleAlias = result.moduleSymbol ? this.getSplitWordAlias(result.moduleSymbol) : '';
+    const dataModelPath = result.dataModelPath ? this.normalizeSearchText(result.dataModelPath) : '';
+    let boost = 0;
+
+    if (normalizedName === normalizedQuery) boost += 6;
+    if (moduleAlias && moduleAlias === normalizedQuery) boost += result.type === 'Module' ? 5 : 3;
+    if (fileBase === normalizedQuery) boost += result.type === 'File' ? 4 : 2.5;
+    if (normalizedName.includes(normalizedQuery)) boost += 1.5;
+    if (moduleAlias && moduleAlias.includes(normalizedQuery)) boost += 1.25;
+    if (fileBase.includes(normalizedQuery)) boost += 1;
+    if (dataModelPath && dataModelPath.includes(normalizedQuery)) boost += 1.5;
+
+    if (normalizedQuery.includes('client') && result.runtimeArea === 'client') boost += 0.75;
+    if (normalizedQuery.includes('server') && result.runtimeArea === 'server') boost += 0.75;
+    if (normalizedQuery.includes('shared') && result.runtimeArea === 'shared') boost += 0.75;
+
+    if (result.type === 'Module' && result.description?.startsWith('luau-module:strong')) boost += 1;
+    if (result.type === 'Module' && result.description?.startsWith('luau-module:weak')) boost -= 0.5;
+
+    return boost;
+  }
+
+  private async rankSearchResults(repo: RepoHandle, searchQuery: string, rawResults: any[], limit: number): Promise<RankedSearchResult[]> {
+    const exactAliasCandidates = await this.getExactAliasCandidates(repo, searchQuery);
+    const dedupedRaw = [...rawResults, ...exactAliasCandidates].filter((result, index, array) => {
+      const key = result.nodeId || `${result.type}:${result.filePath}:${result.name}:${result.startLine || ''}`;
+      return array.findIndex((candidate) => {
+        const candidateKey = candidate.nodeId || `${candidate.type}:${candidate.filePath}:${candidate.name}:${candidate.startLine || ''}`;
+        return candidateKey === key;
+      }) === index;
+    });
+    const filePaths = [...new Set(dedupedRaw.map(r => r.filePath).filter(Boolean))];
+    const [rojoProject, primaryModules, boundaryImports] = await Promise.all([
+      this.getRojoProjectIndex(repo),
+      this.getPrimaryModuleSymbols(repo, filePaths),
+      this.getBoundaryImports(repo, filePaths),
+    ]);
+
+    const hasMappedCandidates = dedupedRaw.some((result: any) => this.isRojoMappedResult(rojoProject, result.filePath));
+    const preferMappedResults = this.isBroadSearchQuery(searchQuery) && hasMappedCandidates;
+
+    const ranked = dedupedRaw.map((result: any) => {
+      const rojoTarget = rojoProject?.getTargetsForFile(result.filePath)?.[0] as RojoTargetSummary | undefined;
+      const moduleSymbol = result.type === 'Module' ? result.name : primaryModules.get(result.filePath);
+      const rojoMappingBoost = preferMappedResults
+        ? (rojoTarget ? 5 : -5)
+        : 0;
+      const score = (result.bm25Score ?? result.score ?? 0) + this.computeSearchBoost(searchQuery, {
+        name: result.name,
+        filePath: result.filePath,
+        type: result.type,
+        runtimeArea: result.runtimeArea,
+        dataModelPath: rojoTarget?.dataModelPath,
+        moduleSymbol,
+        description: result.description,
+      }) + rojoMappingBoost;
+
+      return {
+        nodeId: result.nodeId,
+        name: result.name,
+        type: result.type,
+        filePath: result.filePath,
+        startLine: result.startLine,
+        endLine: result.endLine,
+        runtimeArea: result.runtimeArea,
+        description: result.description,
+        bm25Score: result.bm25Score ?? result.score ?? 0,
+        score,
+        moduleSymbol,
+        dataModelPath: rojoTarget?.dataModelPath,
+        boundaryImports: boundaryImports.get(result.filePath),
+      } satisfies RankedSearchResult;
+    });
+
+    return ranked
+      .sort((a, b) => b.score - a.score || b.bm25Score - a.bm25Score)
+      .slice(0, limit);
   }
 
   async executeCypher(query: string): Promise<any> {
@@ -667,6 +868,8 @@ export class LocalBackend {
     
     // Step 2: Disambiguation
     if (symbols.length > 1 && !uid) {
+      const primaryModules = await this.getPrimaryModuleSymbols(repo, [...new Set(symbols.map((s: any) => s.filePath || s[3]).filter(Boolean))]);
+      const rojoProject = await this.getRojoProjectIndex(repo);
       return {
         status: 'ambiguous',
         message: `Found ${symbols.length} symbols matching '${name}'. Use uid or file_path to disambiguate.`,
@@ -677,6 +880,8 @@ export class LocalBackend {
           filePath: s.filePath || s[3],
           line: s.startLine || s[4],
           ...(s.runtimeArea || s[6] ? { runtimeArea: s.runtimeArea || s[6] } : {}),
+          ...(primaryModules.get(s.filePath || s[3]) ? { module_symbol: primaryModules.get(s.filePath || s[3]) } : {}),
+          ...(rojoProject?.getTargetsForFile(s.filePath || s[3])?.[0]?.dataModelPath ? { data_model_path: rojoProject.getTargetsForFile(s.filePath || s[3])[0].dataModelPath } : {}),
         })),
       };
     }
@@ -684,6 +889,14 @@ export class LocalBackend {
     // Step 3: Build full context
     const sym = symbols[0];
     const symId = sym.id || sym[0];
+    const filePath = sym.filePath || sym[3];
+    const [primaryModules, rojoProject, boundaryImports] = await Promise.all([
+      this.getPrimaryModuleSymbols(repo, filePath ? [filePath] : []),
+      this.getRojoProjectIndex(repo),
+      this.getBoundaryImports(repo, filePath ? [filePath] : []),
+    ]);
+    const dataModelPath = rojoProject?.getTargetsForFile(filePath)?.[0]?.dataModelPath;
+    const moduleSymbol = (sym.type || sym[2]) === 'Module' ? (sym.name || sym[1]) : primaryModules.get(filePath);
 
     // Categorized incoming refs
     const incomingRows = await executeParameterized(repo.id, `
@@ -733,10 +946,13 @@ export class LocalBackend {
         uid: sym.id || sym[0],
         name: sym.name || sym[1],
         kind: sym.type || sym[2],
-        filePath: sym.filePath || sym[3],
+        filePath,
         startLine: sym.startLine || sym[4],
         endLine: sym.endLine || sym[5],
         ...(sym.runtimeArea || sym[6] ? { runtimeArea: sym.runtimeArea || sym[6] } : {}),
+        ...(moduleSymbol ? { module_symbol: moduleSymbol } : {}),
+        ...(dataModelPath ? { data_model_path: dataModelPath } : {}),
+        ...(boundaryImports.get(filePath)?.length ? { boundary_imports: boundaryImports.get(filePath) } : {}),
         ...(include_content && (sym.content || sym[7]) ? { content: sym.content || sym[7] } : {}),
       },
       incoming: categorize(incomingRows),
