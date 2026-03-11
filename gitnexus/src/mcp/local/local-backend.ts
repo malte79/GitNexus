@@ -446,6 +446,19 @@ export class LocalBackend {
     return this.normalizeSearchText(value).replace(/\s+/g, '');
   }
 
+  private isBroadSearchQuery(searchQuery: string): boolean {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return false;
+    if (/[\\/]/.test(trimmed)) return false;
+    if (/\.(lua|luau)$/i.test(trimmed)) return false;
+    return this.normalizeSearchText(trimmed).includes(' ');
+  }
+
+  private isRojoMappedResult(rojoProject: any | null, filePath?: string): boolean {
+    if (!rojoProject || !filePath) return false;
+    return (rojoProject.getTargetsForFile(filePath) || []).length > 0;
+  }
+
   private async getRojoProjectIndex(repo: RepoHandle): Promise<any | null> {
     let cached = this.rojoProjectCache.get(repo.id);
     if (!cached) {
@@ -605,9 +618,15 @@ export class LocalBackend {
       this.getBoundaryImports(repo, filePaths),
     ]);
 
+    const hasMappedCandidates = dedupedRaw.some((result: any) => this.isRojoMappedResult(rojoProject, result.filePath));
+    const preferMappedResults = this.isBroadSearchQuery(searchQuery) && hasMappedCandidates;
+
     const ranked = dedupedRaw.map((result: any) => {
       const rojoTarget = rojoProject?.getTargetsForFile(result.filePath)?.[0] as RojoTargetSummary | undefined;
       const moduleSymbol = result.type === 'Module' ? result.name : primaryModules.get(result.filePath);
+      const rojoMappingBoost = preferMappedResults
+        ? (rojoTarget ? 5 : -5)
+        : 0;
       const score = (result.bm25Score ?? result.score ?? 0) + this.computeSearchBoost(searchQuery, {
         name: result.name,
         filePath: result.filePath,
@@ -616,7 +635,7 @@ export class LocalBackend {
         dataModelPath: rojoTarget?.dataModelPath,
         moduleSymbol,
         description: result.description,
-      });
+      }) + rojoMappingBoost;
 
       return {
         nodeId: result.nodeId,

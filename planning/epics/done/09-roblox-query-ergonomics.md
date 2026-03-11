@@ -1,7 +1,7 @@
 Title: Roblox Query Ergonomics
 Assigned to: Agent 1
 Lane: Product
-Status: doing
+Status: done
 Objective: Improve Luau/Roblox query ergonomics by making module-table exports first-class symbols, strengthening retrieval and ranking for Roblox/Luau concepts, and producing more useful Roblox-aware summaries so CodeNexus answers are easier for agents to use on real Rojo repos.
 In scope: Luau module-table symbol extraction; file-to-module symbol linking; deterministic support for common Roblox Luau module patterns such as returned singleton tables, table method definitions, constructor-like modules, and service-like modules; improved search/ranking for exact file/module names and Roblox domain context; use of `runtimeArea` and Rojo path context in retrieval and summaries; richer query/context output for Roblox repos; tests, docs, and real-product proof on a Rojo repo.
 Out of scope: new language support; new Roblox path-resolution rules beyond Epic 08; branch-aware indexing; embeddings; world projection; transport/runtime redesign; full text-semantic search redesign.

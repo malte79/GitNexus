@@ -108,7 +108,7 @@ describe('LocalBackend.callTool', () => {
   });
 
   it('ranks Roblox module symbols and includes Roblox-aware summaries', async () => {
-    (searchFTSFromKuzu as any).mockImplementation(async (_repoId: string, query: string) => {
+    (searchFTSFromKuzu as any).mockImplementation(async (query: string) => {
       if (query === 'SpotlightRegistry') {
         return [
           {
@@ -143,6 +143,65 @@ describe('LocalBackend.callTool', () => {
             score: 1.2,
             rank: 1,
           },
+          {
+            nodeId: 'file:LightingShowArchive',
+            name: 'LightingShowService.lua',
+            type: 'File',
+            filePath: 'docs/archive/LightingShowService.lua',
+            score: 3.8,
+            rank: 2,
+          },
+        ];
+      }
+      if (query === 'world bootstrap') {
+        return [
+          {
+            nodeId: 'file:WorldBootstrapArchive',
+            name: 'WorldBootstrap.lua',
+            type: 'File',
+            filePath: 'docs/archive/WorldBootstrap.lua',
+            score: 4.2,
+            rank: 1,
+          },
+          {
+            nodeId: 'file:WorldBootstrap',
+            name: 'WorldBootstrap.server.lua',
+            type: 'File',
+            filePath: 'src/server/WorldBootstrap.server.lua',
+            runtimeArea: 'server',
+            score: 1.3,
+            rank: 2,
+          },
+        ];
+      }
+      if (query === 'client shared boundary') {
+        return [
+          {
+            nodeId: 'file:ClientSharedBoundaryArchive',
+            name: 'ClientSharedBoundary.lua',
+            type: 'File',
+            filePath: 'docs/archive/ClientSharedBoundary.lua',
+            score: 4.1,
+            rank: 1,
+          },
+          {
+            nodeId: 'file:UIServiceServer',
+            name: 'UIService.lua',
+            type: 'File',
+            filePath: 'src/server/Game/UIService.lua',
+            runtimeArea: 'server',
+            score: 1.2,
+            rank: 2,
+          },
+          {
+            nodeId: 'file:UIServiceClient',
+            name: 'UIService.lua',
+            type: 'File',
+            filePath: 'src/client/UI/UIService.lua',
+            runtimeArea: 'client',
+            score: 1.1,
+            rank: 3,
+          },
         ];
       }
       return [];
@@ -153,6 +212,12 @@ describe('LocalBackend.callTool', () => {
         return [
           { filePath: 'src/shared/Spotlight/SpotlightRegistry.lua' },
           { filePath: 'src/server/Lighting/LightingShowService.lua' },
+          { filePath: 'src/server/Game/UIService.lua' },
+          { filePath: 'src/client/UI/UIService.lua' },
+          { filePath: 'src/server/WorldBootstrap.server.lua' },
+          { filePath: 'docs/archive/LightingShowService.lua' },
+          { filePath: 'docs/archive/WorldBootstrap.lua' },
+          { filePath: 'docs/archive/ClientSharedBoundary.lua' },
         ];
       }
       return [];
@@ -330,6 +395,15 @@ describe('LocalBackend.callTool', () => {
       runtimeArea: 'server',
       data_model_path: 'ServerScriptService/WorldBootstrap',
     });
+
+    const clientSharedBoundary = await backend.callTool('query', { query: 'client shared boundary' });
+    expect([
+      'src/server/Game/UIService.lua',
+      'src/client/UI/UIService.lua',
+    ]).toContain(clientSharedBoundary.definitions[0]?.filePath);
+    expect(['server', 'client']).toContain(clientSharedBoundary.definitions[0]?.runtimeArea);
+    expect(clientSharedBoundary.definitions[0]?.data_model_path).toBeTruthy();
+    expect(clientSharedBoundary.definitions[0]?.filePath).not.toBe('docs/archive/ClientSharedBoundary.lua');
   });
 
   it('rejects legacy repo parameters', async () => {

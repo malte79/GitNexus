@@ -47,6 +47,12 @@ Epic 09 stays deterministic. Ranking may use only grounded signals such as:
 - `runtimeArea`
 - Rojo or DataModel path context already derived from Epic 08
 
+For broad multi-word Roblox queries on Rojo repos, ranking should prefer files that actually map from `default.project.json` over unmapped Luau files when mapped runtime candidates exist. This preference is driven by Rojo mapping only:
+
+- it does not use lexical path penalties such as checking for `docs/` or `archive/`
+- it does not hide unmapped Luau files entirely
+- it must not break exact file or exact module lookup
+
 Epic 09 does not introduce:
 
 - embeddings
