@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { resolveCliInvocation } from './entrypoint-path.js';
 import { waitForRepoLocalService, DuplicateServiceError, ServiceStartupError } from '../server/service-runtime.js';
 
 export const startCommand = async () => {
   try {
-    const cliEntrypoint = fileURLToPath(new URL('./index.js', import.meta.url));
-    const child = spawn(process.execPath, [cliEntrypoint, 'serve'], {
+    const cliInvocation = resolveCliInvocation(['serve']);
+    const child = spawn(cliInvocation.command, cliInvocation.args, {
       cwd: process.cwd(),
       detached: true,
       stdio: 'ignore',

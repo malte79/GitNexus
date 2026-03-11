@@ -141,10 +141,20 @@ describe('config and metadata round trips', () => {
     const handle = await createTempDir('repo-manager-config-');
     const storagePath = path.join(handle.dbPath, '.codenexus');
 
-    await saveConfig(storagePath, { version: 1, port: 4747 });
+    await saveConfig(storagePath, {
+      version: 1,
+      port: 4747,
+      auto_index: true,
+      auto_index_interval_seconds: 300,
+    });
     const config = await loadConfig(storagePath);
 
-    expect(config).toEqual({ version: 1, port: 4747 });
+    expect(config).toEqual({
+      version: 1,
+      port: 4747,
+      auto_index: true,
+      auto_index_interval_seconds: 300,
+    });
     await handle.cleanup();
   });
 
@@ -188,7 +198,7 @@ describe('repo-local state', () => {
     await repo.cleanup();
   });
 
-  it('treats an index created before the first commit as indexed_stale, not unindexed', async () => {
+  it('treats an index created before the first commit as indexed_current when the dirty snapshot matches', async () => {
     const repo = await createTempDir('repo-manager-no-commit-');
     execSync('git init -q', { cwd: repo.dbPath });
     execSync('git config user.email "test@example.com"', { cwd: repo.dbPath });
@@ -209,7 +219,7 @@ describe('repo-local state', () => {
     });
 
     const state = await getRepoState(repo.dbPath);
-    expect(state?.baseState).toBe('indexed_stale');
+    expect(state?.baseState).toBe('indexed_current');
     expect(state?.meta?.indexed_head).toBe('');
     expect(state?.detailFlags).toContain('working_tree_dirty');
     await repo.cleanup();

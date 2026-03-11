@@ -26,7 +26,7 @@ Epic 03 implements a hard cut:
 | retained indexing shim | [index-command.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index-command.ts) | write `.codenexus/kuzu` and `.codenexus/meta.json` only |
 | retained status shim | [status.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/status.ts) | report canonical base state and detail flags |
 | serve command | [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts) | start the repo-local HTTP service for one repo boundary |
-| service runtime | [service-runtime.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/server/service-runtime.ts) | bind the HTTP server, own graceful shutdown, and maintain runtime metadata |
+| service runtime | [service-runtime.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/server/service-runtime.ts) | bind the HTTP server, own graceful shutdown, maintain runtime metadata, and run background auto-index polling |
 
 ## Active State Layout
 
@@ -36,10 +36,20 @@ Epic 03 uses the v1 `.codenexus/` layout already locked in [repo-state-model.md]
 - `.codenexus/meta.json`
 - `.codenexus/kuzu/`
 - `.codenexus/runtime.json`
+- `.codenexus/index.lock`
 
-All four paths are now exercised by the active CLI surface. `codenexus serve` owns the live HTTP lifecycle and advisory `runtime.json`.
+All five paths are now exercised by the active CLI surface. `codenexus serve` owns the live HTTP lifecycle and advisory `runtime.json`. `codenexus index` owns `.codenexus/index.lock` while an index run is active so manual and background reindex attempts serialize on one repo boundary.
 
 The live service health contract is now also responsible for exposing the loaded index identity the service actually opened at startup. That identity is the source of truth for serving freshness, while `runtime.json` persists the same facts only as advisory recovery state.
+
+Epic 11 extends the same runtime seam rather than adding a second service path:
+
+- detached background mode reads `auto_index` and `auto_index_interval_seconds` from `.codenexus/config.toml`
+- only detached background mode may trigger automatic reindex attempts
+- the runtime checks the same repo-state freshness inputs already owned by [repo-manager.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/repo-manager.ts)
+- branch switches are treated as ordinary repo divergence
+- successful background auto-index still reuses the normal `codenexus index` command path and the existing live-reload adoption path
+- failure and backoff state is surfaced through `runtime.json`, `/api/health`, and `codenexus status`
 
 ## Hard-Cut Removals
 

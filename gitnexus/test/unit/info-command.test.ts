@@ -20,6 +20,7 @@ describe('renderInfoMarkdown', () => {
     expect(output).toContain('Suggested AGENTS.md Snippet');
     expect(output).toContain('live service adopts rebuilt indexes automatically in the normal path');
     expect(output).toContain('if live reload fails, use `codenexus restart`');
+    expect(output).toContain('background auto-indexing by default on a 5 minute interval');
     expect(output).toContain('`.codenexus/`');
   });
 
@@ -29,6 +30,7 @@ describe('renderInfoMarkdown', () => {
     expect(output).toContain('### Planning');
     expect(output).toContain('### Implementing');
     expect(output).toContain('### Refactoring');
+    expect(output).toContain('### Background Freshness');
     expect(output).toContain('will use it as part of normal code analysis');
     expect(output).toContain('Agents should use CodeNexus aggressively for refactors');
   });

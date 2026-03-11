@@ -29,13 +29,23 @@ async function buildLoadedIndex(repoPath: string, overrides: Partial<LoadedIndex
   };
 }
 
-async function prepareIndexedRepo(repoPath: string, port: number) {
+async function prepareIndexedRepo(
+  repoPath: string,
+  port: number,
+  configOverrides: Partial<{ auto_index: boolean; auto_index_interval_seconds: number }> = {},
+) {
   const storagePath = path.join(repoPath, '.codenexus');
   await fs.writeFile(path.join(repoPath, '.gitignore'), '.codenexus/\n', 'utf-8');
   execSync('git add .gitignore', { cwd: repoPath });
   execSync('git commit -q -m "ignore .codenexus"', { cwd: repoPath });
 
-  await saveConfig(storagePath, { version: 1, port });
+  await saveConfig(storagePath, {
+    version: 1,
+    port,
+    auto_index: true,
+    auto_index_interval_seconds: 300,
+    ...configOverrides,
+  });
   await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
   const loadedIndex = await buildLoadedIndex(repoPath);
   await saveMeta(storagePath, {
@@ -207,5 +217,74 @@ describe('repo-local HTTP service runtime', () => {
 
     await runtime.close();
     await repo.cleanup();
+  });
+
+  it('auto-indexes repo changes in background mode', async () => {
+    const repo = await createGitRepo('service-runtime-auto-index-background-');
+    const port = await reservePort();
+    await prepareIndexedRepo(repo.dbPath, port, {
+      auto_index: true,
+      auto_index_interval_seconds: 1,
+    });
+
+    const previousMode = process.env.CODENEXUS_SERVICE_MODE;
+    process.env.CODENEXUS_SERVICE_MODE = 'background';
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    try {
+      await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'background refresh\n', 'utf-8');
+
+      const started = Date.now();
+      while (Date.now() - started < 10_000) {
+        const state = await getRepoState(repo.dbPath);
+        if (
+          state?.baseState === 'serving_current' &&
+          state.liveHealth?.loaded_index.indexed_dirty === true &&
+          !!state.liveHealth.auto_index?.last_succeeded_at
+        ) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      const state = await getRepoState(repo.dbPath);
+      expect(state?.baseState).toBe('serving_current');
+      expect(state?.liveHealth?.mode).toBe('background');
+      expect(state?.liveHealth?.loaded_index.indexed_dirty).toBe(true);
+      expect(state?.liveHealth?.auto_index?.last_succeeded_at).toBeTruthy();
+      expect(state?.detailFlags).not.toContain('service_restart_required');
+    } finally {
+      process.env.CODENEXUS_SERVICE_MODE = previousMode;
+      await runtime.close();
+      await repo.cleanup();
+    }
+  });
+
+  it('does not auto-index repo changes in foreground mode', async () => {
+    const repo = await createGitRepo('service-runtime-auto-index-foreground-');
+    const port = await reservePort();
+    await prepareIndexedRepo(repo.dbPath, port, {
+      auto_index: true,
+      auto_index_interval_seconds: 1,
+    });
+
+    const previousMode = process.env.CODENEXUS_SERVICE_MODE;
+    delete process.env.CODENEXUS_SERVICE_MODE;
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    try {
+      await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'foreground stays stale\n', 'utf-8');
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+
+      const state = await getRepoState(repo.dbPath);
+      expect(state?.baseState).toBe('serving_stale');
+      expect(state?.liveHealth?.mode).toBe('foreground');
+      expect(state?.liveHealth?.auto_index?.last_attempt_at).toBeUndefined();
+      expect(state?.detailFlags).toContain('working_tree_dirty');
+    } finally {
+      process.env.CODENEXUS_SERVICE_MODE = previousMode;
+      await runtime.close();
+      await repo.cleanup();
+    }
   });
 });

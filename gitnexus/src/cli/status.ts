@@ -27,6 +27,9 @@ export const statusCommand = async () => {
   console.log(`State: ${state.baseState}`);
   if (state.config) {
     console.log(`Configured port: ${state.config.port}`);
+    console.log(
+      `Auto-index: ${state.config.auto_index ? 'enabled' : 'disabled'} (${state.config.auto_index_interval_seconds}s interval)`,
+    );
   }
   if (state.liveHealth) {
     console.log(`Service: running (pid ${state.liveHealth.pid} on port ${state.liveHealth.port})`);
@@ -36,6 +39,24 @@ export const statusCommand = async () => {
     }
     if (state.liveHealth.reload_error) {
       console.log(`Reload error: ${state.liveHealth.reload_error}`);
+    }
+  }
+  const autoIndex = state.liveHealth?.auto_index ?? state.runtime?.auto_index;
+  if (autoIndex) {
+    if (autoIndex.last_attempt_at) {
+      console.log(`Auto-index last attempt: ${new Date(autoIndex.last_attempt_at).toLocaleString()}`);
+    }
+    if (autoIndex.last_succeeded_at) {
+      console.log(`Auto-index last success: ${new Date(autoIndex.last_succeeded_at).toLocaleString()}`);
+    }
+    if (autoIndex.last_failed_at) {
+      console.log(`Auto-index last failure: ${new Date(autoIndex.last_failed_at).toLocaleString()}`);
+    }
+    if (autoIndex.backoff_until) {
+      console.log(`Auto-index backoff until: ${new Date(autoIndex.backoff_until).toLocaleString()}`);
+    }
+    if (autoIndex.last_error) {
+      console.log(`Auto-index error: ${autoIndex.last_error}`);
     }
   }
   if (state.meta) {
@@ -71,5 +92,8 @@ export const statusCommand = async () => {
   }
   if (state.detailFlags.includes('runtime_metadata_stale') && state.liveHealth) {
     console.log('Runtime metadata: stale; live service health overrode advisory runtime.json.');
+  }
+  if (state.liveHealth?.mode === 'background' && state.config?.auto_index) {
+    console.log('Background freshness: automatic reindex runs on the configured interval when the repo diverges from the indexed state.');
   }
 };
