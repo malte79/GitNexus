@@ -24,10 +24,9 @@ export function isTestFilePath(filePath: string): boolean {
   return (
     p.includes('.test.') || p.includes('.spec.') ||
     p.includes('__tests__/') || p.includes('__mocks__/') ||
-    p.includes('/test/') || p.includes('/tests/') ||
-    p.includes('/testing/') || p.includes('/fixtures/') ||
+    /(^|\/)(test|tests|testing|fixtures)(\/|$)/.test(p) ||
     p.endsWith('_test.go') || p.endsWith('_test.py') ||
-    p.includes('/test_') || p.includes('/conftest.')
+    /(^|\/)test_/.test(p) || p.includes('/conftest.')
   );
 }
 
@@ -156,7 +155,7 @@ export class LocalBackend {
       throw new Error('The "repo" parameter is no longer supported. The runtime is bound to the current repo boundary.');
     }
     if (this.repo) return this.repo;
-    throw new Error('No usable local index for the current repo boundary. Create .codenexus/config.toml and run codenexus index.');
+    throw new Error('No usable local index for the current repo boundary. Create .codenexus/config.toml and run codenexus manage index.');
   }
 
   async reload(): Promise<void> {
@@ -201,6 +200,8 @@ export class LocalBackend {
     const repo = await this.resolveRepo(params?.repo);
 
     switch (method) {
+      case 'summary':
+        return this.overview(repo, params);
       case 'query':
         return this.query(repo, params);
       case 'cypher': {
@@ -460,6 +461,161 @@ export class LocalBackend {
     return this.normalizeSearchText(trimmed).includes(' ');
   }
 
+  private isTestFocusedQuery(searchQuery: string): boolean {
+    const normalized = this.normalizeSearchText(searchQuery);
+    if (!/\b(test|tests|testing|spec|smoke|playtest|harness|fixture|fixtures|matrix)\b/.test(normalized)) {
+      return false;
+    }
+    return !/\b(runtime|lifecycle|bridge|protocol|http|plugin|shell|projection|studio|server|client|world|subsystem)\b/.test(normalized);
+  }
+
+  private isLikelyProductionFile(filePath: string): boolean {
+    const normalized = filePath.toLowerCase().replace(/\\/g, '/');
+    if (isTestFilePath(normalized)) return false;
+    if (/(^|\/)(docs?|archive|examples|vendor|scripts?|fixtures?)(\/|$)/.test(normalized)) {
+      return false;
+    }
+    return true;
+  }
+
+  private isLowSignalSummarySymbol(name: string): boolean {
+    return /^(main|new|init|encode|decode|worker|assert[a-z0-9_]*)$/i.test(name);
+  }
+
+  private getNodeKind(row: { id?: string; uid?: string; nodeId?: string; type?: string; kind?: string }, fallback?: string): string {
+    const explicit = row.type || row.kind || fallback;
+    if (explicit) return explicit;
+    const identifier = row.id || row.uid || row.nodeId;
+    if (typeof identifier === 'string') {
+      const boundary = identifier.indexOf(':');
+      if (boundary > 0) {
+        return identifier.slice(0, boundary);
+      }
+    }
+    return '';
+  }
+
+  private async getContainedMembers(
+    repo: RepoHandle,
+    symbol: { id: string; kind?: string; filePath?: string; startLine?: number; endLine?: number },
+  ): Promise<{ rows: any[]; inferred: boolean }> {
+    const directRows = await executeParameterized(repo.id, `
+      MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)
+      RETURN child.id AS uid, child.name AS name, labels(child)[0] AS kind, child.filePath AS filePath,
+             child.startLine AS startLine, child.endLine AS endLine
+      LIMIT 100
+    `, { symId: symbol.id });
+
+    if (directRows.length > 0) {
+      return { rows: directRows, inferred: false };
+    }
+
+    const kind = symbol.kind || '';
+    if (!['Class', 'Interface'].includes(kind)) {
+      return { rows: [], inferred: false };
+    }
+    if (!symbol.filePath || symbol.startLine === undefined || symbol.endLine === undefined) {
+      return { rows: [], inferred: false };
+    }
+
+    const inferredRows = await executeParameterized(repo.id, `
+      MATCH (child:Function)
+      WHERE child.filePath = $filePath
+        AND child.id <> $symId
+        AND child.startLine IS NOT NULL
+        AND child.endLine IS NOT NULL
+        AND child.startLine > $startLine
+        AND child.endLine <= $endLine
+      RETURN child.id AS uid, child.name AS name, 'Function' AS kind, child.filePath AS filePath,
+             child.startLine AS startLine, child.endLine AS endLine
+      UNION
+      MATCH (child:Method)
+      WHERE child.filePath = $filePath
+        AND child.id <> $symId
+        AND child.startLine IS NOT NULL
+        AND child.endLine IS NOT NULL
+        AND child.startLine > $startLine
+        AND child.endLine <= $endLine
+      RETURN child.id AS uid, child.name AS name, 'Method' AS kind, child.filePath AS filePath,
+             child.startLine AS startLine, child.endLine AS endLine
+      UNION
+      MATCH (child:Property)
+      WHERE child.filePath = $filePath
+        AND child.id <> $symId
+        AND child.startLine IS NOT NULL
+        AND child.endLine IS NOT NULL
+        AND child.startLine > $startLine
+        AND child.endLine <= $endLine
+      RETURN child.id AS uid, child.name AS name, 'Property' AS kind, child.filePath AS filePath,
+             child.startLine AS startLine, child.endLine AS endLine
+      UNION
+      MATCH (child:Constructor)
+      WHERE child.filePath = $filePath
+        AND child.id <> $symId
+        AND child.startLine IS NOT NULL
+        AND child.endLine IS NOT NULL
+        AND child.startLine > $startLine
+        AND child.endLine <= $endLine
+      RETURN child.id AS uid, child.name AS name, 'Constructor' AS kind, child.filePath AS filePath,
+             child.startLine AS startLine, child.endLine AS endLine
+      ORDER BY startLine ASC
+      LIMIT 100
+    `, {
+      symId: symbol.id,
+      filePath: symbol.filePath,
+      startLine: symbol.startLine,
+      endLine: symbol.endLine,
+    });
+
+    const filteredRows = this.filterImmediateContainedMembers(inferredRows);
+    return { rows: filteredRows, inferred: filteredRows.length > 0 };
+  }
+
+  private filterImmediateContainedMembers(rows: any[]): any[] {
+    const sorted = [...rows].sort((a: any, b: any) => {
+      const aStart = a.startLine ?? a[4] ?? Number.MAX_SAFE_INTEGER;
+      const bStart = b.startLine ?? b[4] ?? Number.MAX_SAFE_INTEGER;
+      if (aStart !== bStart) return aStart - bStart;
+      const aEnd = a.endLine ?? a[5] ?? -1;
+      const bEnd = b.endLine ?? b[5] ?? -1;
+      return bEnd - aEnd;
+    });
+
+    const kept: any[] = [];
+    for (const row of sorted) {
+      const startLine = row.startLine ?? row[4];
+      const endLine = row.endLine ?? row[5];
+      const kind = row.kind ?? row[2];
+      if (
+        typeof startLine !== 'number' ||
+        typeof endLine !== 'number'
+      ) {
+        kept.push(row);
+        continue;
+      }
+
+      const nestedInsideExistingContainer = kept.some((existing: any) => {
+        const existingKind = existing.kind ?? existing[2];
+        if (!['Function', 'Method', 'Constructor'].includes(existingKind)) {
+          return false;
+        }
+        const existingStart = existing.startLine ?? existing[4];
+        const existingEnd = existing.endLine ?? existing[5];
+        if (typeof existingStart !== 'number' || typeof existingEnd !== 'number') {
+          return false;
+        }
+        return startLine > existingStart && endLine <= existingEnd;
+      });
+
+      if (nestedInsideExistingContainer && ['Function', 'Method', 'Constructor'].includes(kind)) {
+        continue;
+      }
+      kept.push(row);
+    }
+
+    return kept;
+  }
+
   private isRojoMappedResult(rojoProject: any | null, filePath?: string): boolean {
     if (!rojoProject || !filePath) return false;
     return (rojoProject.getTargetsForFile(filePath) || []).length > 0;
@@ -626,27 +782,37 @@ export class LocalBackend {
 
     const hasMappedCandidates = dedupedRaw.some((result: any) => this.isRojoMappedResult(rojoProject, result.filePath));
     const preferMappedResults = this.isBroadSearchQuery(searchQuery) && hasMappedCandidates;
+    const broadSearch = this.isBroadSearchQuery(searchQuery);
+    const testFocusedQuery = this.isTestFocusedQuery(searchQuery);
 
     const ranked = dedupedRaw.map((result: any) => {
+      const resultType = this.getNodeKind(result);
       const rojoTarget = rojoProject?.getTargetsForFile(result.filePath)?.[0] as RojoTargetSummary | undefined;
-      const moduleSymbol = result.type === 'Module' ? result.name : primaryModules.get(result.filePath);
+      const moduleSymbol = resultType === 'Module' ? result.name : primaryModules.get(result.filePath);
       const rojoMappingBoost = preferMappedResults
         ? (rojoTarget ? 5 : -5)
+        : 0;
+      const productionBoost = broadSearch && this.isLikelyProductionFile(result.filePath) ? 3 : 0;
+      const testPenalty = broadSearch && isTestFilePath(result.filePath)
+        ? (testFocusedQuery ? 3.5 : 8)
+        : 0;
+      const nonSourcePenalty = broadSearch && !this.isLikelyProductionFile(result.filePath) && !isTestFilePath(result.filePath)
+        ? 2.5
         : 0;
       const score = (result.bm25Score ?? result.score ?? 0) + this.computeSearchBoost(searchQuery, {
         name: result.name,
         filePath: result.filePath,
-        type: result.type,
+        type: resultType,
         runtimeArea: result.runtimeArea,
         dataModelPath: rojoTarget?.dataModelPath,
         moduleSymbol,
         description: result.description,
-      }) + rojoMappingBoost;
+      }) + rojoMappingBoost + productionBoost - testPenalty - nonSourcePenalty;
 
       return {
         nodeId: result.nodeId,
         name: result.name,
-        type: result.type,
+        type: resultType,
         filePath: result.filePath,
         startLine: result.startLine,
         endLine: result.endLine,
@@ -670,6 +836,30 @@ export class LocalBackend {
     return this.cypher(repo, { query });
   }
 
+  private buildCypherError(query: string, errorMessage: string): any {
+    const starterQueries = [
+      "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20",
+      "MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community) RETURN c.heuristicLabel, COUNT(*) AS symbols ORDER BY symbols DESC LIMIT 20",
+      "MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process) RETURN p.heuristicLabel, s.name, r.step ORDER BY p.heuristicLabel, r.step LIMIT 30",
+    ];
+
+    if (/\btype\s*\(/i.test(query) || /function TYPE does not exist/i.test(errorMessage)) {
+      return {
+        error: errorMessage,
+        hint: "Use the CodeRelation `type` property instead of `type(r)`. Example: MATCH (a)-[r:CodeRelation {type: 'CALLS'}]->(b) RETURN a.name, b.name LIMIT 20",
+        schema_resource: 'gitnexus://schema',
+        starter_queries: starterQueries,
+      };
+    }
+
+    return {
+      error: errorMessage,
+      hint: 'Use read-only Cypher over the single CodeRelation table and filter edge kinds with the `type` property.',
+      schema_resource: 'gitnexus://schema',
+      starter_queries: starterQueries,
+    };
+  }
+
   private async cypher(repo: RepoHandle, params: { query: string }): Promise<any> {
     await this.ensureInitialized(repo.id);
 
@@ -679,14 +869,17 @@ export class LocalBackend {
 
     // Block write operations (defense-in-depth — DB is already read-only)
     if (CYPHER_WRITE_RE.test(params.query)) {
-      return { error: 'Write operations (CREATE, DELETE, SET, MERGE, REMOVE, DROP, ALTER, COPY, DETACH) are not allowed. The knowledge graph is read-only.' };
+      return this.buildCypherError(
+        params.query,
+        'Write operations (CREATE, DELETE, SET, MERGE, REMOVE, DROP, ALTER, COPY, DETACH) are not allowed. The knowledge graph is read-only.',
+      );
     }
 
     try {
       const result = await executeQuery(repo.id, params.query);
       return result;
     } catch (err: any) {
-      return { error: err.message || 'Query failed' };
+      return this.buildCypherError(params.query, err.message || 'Query failed');
     }
   }
 
@@ -769,7 +962,65 @@ export class LocalBackend {
       stats: repo.stats,
       indexedAt: repo.indexedAt,
       lastCommit: repo.lastCommit,
+      coverage: {
+        confidence: 'grounded',
+        sections: {} as Record<string, 'grounded' | 'partial'>,
+        notes: [] as string[],
+      },
     };
+
+    try {
+      const fileRows = await executeQuery(repo.id, `
+        MATCH (f:File)
+        RETURN f.filePath AS filePath
+      `);
+      const filePaths = fileRows.map((row: any) => row.filePath || row[0]).filter(Boolean);
+      const testFiles = filePaths.filter((filePath: string) => isTestFilePath(filePath));
+      result.production_vs_test = {
+        production_files: filePaths.length - testFiles.length,
+        test_files: testFiles.length,
+      };
+      result.coverage.sections.production_vs_test = 'grounded';
+    } catch (error: any) {
+      result.production_vs_test = null;
+      result.coverage.sections.production_vs_test = 'partial';
+      result.coverage.notes.push(`production_vs_test unavailable: ${error?.message || 'query failed'}`);
+    }
+
+    try {
+      const centralRows = await executeQuery(repo.id, `
+        MATCH (src)-[r:CodeRelation]->(n)
+        WHERE r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, COUNT(*) AS fanIn
+        ORDER BY fanIn DESC
+        LIMIT ${Math.max(limit * 3, 30)}
+      `);
+      result.top_symbols = centralRows
+        .map((row: any) => {
+          const type = this.getNodeKind({ id: row.id || row[0], type: row.type || row[2] });
+          return {
+            id: row.id || row[0],
+            name: row.name || row[1],
+            type,
+            filePath: row.filePath || row[3],
+            fan_in: row.fanIn || row[4] || 0,
+            priority:
+              (row.fanIn || row[4] || 0) +
+              (type === 'Class' ? 4 : 0) +
+              (type === 'Method' ? 2 : 0) -
+              (this.isLowSignalSummarySymbol(row.name || row[1]) ? 5 : 0),
+          };
+        })
+        .filter((row: any) => row.filePath && this.isLikelyProductionFile(row.filePath))
+        .sort((a: any, b: any) => b.priority - a.priority || b.fan_in - a.fan_in)
+        .map(({ priority: _priority, ...row }: any) => row)
+        .slice(0, limit);
+      result.coverage.sections.top_symbols = 'grounded';
+    } catch (error: any) {
+      result.top_symbols = null;
+      result.coverage.sections.top_symbols = 'partial';
+      result.coverage.notes.push(`top_symbols unavailable: ${error?.message || 'query failed'}`);
+    }
     
     if (params.showClusters !== false) {
       try {
@@ -789,8 +1040,11 @@ export class LocalBackend {
           symbolCount: c.symbolCount || c[4],
         }));
         result.clusters = this.aggregateClusters(rawClusters).slice(0, limit);
-      } catch {
-        result.clusters = [];
+        result.coverage.sections.clusters = 'grounded';
+      } catch (error: any) {
+        result.clusters = null;
+        result.coverage.sections.clusters = 'partial';
+        result.coverage.notes.push(`clusters unavailable: ${error?.message || 'query failed'}`);
       }
     }
     
@@ -809,9 +1063,16 @@ export class LocalBackend {
           processType: p.processType || p[3],
           stepCount: p.stepCount || p[4],
         }));
-      } catch {
-        result.processes = [];
+        result.coverage.sections.processes = 'grounded';
+      } catch (error: any) {
+        result.processes = null;
+        result.coverage.sections.processes = 'partial';
+        result.coverage.notes.push(`processes unavailable: ${error?.message || 'query failed'}`);
       }
+    }
+
+    if (result.coverage.notes.length > 0) {
+      result.coverage.confidence = 'partial';
     }
     
     return result;
@@ -902,7 +1163,17 @@ export class LocalBackend {
       this.getBoundaryImports(repo, filePath ? [filePath] : []),
     ]);
     const dataModelPath = rojoProject?.getTargetsForFile(filePath)?.[0]?.dataModelPath;
-    const moduleSymbol = (sym.type || sym[2]) === 'Module' ? (sym.name || sym[1]) : primaryModules.get(filePath);
+    const symbolKind = this.getNodeKind({ id: symId, type: sym.type || sym[2] });
+    const moduleSymbol = symbolKind === 'Module' ? (sym.name || sym[1]) : primaryModules.get(filePath);
+
+    const { rows: memberRows, inferred: inferredMembers } = await this.getContainedMembers(repo, {
+      id: symId,
+      kind: symbolKind,
+      filePath,
+      startLine: sym.startLine || sym[4],
+      endLine: sym.endLine || sym[5],
+    });
+    const memberIds = [...new Set(memberRows.map((row: any) => row.uid || row[0]).filter(Boolean))];
 
     // Categorized incoming refs
     const incomingRows = await executeParameterized(repo.id, `
@@ -928,6 +1199,30 @@ export class LocalBackend {
         RETURN p.id AS pid, p.heuristicLabel AS label, r.step AS step, p.stepCount AS stepCount
       `, { symId });
     } catch (e) { logQueryError('context:process-participation', e); }
+
+    let incomingViaMembersRows: any[] = [];
+    let outgoingViaMembersRows: any[] = [];
+    if (memberIds.length > 0) {
+      const quotedMemberIds = memberIds.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(', ');
+      try {
+        incomingViaMembersRows = await executeQuery(repo.id, `
+          MATCH (caller)-[r:CodeRelation]->(child)
+          WHERE child.id IN [${quotedMemberIds}] AND r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+          RETURN r.type AS relType, caller.id AS uid, caller.name AS name, caller.filePath AS filePath,
+                 labels(caller)[0] AS kind, child.name AS viaMember
+          LIMIT 40
+        `);
+      } catch (e) { logQueryError('context:incoming-via-members', e); }
+      try {
+        outgoingViaMembersRows = await executeQuery(repo.id, `
+          MATCH (child)-[r:CodeRelation]->(target)
+          WHERE child.id IN [${quotedMemberIds}] AND r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+          RETURN r.type AS relType, target.id AS uid, target.name AS name, target.filePath AS filePath,
+                 labels(target)[0] AS kind, child.name AS viaMember
+          LIMIT 40
+        `);
+      } catch (e) { logQueryError('context:outgoing-via-members', e); }
+    }
     
     // Helper to categorize refs
     const categorize = (rows: any[]) => {
@@ -939,19 +1234,40 @@ export class LocalBackend {
           name: row.name || row[2],
           filePath: row.filePath || row[3],
           kind: row.kind || row[4],
+          ...(row.viaMember || row[5] ? { viaMember: row.viaMember || row[5] } : {}),
         };
         if (!cats[relType]) cats[relType] = [];
         cats[relType].push(entry);
       }
       return cats;
     };
+
+    const directRelationshipCount = incomingRows.length + outgoingRows.length + processRows.length;
+    const memberRelationshipCount = incomingViaMembersRows.length + outgoingViaMembersRows.length;
+    const partialCoverage =
+      directRelationshipCount === 0 &&
+      (memberRelationshipCount > 0 || memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symbolKind));
+    const confidence = inferredMembers
+      ? 'partial'
+      : partialCoverage
+        ? 'partial'
+        : memberRelationshipCount > 0
+          ? 'expanded'
+          : 'grounded';
+    const coverageNote = inferredMembers
+      ? 'Direct container edges were not available for this symbol, so related members were inferred from same-file source ranges and filtered down to immediate container members. Results are materially better than raw symbol-only coverage, but graph coverage may still be incomplete.'
+      : partialCoverage
+        ? 'Direct relationships on this container symbol are sparse. Member-based relationships are shown where available, but graph coverage may still be incomplete.'
+        : memberRelationshipCount > 0
+          ? 'Includes additional relationships gathered through contained members.'
+          : 'Relationships are grounded in direct graph edges for this symbol.';
     
     return {
       status: 'found',
       symbol: {
         uid: sym.id || sym[0],
         name: sym.name || sym[1],
-        kind: sym.type || sym[2],
+        kind: symbolKind,
         filePath,
         startLine: sym.startLine || sym[4],
         endLine: sym.endLine || sym[5],
@@ -961,14 +1277,24 @@ export class LocalBackend {
         ...(boundaryImports.get(filePath)?.length ? { boundary_imports: boundaryImports.get(filePath) } : {}),
         ...(include_content && (sym.content || sym[7]) ? { content: sym.content || sym[7] } : {}),
       },
-      incoming: categorize(incomingRows),
-      outgoing: categorize(outgoingRows),
+      incoming: categorize([...incomingRows, ...incomingViaMembersRows]),
+      outgoing: categorize([...outgoingRows, ...outgoingViaMembersRows]),
       processes: processRows.map((r: any) => ({
         id: r.pid || r[0],
         name: r.label || r[1],
         step_index: r.step || r[2],
         step_count: r.stepCount || r[3],
       })),
+      members: memberRows.map((row: any) => ({
+        uid: row.uid || row[0],
+        name: row.name || row[1],
+        kind: row.kind || row[2],
+        filePath: row.filePath || row[3],
+      })),
+      coverage: {
+        confidence,
+        note: coverageNote,
+      },
     };
   }
 
@@ -1360,17 +1686,28 @@ export class LocalBackend {
     const targets = await executeParameterized(repo.id, `
       MATCH (n)
       WHERE n.name = $targetName
-      RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath
+      RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine
       LIMIT 1
     `, { targetName: target });
     if (targets.length === 0) return { error: `Target '${target}' not found` };
     
     const sym = targets[0];
     const symId = sym.id || sym[0];
+    const symType = this.getNodeKind({ id: symId, type: sym.type || sym[2] });
+    const { rows: memberRows, inferred: inferredMembers } = await this.getContainedMembers(repo, {
+      id: symId,
+      kind: symType,
+      filePath: sym.filePath || sym[3],
+      startLine: sym.startLine || sym[4],
+      endLine: sym.endLine || sym[5],
+    });
+    const memberIds = [...new Set(memberRows.map((row: any) => row.id || row.uid || row[0]).filter(Boolean))];
+    const traversalSourceIds = [symId, ...memberIds];
     
     const impacted: any[] = [];
-    const visited = new Set<string>([symId]);
-    let frontier = [symId];
+    const visited = new Set<string>(traversalSourceIds);
+    let frontier = traversalSourceIds;
     
     for (let depth = 1; depth <= maxDepth && frontier.length > 0; depth++) {
       const nextFrontier: string[] = [];
@@ -1476,17 +1813,39 @@ export class LocalBackend {
     } else if (directCount >= 5 || impacted.length >= 30) {
       risk = 'MEDIUM';
     }
+    if ((inferredMembers || (impacted.length === 0 && ['Class', 'Module', 'File'].includes(symType))) && impacted.length === 0) {
+      risk = 'UNKNOWN';
+    }
 
     return {
       target: {
         id: symId,
         name: sym.name || sym[1],
-        type: sym.type || sym[2],
+        type: symType,
         filePath: sym.filePath || sym[3],
+        member_count: memberRows.length,
       },
       direction,
       impactedCount: impacted.length,
       risk,
+      coverage: {
+        confidence:
+          inferredMembers
+            ? 'partial'
+            : impacted.length === 0 && (memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symType))
+              ? 'partial'
+              : memberRows.length > 0
+                ? 'expanded'
+                : 'grounded',
+        note:
+          inferredMembers
+            ? 'Direct container edges were not available for this symbol, so impact expansion used same-file source ranges filtered to immediate container members. Coverage is improved, but still partial.'
+            : impacted.length === 0 && (memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symType))
+              ? 'No affected symbols were found through direct graph traversal. For container-style symbols, impact coverage may still be incomplete even after expanding through contained members.'
+              : memberRows.length > 0
+                ? 'Impact includes relationships gathered through contained members for this symbol.'
+                : 'Impact is grounded in direct graph traversal for this symbol.',
+      },
       summary: {
         direct: directCount,
         processes_affected: processCount,

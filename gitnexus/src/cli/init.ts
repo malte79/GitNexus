@@ -55,7 +55,7 @@ export const initCommand = async () => {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Invalid CodeNexus config at ${configPath}`);
       console.error(message);
-      console.error('Repair the existing config and rerun `codenexus init`.');
+      console.error('Repair the existing config and rerun `codenexus manage init`.');
       process.exitCode = 1;
       return;
     }

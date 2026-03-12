@@ -1,4 +1,4 @@
-export function renderInfoMarkdown(): string {
+export function renderHelpMarkdown(): string {
   return `# CodeNexus
 
 Agents working in a repo that uses CodeNexus will use it as part of normal code analysis, planning, implementation, and refactoring work.
@@ -14,51 +14,182 @@ npm link
 
 This installs the \`codenexus\` command on your machine from the current local checkout.
 
-## Repo Lifecycle
+## Command Shape
 
-From the repo you want to work in, use this lifecycle:
+CodeNexus now separates use from administration:
 
 \`\`\`bash
-codenexus init
-codenexus index
-codenexus status
-codenexus serve
-codenexus start
-codenexus stop
-codenexus restart
+codenexus help
+codenexus query <terms...>
+codenexus context <name>
+codenexus impact <target> --direction upstream
+codenexus detect-changes
+codenexus cypher <query...>
+codenexus rename <symbol> --new-name <name>
+codenexus summary
+codenexus manage <subcommand>
 \`\`\`
 
-What each command does:
+Use plane:
+- \`codenexus help\`: explain the CLI surface and the direct MCP path
+- \`codenexus query\`: find relevant symbols and execution flows
+- \`codenexus context\`: inspect one symbol in depth
+- \`codenexus impact\`: estimate blast radius before changing a symbol
+- \`codenexus detect-changes\`: analyze local git changes and affected flows
+- \`codenexus cypher\`: ask a custom read-only graph question
+- \`codenexus rename\`: preview or apply a coordinated rename
+- \`codenexus summary\`: show a compact repo or subsystem summary
 
-- \`codenexus init\`: create repo-local CodeNexus config in \`.codenexus/config.toml\`
-- \`codenexus index\`: build or refresh the on-disk index
-- \`codenexus status\`: show repo, index, and live service state
-- \`codenexus serve\`: start the repo-local HTTP service in the foreground
-- \`codenexus start\`: start the repo-local HTTP service in background mode
-- \`codenexus stop\`: stop the repo-local background service
-- \`codenexus restart\`: restart the repo-local background service
+Manage plane:
+- \`codenexus manage init\`: create repo-local CodeNexus config in \`.codenexus/config.toml\`
+- \`codenexus manage index\`: build or refresh the on-disk index
+- \`codenexus manage status\`: show repo, index, and live service state
+- \`codenexus manage serve\`: start the repo-local HTTP service in the foreground
+- \`codenexus manage start\`: start the repo-local HTTP service in background mode
+- \`codenexus manage stop\`: stop the repo-local background service
+- \`codenexus manage restart\`: restart the repo-local background service
+
+## Service Requirement
+
+The top-level structural commands still use the repo-local MCP HTTP service. They do not bypass it.
+
+Normal setup from the repo you want to analyze:
+
+\`\`\`bash
+codenexus manage init
+codenexus manage index
+codenexus manage start
+codenexus manage status
+\`\`\`
+
+If a top-level structural command says the service is unavailable, the normal remediation is:
+
+\`\`\`bash
+codenexus manage start
+\`\`\`
 
 ## Freshness
 
-- \`codenexus index\` is the manual refresh path
-- \`codenexus start\` enables background auto-indexing by default on a 5 minute interval (configurable in \`.codenexus/config.toml\`)
-- foreground \`codenexus serve\` does not run background auto-indexing
+- \`codenexus manage index\` is the manual refresh path
+- \`codenexus manage start\` enables background auto-indexing by default on a 5 minute interval (configurable in \`.codenexus/config.toml\`)
+- foreground \`codenexus manage serve\` does not run background auto-indexing
 - if a CodeNexus service is already running, reindexing refreshes disk and the live service adopts the rebuilt index automatically in the normal path
-- if live reload fails, use \`codenexus restart\` for a background service or restart foreground \`codenexus serve\` manually
-- if you need certainty immediately, run \`codenexus index\` manually instead of waiting for the background interval
+- if live reload fails, use \`codenexus manage restart\` for a background service or restart foreground \`codenexus manage serve\` manually
+- if you need certainty immediately, run \`codenexus manage index\` manually instead of waiting for the background interval
+
+## Everyday CLI Use
+
+### \`query\`
+
+Good for:
+- subsystem discovery
+- “where does this behavior live?”
+- finding the most relevant files before editing
+
+CLI examples:
+
+\`\`\`bash
+codenexus query round start show logic
+codenexus query bridge http lifecycle status start stop studio automation
+\`\`\`
+
+### \`context\`
+
+Good for:
+- “show me callers of this symbol”
+- understanding one module before changing it
+- disambiguating symbols with the same name
+
+CLI examples:
+
+\`\`\`bash
+codenexus context SpotlightRegistry
+codenexus context CommandBridgeHandler --file-path typed/bridge/http
+\`\`\`
+
+### \`impact\`
+
+Good for:
+- “what breaks if I change this module?”
+- fan-in and dependency-risk checks
+- refactor safety checks
+
+CLI examples:
+
+\`\`\`bash
+codenexus impact LightingShowService --direction upstream
+codenexus impact ProtocolRouter --direction upstream --max-depth 4
+\`\`\`
+
+### \`detect-changes\`
+
+Good for:
+- pre-commit review
+- tracing changed symbols into affected execution flows
+- checking whether a local edit touched a sensitive area
+
+CLI examples:
+
+\`\`\`bash
+codenexus detect-changes
+codenexus detect-changes --scope compare --base-ref main
+\`\`\`
+
+### \`cypher\`
+
+Good for:
+- subsystem dependency graph queries
+- custom caller or importer reports
+- one-off graph exploration
+
+CLI examples:
+
+\`\`\`bash
+codenexus cypher "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20"
+\`\`\`
+
+When Cypher fails on a near miss such as \`type(r)\`, use the schema and starter guidance from the tool output or the direct MCP resources.
+
+### \`rename\`
+
+Good for:
+- cross-file symbol rename preview
+- safer refactors than blind search-and-replace
+- checking rename confidence before editing
+
+CLI examples:
+
+\`\`\`bash
+codenexus rename LightingShowService --new-name ShowLightingService
+codenexus rename UIService --file-path src/server/Game/UIService.lua --new-name GameUIService --apply
+\`\`\`
+
+### \`summary\`
+
+Good for:
+- top central symbols by subsystem
+- production-versus-test concentration
+- initial refactor ranking before a deeper dive
+
+CLI examples:
+
+\`\`\`bash
+codenexus summary
+codenexus summary --limit 10 --no-processes
+\`\`\`
 
 ## Using The HTTP Service
 
-The richer structural features are exposed through the repo-local MCP HTTP service.
+The top-level structural commands are thin wrappers over the repo-local MCP HTTP service. Direct MCP access is still the advanced path when you want to script or integrate with the tool directly.
 
 Start the service from the repo you want to analyze:
 
 \`\`\`bash
-codenexus start
-codenexus status
+codenexus manage start
+codenexus manage status
 \`\`\`
 
-Use \`codenexus status\` to confirm the configured port. By default, CodeNexus uses port \`4747\`, so the service URL is usually:
+Use \`codenexus manage status\` to confirm the configured port. By default, CodeNexus uses port \`4747\`, so the service URL is usually:
 
 \`\`\`text
 http://127.0.0.1:4747/api/mcp
@@ -111,6 +242,8 @@ await client.close();
 \`\`\`
 
 ### Tool Use Cases And Example Calls
+
+These examples use the direct MCP path. The equivalent top-level CLI commands are usually simpler for day-to-day use.
 
 #### \`query\`
 
@@ -295,16 +428,17 @@ await client.callTool({
 This repo uses CodeNexus for repo-local code intelligence. Agents working here will use it during normal analysis and change work.
 
 Common workflow:
-- \`codenexus status\`
-- \`codenexus index\`
-- \`codenexus start\`
+- \`codenexus help\`
+- \`codenexus manage status\`
+- \`codenexus manage index\`
+- \`codenexus manage start\`
 
 Important:
 - \`.codenexus/\` is repo-local state and should usually be gitignored
-- \`codenexus index\` is the manual refresh path
-- background \`codenexus start\` enables automatic reindex on the configured interval (5 minutes by default)
+- \`codenexus manage index\` is the manual refresh path
+- background \`codenexus manage start\` enables automatic reindex on the configured interval (5 minutes by default)
 - a live service adopts rebuilt indexes automatically in the normal path
-- if live reload fails, use \`codenexus restart\` (background) or restart foreground \`codenexus serve\`
+- if live reload fails, use \`codenexus manage restart\` (background) or restart foreground \`codenexus manage serve\`
 - richer structural queries are available through the repo-local MCP HTTP service at \`/api/mcp\`
 \`\`\`
 
@@ -324,7 +458,7 @@ Agents should use CodeNexus aggressively for refactors. It is one of the stronge
 
 ### Background Freshness
 
-Agents using background mode should expect CodeNexus to keep the repo reasonably fresh on its configured interval. When immediate freshness matters, they will still run \`codenexus index\` directly instead of waiting for the next background cycle.
+Agents using background mode should expect CodeNexus to keep the repo reasonably fresh on its configured interval. When immediate freshness matters, they will still run \`codenexus manage index\` directly instead of waiting for the next background cycle.
 
 ## Supported Scope
 
@@ -334,6 +468,10 @@ Agents using background mode should expect CodeNexus to keep the repo reasonably
 `;
 }
 
-export async function infoCommand(): Promise<void> {
-  process.stdout.write(`${renderInfoMarkdown()}\n`);
+export function renderInfoMarkdown(): string {
+  return renderHelpMarkdown();
+}
+
+export async function helpCommand(): Promise<void> {
+  process.stdout.write(`${renderHelpMarkdown()}\n`);
 }

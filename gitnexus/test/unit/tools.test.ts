@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { GITNEXUS_TOOLS } from '../../src/mcp/tools.js';
 
 describe('GITNEXUS_TOOLS', () => {
-  it('exports exactly 6 tools', () => {
-    expect(GITNEXUS_TOOLS).toHaveLength(6);
+  it('exports exactly 7 tools', () => {
+    expect(GITNEXUS_TOOLS).toHaveLength(7);
   });
 
   it('contains the expected bound-repo tool names', () => {
@@ -15,6 +15,7 @@ describe('GITNEXUS_TOOLS', () => {
         'detect_changes',
         'rename',
         'impact',
+        'summary',
       ]),
     );
   });

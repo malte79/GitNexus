@@ -112,7 +112,7 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   const context = backend.getContext();
 
   if (!context) {
-    return 'error: No codebase loaded. Create .codenexus/config.toml and run codenexus index';
+    return 'error: No codebase loaded. Create .codenexus/config.toml and run codenexus manage index';
   }
 
   const staleness = checkStaleness(repo.repoPath, repo.lastCommit || 'HEAD');
@@ -132,6 +132,7 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   lines.push(`  processes: ${context.stats.processCount}`);
   lines.push('');
   lines.push('tools_available:');
+  lines.push('  - summary: Compact repo and subsystem overview');
   lines.push('  - query: Process-grouped code intelligence');
   lines.push('  - context: 360-degree symbol view');
   lines.push('  - impact: Blast radius analysis');
@@ -155,7 +156,7 @@ async function getClustersResource(backend: LocalBackend): Promise<string> {
     const result = await backend.queryClusters(100);
 
     if (!result.clusters || result.clusters.length === 0) {
-      return 'modules: []\n# No functional areas detected. Run: codenexus index';
+      return 'modules: []\n# No functional areas detected. Run: codenexus manage index';
     }
 
     const displayLimit = 20;
@@ -186,7 +187,7 @@ async function getProcessesResource(backend: LocalBackend): Promise<string> {
     const result = await backend.queryProcesses(50);
 
     if (!result.processes || result.processes.length === 0) {
-      return 'processes: []\n# No processes detected. Run: codenexus index';
+      return 'processes: []\n# No processes detected. Run: codenexus manage index';
     }
 
     const displayLimit = 20;

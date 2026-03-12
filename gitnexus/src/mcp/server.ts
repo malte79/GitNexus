@@ -31,6 +31,9 @@ import { getResourceDefinitions, getResourceTemplates, readResource } from './re
  */
 function getNextStepHint(toolName: string, args: Record<string, any> | undefined): string {
   switch (toolName) {
+    case 'summary':
+      return `\n\n---\n**Next:** Use query({query: "<concept>"}) to drill into a subsystem, or context({name: "<symbol_name>"}) to inspect one central symbol.`;
+
     case 'query':
       return `\n\n---\n**Next:** To understand a specific symbol in depth, use context({name: "<symbol_name>"}) to see categorized refs and process participation.`;
 
