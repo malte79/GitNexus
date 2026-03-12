@@ -55,7 +55,7 @@ function buildHealthPayload(
   reloadError?: string,
 ): ServiceHealth {
   if (!state.meta) {
-    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus index` first.');
+    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus manage index` first.');
   }
 
   return {
@@ -97,7 +97,7 @@ function buildAutoIndexBackoffUntil(
 function requireStartableState(state: RepoStateSnapshot): void {
   switch (state.baseState) {
     case 'uninitialized':
-      throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus init` first.');
+      throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus manage init` first.');
     case 'invalid_config':
       throw new ServiceStartupError(
         state.configError
@@ -105,7 +105,7 @@ function requireStartableState(state: RepoStateSnapshot): void {
           : 'Invalid CodeNexus config.',
       );
     case 'initialized_unindexed':
-      throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus index` first.');
+      throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus manage index` first.');
     case 'indexed_current':
     case 'indexed_stale':
       return;
@@ -121,7 +121,7 @@ async function createBoundBackend(repoRoot: string): Promise<LocalBackend> {
   const backend = new LocalBackend(repoRoot);
   const initialized = await backend.init();
   if (!initialized) {
-    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus index` first.');
+    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus manage index` first.');
   }
   return backend;
 }
@@ -229,7 +229,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
   requireStartableState(state);
 
   if (!state.config) {
-    throw new ServiceStartupError('Missing CodeNexus config. Run `codenexus init` first.');
+    throw new ServiceStartupError('Missing CodeNexus config. Run `codenexus manage init` first.');
   }
 
   if (state.baseState === 'serving_current' || state.baseState === 'serving_stale') {
@@ -390,7 +390,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
     await persistRuntime();
 
     autoIndexPromise = (async () => {
-      const cliInvocation = resolveCliInvocation(['index', repoRoot]);
+      const cliInvocation = resolveCliInvocation(['manage', 'index', repoRoot]);
       const child = spawn(cliInvocation.command, cliInvocation.args, {
         cwd: repoRoot,
         env: {
@@ -525,7 +525,7 @@ export async function stopRepoLocalService(startPath = process.cwd()): Promise<{
   const { repoRoot, worktreeRoot } = boundary;
   const state = await getRepoState(repoRoot);
   if (!state || !state.config) {
-    throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus init` first.');
+    throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus manage init` first.');
   }
 
   const { storagePath } = getStoragePaths(repoRoot);
@@ -562,7 +562,7 @@ export async function waitForRepoLocalService(startPath = process.cwd(), timeout
 
   const state = await getRepoState(boundary.repoRoot);
   if (!state?.config) {
-    throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus init` first.');
+    throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus manage init` first.');
   }
 
   await assertNoConflictingCodeNexusService(state.config.port, boundary.repoRoot, boundary.worktreeRoot);

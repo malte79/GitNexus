@@ -164,7 +164,7 @@ describe('indexCommand', () => {
 
     const output = logSpy.mock.calls.flat().join(' ');
     expect(output).toContain('Note: A live CodeNexus service failed to adopt the refreshed on-disk index automatically.');
-    expect(output).toContain('Run `codenexus restart` to recover the background service.');
+    expect(output).toContain('Run `codenexus manage restart` to recover the background service.');
 
     exitSpy.mockRestore();
     logSpy.mockRestore();

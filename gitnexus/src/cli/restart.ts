@@ -6,7 +6,7 @@ export const restartCommand = async () => {
   try {
     await stopRepoLocalService(process.cwd());
 
-    const cliInvocation = resolveCliInvocation(['serve']);
+    const cliInvocation = resolveCliInvocation(['manage', 'serve']);
     const child = spawn(cliInvocation.command, cliInvocation.args, {
       cwd: process.cwd(),
       detached: true,

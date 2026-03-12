@@ -2,16 +2,7 @@
 
 ## Purpose
 
-This document maps the locked CodeNexus runtime contract onto the reduced post-Epic-02 codebase.
-
-Epic 03 implements a hard cut:
-
-- `.codenexus/` is the only active repo-state boundary
-- the nearest enclosing git root is the active repo boundary
-- nested repos win over parent repos
-- worktrees are distinct runtime boundaries
-- there is no active global registry
-- there is no active repo-discovery routing surface
+This document maps the locked CodeNexus runtime contract onto the current repo-local implementation.
 
 ## Owning Modules
 
@@ -22,15 +13,15 @@ Epic 03 implements a hard cut:
 | repo-bound query engine | [local-backend.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend.ts) | one bound repo, one Kuzu handle, one active tool surface |
 | agent-facing tool schema | [tools.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/tools.ts) | single-repo tool contracts with no repo routing |
 | agent-facing resources | [resources.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/resources.ts) | single-repo resource URIs with no repo discovery |
-| repo activation shim | [init.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/init.ts) | create `.codenexus/config.toml` without creating index or runtime state |
-| retained indexing shim | [index-command.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index-command.ts) | write `.codenexus/kuzu` and `.codenexus/meta.json` only |
-| retained status shim | [status.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/status.ts) | report canonical base state and detail flags |
-| serve command | [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts) | start the repo-local HTTP service for one repo boundary |
+| top-level CLI entrypoint | [index.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index.ts) | use-plane versus manage-plane command tree |
+| top-level help surface | [info.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/info.ts) | Markdown guidance for the use plane and direct MCP path |
+| CLI MCP client wrapper | [mcp-command-client.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/mcp-command-client.ts) | repo-match checks, bounded service connection, and tool passthrough |
+| lifecycle shims | [init.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/init.ts), [index-command.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index-command.ts), [status.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/status.ts), [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts), [start.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/start.ts), [stop.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/stop.ts), [restart.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/restart.ts) | repo activation, index lifecycle, status, and service lifecycle |
 | service runtime | [service-runtime.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/server/service-runtime.ts) | bind the HTTP server, own graceful shutdown, maintain runtime metadata, and run background auto-index polling |
 
 ## Active State Layout
 
-Epic 03 uses the v1 `.codenexus/` layout already locked in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md):
+The active repo-local layout is:
 
 - `.codenexus/config.toml`
 - `.codenexus/meta.json`
@@ -38,89 +29,58 @@ Epic 03 uses the v1 `.codenexus/` layout already locked in [repo-state-model.md]
 - `.codenexus/runtime.json`
 - `.codenexus/index.lock`
 
-All five paths are now exercised by the active CLI surface. `codenexus serve` owns the live HTTP lifecycle and advisory `runtime.json`. `codenexus index` owns `.codenexus/index.lock` while an index run is active so manual and background reindex attempts serialize on one repo boundary.
+`codenexus manage index` owns `.codenexus/index.lock` while an index run is active so manual and background reindex attempts serialize on one repo boundary.
 
-The live service health contract is now also responsible for exposing the loaded index identity the service actually opened at startup. That identity is the source of truth for serving freshness, while `runtime.json` persists the same facts only as advisory recovery state.
-
-Epic 11 extends the same runtime seam rather than adding a second service path:
-
-- detached background mode reads `auto_index` and `auto_index_interval_seconds` from `.codenexus/config.toml`
-- only detached background mode may trigger automatic reindex attempts
-- the runtime checks the same repo-state freshness inputs already owned by [repo-manager.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/repo-manager.ts)
-- branch switches are treated as ordinary repo divergence
-- successful background auto-index still reuses the normal `codenexus index` command path and the existing live-reload adoption path
-- failure and backoff state is surfaced through `runtime.json`, `/api/health`, and `codenexus status`
-
-## Hard-Cut Removals
-
-Epic 03 removes the old active architecture rather than adapting it:
-
-- no `~/.gitnexus/registry.json`
-- no registry refresh path
-- no `list_repos`
-- no `gitnexus://repos`
-- no repo-name-targeted MCP resource paths
-- no active `repo` parameter routing semantics
-- no `.gitnexus/` runtime ownership
+The live service health contract exposes the loaded index identity the service actually opened at startup. That identity is the source of truth for serving freshness, while `runtime.json` persists the same facts only as advisory recovery state.
 
 ## Active CLI Surface
 
-Epic 04 replaces the inherited user-facing CLI with:
+The current CLI surface is intentionally split:
 
-- `codenexus init`
-- `codenexus index`
-- `codenexus status`
-- `codenexus serve`
+- use plane:
+  - `codenexus help`
+  - `codenexus query`
+  - `codenexus context`
+  - `codenexus impact`
+  - `codenexus detect-changes`
+  - `codenexus cypher`
+  - `codenexus rename`
+  - `codenexus summary`
+- manage plane:
+  - `codenexus manage init`
+  - `codenexus manage index`
+  - `codenexus manage status`
+  - `codenexus manage serve`
+  - `codenexus manage start`
+  - `codenexus manage stop`
+  - `codenexus manage restart`
 
-`codenexus serve` now starts the repo-local HTTP service directly. The CLI must not silently fall back to inherited transport behavior for compatibility.
+The top-level structural commands are thin HTTP clients over the repo-local MCP service. They do not bypass the service and do not auto-start it.
 
-## Separation From Later Epics
+## Runtime Notes
 
-Epic 03 owns:
+- `codenexus manage serve` starts the repo-local HTTP service directly
+- `codenexus manage start` runs the same service in detached background mode
+- only detached background mode owns automatic freshness polling
+- successful background auto-index still reuses the normal `codenexus manage index` path and the existing live-reload adoption path
+- failure and backoff state is surfaced through `runtime.json`, `/api/health`, and `codenexus manage status`
 
-- repo-local state ownership
-- single-repo backend binding
-- removal of active multi-repo affordances
+## Query Surface Notes
 
-Epic 04 still owns:
+The bound MCP tool surface is now:
 
-- the final user-facing CLI shape
-- `codenexus init`
-- command-module renaming and user ergonomics
+- `summary`
+- `query`
+- `context`
+- `impact`
+- `detect_changes`
+- `rename`
+- `cypher`
 
-Epic 05 owns and now implements:
+Implementation posture:
 
-- the repo-local HTTP MCP lifecycle
-- port binding and runtime metadata writes as a real service contract
-- replacement of retained stdio MCP as the primary transport
-
-## Language Layer Extension
-
-Epic 07 extends the existing indexing engine with Luau as a language-level feature, not as a separate product path.
-
-The same core seams remain responsible:
-
-- [supported-languages.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/config/supported-languages.ts) owns language registration
-- [utils.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/utils.ts) owns extension mapping
-- [parser-loader.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/tree-sitter/parser-loader.ts) and [parse-worker.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/workers/parse-worker.ts) own parser loading
-- [tree-sitter-queries.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/tree-sitter-queries.ts) owns language capture definitions
-- [import-processor.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/import-processor.ts) and [call-processor.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/call-processor.ts) own graph linking
-
-Epic 07 adds Luau to those existing seams only.
-
-Epic 08 layers Roblox- and Rojo-specific semantics on top through a dedicated domain helper under [gitnexus/src/core/ingestion/roblox](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/core/ingestion/roblox):
-
-- `default.project.json` is parsed into a deterministic filesystem-to-DataModel mapping
-- static Roblox path forms such as `game:GetService(...)`, `script.Parent`, and chained `WaitForChild(...)` are resolved conservatively
-- shallow syntax-local aliases of those rooted paths are supported
-- runtime-area tagging (`shared`, `client`, `server`, `other`) is carried into the indexed graph and surfaced through query results
-
-This keeps the Roblox specialization isolated from the generic Luau parser and graph seams while making the existing product genuinely useful on Rojo-based Roblox repos.
-
-Epic 09 then improves the agent-facing ergonomics on top of that correctness layer:
-
-- common returned Luau module tables become stronger first-class symbols
-- deterministic ranking uses exact module names, file names, split-word service aliases, `runtimeArea`, and Rojo path context
-- query and context responses now surface concise Roblox-aware facts such as module symbol, runtime area, DataModel path, and key boundary-crossing imports
-
-Those ergonomics changes are documented in [roblox-query-ergonomics.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/roblox-query-ergonomics.md).
+- `query` remains BM25-plus-graph retrieval with deterministic ranking adjustments
+- `summary` is a read-only overview derived from existing graph facts
+- `context` prefers direct relationships, but may supplement container symbols with member-based relationships and explicit partial-coverage reporting
+- `impact` prefers direct graph traversal, but may expand through contained members and report partial confidence when container-symbol coverage is incomplete
+- `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)`

@@ -48,7 +48,7 @@ describe('statusCommand', () => {
     await statusCommand();
 
     const output = logSpy.mock.calls.flat().join(' ');
-    expect(output).toContain('Refresh action: run `codenexus index` to refresh the on-disk index.');
+    expect(output).toContain('Refresh action: run `codenexus manage index` to refresh the on-disk index.');
 
     logSpy.mockRestore();
   });
@@ -105,6 +105,7 @@ describe('statusCommand', () => {
     await statusCommand();
 
     const output = logSpy.mock.calls.flat().join(' ');
+    expect(output).toContain('Primary stale reason: the live service has not adopted the refreshed on-disk index yet.');
     expect(output).toContain('Reload action: the live service is still adopting the refreshed on-disk index.');
     expect(output).toContain('Loaded service commit: abcdef1');
     expect(output).toContain('Service mode: background');
@@ -169,9 +170,11 @@ describe('statusCommand', () => {
 
     const output = logSpy.mock.calls.flat().join(' ');
     expect(output).toContain('Reload error: reload failed');
-    expect(output).toContain('Reload action: run `codenexus restart` to recover from the last live-reload failure.');
+    expect(output).toContain('Primary stale reason: the live service failed to reload the refreshed on-disk index.');
+    expect(output).toContain('Reload action: run `codenexus manage restart` to recover from the last live-reload failure.');
     expect(output).toContain('Auto-index error: Auto-index exited with code 1');
     expect(output).toContain('Auto-index backoff until:');
+    expect(output).toContain('Auto-index note: automatic freshness is temporarily paused by backoff');
 
     logSpy.mockRestore();
   });

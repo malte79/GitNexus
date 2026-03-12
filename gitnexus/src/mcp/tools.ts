@@ -22,6 +22,19 @@ export interface ToolDefinition {
 
 export const GITNEXUS_TOOLS: ToolDefinition[] = [
   {
+    name: 'summary',
+    description: `Show a compact structural summary for the bound repo, including subsystems and central symbols.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        showClusters: { type: 'boolean', description: 'Include subsystem or module summary (default: true)', default: true },
+        showProcesses: { type: 'boolean', description: 'Include process summary (default: true)', default: true },
+        limit: { type: 'number', description: 'Max clusters or processes to return (default: 20)', default: 20 },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'query',
     description: `Query the code knowledge graph for execution flows related to a concept.
 Returns processes ranked by relevance for the bound repo.`,

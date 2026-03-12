@@ -1,26 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
-
-vi.mock('../../src/cli/init.js', () => ({
-  initCommand: vi.fn(),
-}));
-vi.mock('../../src/cli/index-command.js', () => ({
-  indexCommand: vi.fn(),
-}));
-vi.mock('../../src/cli/serve.js', () => ({
-  serveCommand: vi.fn(),
-}));
-vi.mock('../../src/cli/start.js', () => ({
-  startCommand: vi.fn(),
-}));
-vi.mock('../../src/cli/stop.js', () => ({
-  stopCommand: vi.fn(),
-}));
-vi.mock('../../src/cli/restart.js', () => ({
-  restartCommand: vi.fn(),
-}));
-vi.mock('../../src/cli/info.js', () => ({
-  infoCommand: vi.fn(),
-}));
+import { describe, expect, it } from 'vitest';
 
 describe('CLI commands', () => {
   describe('version', () => {
@@ -60,6 +38,19 @@ describe('CLI commands', () => {
 
       expect(program.name()).toBe('codenexus');
       expect(program.commands.map((command) => command.name())).toEqual([
+        'help',
+        'query',
+        'context',
+        'impact',
+        'detect-changes',
+        'cypher',
+        'rename',
+        'summary',
+        'manage',
+      ]);
+
+      const manage = program.commands.find((command) => command.name() === 'manage');
+      expect(manage?.commands.map((command) => command.name())).toEqual([
         'init',
         'index',
         'status',
@@ -67,75 +58,75 @@ describe('CLI commands', () => {
         'start',
         'stop',
         'restart',
-        'info',
       ]);
     });
 
-    it('renders help for the codenexus command tree', async () => {
+    it('renders help for the new use-plane and manage-plane tree', async () => {
       const { buildProgram } = await import('../../src/cli/index.js');
       const help = buildProgram().helpInformation();
 
       expect(help).toContain('codenexus');
-      expect(help).toContain('init');
-      expect(help).toContain('index');
-      expect(help).toContain('status');
-      expect(help).toContain('serve');
-      expect(help).toContain('start');
-      expect(help).toContain('stop');
-      expect(help).toContain('restart');
-      expect(help).toContain('info');
-      expect(help).not.toContain('analyze');
-      expect(help).not.toContain('\nmcp');
+      expect(help).toContain('help');
+      expect(help).toContain('query');
+      expect(help).toContain('context');
+      expect(help).toContain('impact');
+      expect(help).toContain('detect-changes');
+      expect(help).toContain('cypher');
+      expect(help).toContain('rename');
+      expect(help).toContain('summary');
+      expect(help).toContain('manage');
+      expect(help).not.toContain('\ninfo');
+      expect(help).not.toContain('\ninit');
+      expect(help).not.toContain('\nindex');
+      expect(help).not.toContain('\nstatus');
+      expect(help).not.toContain('\nserve');
+      expect(help).not.toContain('\nstart');
+      expect(help).not.toContain('\nstop');
+      expect(help).not.toContain('\nrestart');
       expect(help).not.toContain('gitnexus');
     });
   });
 
-  describe('initCommand', () => {
-    it('is a function', async () => {
-      const { initCommand } = await import('../../src/cli/init.js');
-      expect(typeof initCommand).toBe('function');
+  describe('legacy top-level guidance', () => {
+    it('redirects old top-level admin commands to manage', async () => {
+      const { handleLegacyTopLevelCommand } = await import('../../src/cli/index.js');
+      const messages: string[] = [];
+
+      expect(handleLegacyTopLevelCommand(['node', 'codenexus', 'status'], (line) => messages.push(line))).toBe(true);
+      expect(messages.join('\n')).toContain('Use `codenexus manage status` instead.');
+    });
+
+    it('redirects codenexus info to codenexus help', async () => {
+      const { handleLegacyTopLevelCommand } = await import('../../src/cli/index.js');
+      const messages: string[] = [];
+
+      expect(handleLegacyTopLevelCommand(['node', 'codenexus', 'info'], (line) => messages.push(line))).toBe(true);
+      expect(messages.join('\n')).toContain('Use `codenexus help` instead.');
     });
   });
 
-  describe('indexCommand', () => {
-    it('is a function', async () => {
-      const { indexCommand } = await import('../../src/cli/index-command.js');
-      expect(typeof indexCommand).toBe('function');
+  describe('command modules', () => {
+    it('exports helpCommand from the help surface module', async () => {
+      const { helpCommand } = await import('../../src/cli/info.js');
+      expect(typeof helpCommand).toBe('function');
     });
-  });
 
-  describe('serveCommand', () => {
-    it('is a function', async () => {
-      const { serveCommand } = await import('../../src/cli/serve.js');
-      expect(typeof serveCommand).toBe('function');
-    });
-  });
+    it('exports top-level analysis commands', async () => {
+      const { queryCommand } = await import('../../src/cli/query.js');
+      const { contextCommand } = await import('../../src/cli/context.js');
+      const { impactCommand } = await import('../../src/cli/impact.js');
+      const { detectChangesCommand } = await import('../../src/cli/detect-changes.js');
+      const { cypherCommand } = await import('../../src/cli/cypher.js');
+      const { renameCommand } = await import('../../src/cli/rename.js');
+      const { summaryCommand } = await import('../../src/cli/summary.js');
 
-  describe('startCommand', () => {
-    it('is a function', async () => {
-      const { startCommand } = await import('../../src/cli/start.js');
-      expect(typeof startCommand).toBe('function');
-    });
-  });
-
-  describe('stopCommand', () => {
-    it('is a function', async () => {
-      const { stopCommand } = await import('../../src/cli/stop.js');
-      expect(typeof stopCommand).toBe('function');
-    });
-  });
-
-  describe('restartCommand', () => {
-    it('is a function', async () => {
-      const { restartCommand } = await import('../../src/cli/restart.js');
-      expect(typeof restartCommand).toBe('function');
-    });
-  });
-
-  describe('infoCommand', () => {
-    it('is a function', async () => {
-      const { infoCommand } = await import('../../src/cli/info.js');
-      expect(typeof infoCommand).toBe('function');
+      expect(typeof queryCommand).toBe('function');
+      expect(typeof contextCommand).toBe('function');
+      expect(typeof impactCommand).toBe('function');
+      expect(typeof detectChangesCommand).toBe('function');
+      expect(typeof cypherCommand).toBe('function');
+      expect(typeof renameCommand).toBe('function');
+      expect(typeof summaryCommand).toBe('function');
     });
   });
 });

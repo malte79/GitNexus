@@ -108,7 +108,7 @@ export const indexCommand = async (
   if (!config) {
     console.log('  Repo is not initialized for CodeNexus\n');
     console.log('  Missing or invalid .codenexus/config.toml\n');
-    console.log('  Run `codenexus init` first.\n');
+    console.log('  Run `codenexus manage init` first.\n');
     process.exitCode = 1;
     return;
   }
@@ -289,23 +289,23 @@ export const indexCommand = async (
   if (stateAfterIndex?.liveHealth?.reload_error) {
     console.log('  Note: A live CodeNexus service failed to adopt the refreshed on-disk index automatically.');
     if (stateAfterIndex.liveHealth.mode === 'background') {
-      console.log('  Run `codenexus restart` to recover the background service.');
+      console.log('  Run `codenexus manage restart` to recover the background service.');
     } else {
-      console.log('  Stop and rerun `codenexus serve` to recover the foreground service.');
+      console.log('  Stop and rerun `codenexus manage serve` to recover the foreground service.');
     }
   } else if (stateAfterIndex?.detailFlags.includes('service_restart_required')) {
     console.log('  Note: A live CodeNexus service is still adopting the refreshed on-disk index.');
-    console.log('  Run `codenexus status` again shortly to confirm the new index generation is loaded.');
+    console.log('  Run `codenexus manage status` again shortly to confirm the new index generation is loaded.');
   } else if (stateAfterIndex?.liveHealth) {
     console.log('  Note: A live CodeNexus service is running and will adopt the refreshed on-disk index automatically.');
-    console.log('  Run `codenexus status` to confirm the service has loaded the new index generation.');
+    console.log('  Run `codenexus manage status` to confirm the service has loaded the new index generation.');
   } else if (stateAfterIndex?.baseState === 'serving_stale') {
     console.log('  Note: A live CodeNexus service is running in degraded stale mode.');
-    console.log('  Run `codenexus index` again if the repo changes. The live service will adopt the refreshed index automatically when reload succeeds.');
+    console.log('  Run `codenexus manage index` again if the repo changes. The live service will adopt the refreshed index automatically when reload succeeds.');
   }
 
   if (options?.indexOnly) {
-    console.log('  Note: --index-only is satisfied by default; codenexus index no longer mutates repo files outside .codenexus.');
+    console.log('  Note: --index-only is satisfied by default; codenexus manage index no longer mutates repo files outside .codenexus.');
   }
 
   if (kuzuWarnings.length > 0) {

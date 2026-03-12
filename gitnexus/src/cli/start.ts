@@ -4,7 +4,7 @@ import { waitForRepoLocalService, DuplicateServiceError, ServiceStartupError } f
 
 export const startCommand = async () => {
   try {
-    const cliInvocation = resolveCliInvocation(['serve']);
+    const cliInvocation = resolveCliInvocation(['manage', 'serve']);
     const child = spawn(cliInvocation.command, cliInvocation.args, {
       cwd: process.cwd(),
       detached: true,

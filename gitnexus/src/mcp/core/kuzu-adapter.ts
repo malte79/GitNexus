@@ -149,7 +149,7 @@ export const initKuzu = async (repoId: string, dbPath: string): Promise<void> =>
   try {
     await fs.stat(dbPath);
   } catch {
-    throw new Error(`KuzuDB not found at ${dbPath}. Run: codenexus index`);
+    throw new Error(`KuzuDB not found at ${dbPath}. Run: codenexus manage index`);
   }
 
   evictLRU();

@@ -107,6 +107,87 @@ describe('LocalBackend.callTool', () => {
     expect(result).toHaveProperty('processes');
   });
 
+  it('dispatches summary without repo routing', async () => {
+    (executeQuery as any).mockImplementation(async (repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (f:File)')) {
+        return [{ filePath: 'src/app.py' }, { filePath: 'tests/test_app.py' }];
+      }
+      if (cypher.includes('RETURN n.id AS id') && cypher.includes('COUNT(*) AS fanIn')) {
+        return [
+          { id: 'func:main', name: 'main', type: 'Function', filePath: 'scripts/run_runtime_stability_burn_in.py', fanIn: 77 },
+          { id: 'func:assertTrue', name: 'assertTrue', type: 'Function', filePath: 'tests/test_handler.py', fanIn: 41 },
+          { id: 'class:CommandBridgeHandler', name: 'CommandBridgeHandler', type: 'Class', filePath: 'src/bridge/handler.py', fanIn: 7 },
+        ];
+      }
+      if (cypher.includes('MATCH (c:Community)')) {
+        return [{ id: 'comm:bridge', label: 'Bridge', heuristicLabel: 'Bridge', cohesion: 0.9, symbolCount: 12 }];
+      }
+      if (cypher.includes('MATCH (p:Process)')) {
+        return [{ id: 'proc:bridge', label: 'BridgeFlow', heuristicLabel: 'Bridge Flow', processType: 'runtime', stepCount: 4 }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('summary', {});
+    expect(result.production_vs_test).toEqual({
+      production_files: 1,
+      test_files: 1,
+    });
+    expect(result.top_symbols[0]).toMatchObject({
+      name: 'CommandBridgeHandler',
+      fan_in: 7,
+    });
+    expect(result.top_symbols).toHaveLength(1);
+    expect(result.clusters[0]).toMatchObject({
+      heuristicLabel: 'Bridge',
+    });
+    expect(result.coverage).toMatchObject({
+      confidence: 'grounded',
+      sections: {
+        production_vs_test: 'grounded',
+        top_symbols: 'grounded',
+        clusters: 'grounded',
+        processes: 'grounded',
+      },
+    });
+  });
+
+  it('surfaces partial summary coverage instead of fake empty values when summary queries fail', async () => {
+    (executeQuery as any).mockImplementation(async (repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (f:File)')) {
+        throw new Error('file scan failed');
+      }
+      if (cypher.includes('RETURN n.id AS id') && cypher.includes('COUNT(*) AS fanIn')) {
+        throw new Error('fan-in failed');
+      }
+      if (cypher.includes('MATCH (c:Community)')) {
+        return [{ id: 'comm:bridge', label: 'Bridge', heuristicLabel: 'Bridge', cohesion: 0.9, symbolCount: 12 }];
+      }
+      if (cypher.includes('MATCH (p:Process)')) {
+        throw new Error('processes failed');
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('summary', {});
+    expect(result.production_vs_test).toBeNull();
+    expect(result.top_symbols).toBeNull();
+    expect(result.clusters[0]).toMatchObject({
+      heuristicLabel: 'Bridge',
+    });
+    expect(result.processes).toBeNull();
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.coverage.sections).toMatchObject({
+      production_vs_test: 'partial',
+      top_symbols: 'partial',
+      clusters: 'grounded',
+      processes: 'partial',
+    });
+    expect(result.coverage.notes.join(' ')).toContain('file scan failed');
+    expect(result.coverage.notes.join(' ')).toContain('fan-in failed');
+    expect(result.coverage.notes.join(' ')).toContain('processes failed');
+  });
+
   it('ranks Roblox module symbols and includes Roblox-aware summaries', async () => {
     (searchFTSFromKuzu as any).mockImplementation(async (query: string) => {
       if (query === 'SpotlightRegistry') {
@@ -445,12 +526,95 @@ describe('LocalBackend.callTool', () => {
   it('blocks write queries through cypher', async () => {
     const result = await backend.callTool('cypher', { query: 'CREATE (n:Test)' });
     expect(result.error).toContain('Write operations');
+    expect(result.schema_resource).toBe('gitnexus://schema');
   });
 
   it('allows read queries through cypher', async () => {
     (executeQuery as any).mockResolvedValue([{ name: 'test' }]);
     const result = await backend.callTool('cypher', { query: 'MATCH (n:Function) RETURN n.name AS name' });
     expect(result.markdown).toContain('test');
+  });
+
+  it('adds near-miss Cypher guidance for type(r)', async () => {
+    (executeQuery as any).mockRejectedValue(new Error('Catalog exception: function TYPE does not exist.'));
+    const result = await backend.callTool('cypher', { query: 'MATCH (a)-[r]->(b) RETURN type(r) AS relType' });
+    expect(result.error).toContain('TYPE does not exist');
+    expect(result.hint).toContain('CodeRelation `type` property');
+    expect(result.schema_resource).toBe('gitnexus://schema');
+  });
+
+  it('reports partial context coverage for central Python classes using inferred immediate members when container edges are missing', async () => {
+    (executeParameterized as any).mockImplementation(async (repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{ id: 'class:CommandBridgeHandler', name: 'CommandBridgeHandler', type: 'Class', filePath: 'src/bridge/handler.py', startLine: 1, endLine: 40 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes('MATCH (child:Function)') && cypher.includes('child.filePath = $filePath')) {
+        return [
+          { uid: 'func:dispatch', name: 'dispatch', kind: 'Function', filePath: 'src/bridge/handler.py', startLine: 5, endLine: 20 },
+          { uid: 'func:inner_helper', name: 'inner_helper', kind: 'Function', filePath: 'src/bridge/handler.py', startLine: 10, endLine: 12 },
+        ];
+      }
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(n {id: $symId})")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(child)') && cypher.includes("child.id IN ['func:dispatch']")) {
+        return [{ relType: 'CALLS', uid: 'func:run', name: 'run', filePath: 'src/main.py', kind: 'Function', viaMember: 'dispatch' }];
+      }
+      if (cypher.includes('MATCH (child)-[r:CodeRelation]->(target)') && cypher.includes("child.id IN ['func:dispatch']")) {
+        return [];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', { name: 'CommandBridgeHandler' });
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.coverage.note).toContain('immediate container members');
+    expect(result.incoming.calls[0]).toMatchObject({
+      name: 'run',
+      viaMember: 'dispatch',
+    });
+    expect(result.members).toHaveLength(1);
+    expect(result.members[0]).toMatchObject({
+      name: 'dispatch',
+      kind: 'Function',
+    });
+  });
+
+  it('reports partial impact coverage for central Python classes using inferred members when no affected symbols are found', async () => {
+    (executeParameterized as any).mockImplementation(async (repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n)') && cypher.includes('WHERE n.name = $targetName')) {
+        return [{ id: 'class:CommandBridgeHandler', name: 'CommandBridgeHandler', type: 'Class', filePath: 'src/bridge/handler.py', startLine: 1, endLine: 40 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes('MATCH (child:Function)') && cypher.includes('child.filePath = $filePath')) {
+        return [{ uid: 'func:dispatch', name: 'dispatch', kind: 'Function', filePath: 'src/bridge/handler.py', startLine: 5, endLine: 10 }];
+      }
+      return [];
+    });
+    (executeQuery as any).mockResolvedValue([]);
+
+    const result = await backend.callTool('impact', {
+      target: 'CommandBridgeHandler',
+      direction: 'upstream',
+    });
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.target.member_count).toBe(1);
+    expect(result.coverage.note).toContain('immediate container members');
+    expect(result.risk).toBe('UNKNOWN');
   });
 
   it('disconnect clears the bound repo and closes Kuzu', async () => {
