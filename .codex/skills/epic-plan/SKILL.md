@@ -17,6 +17,7 @@ Output epic structure only. Do not create or edit files.
 - Every unit must name meaningful `Tests` and `Docs`; avoid placeholders such as `TBD`, `if needed`, or `update docs`.
 - Closeout units must be evidence/validation/rollout closeout work, not feature implementation disguised as closeout.
 - If behavior/contracts change, plan the companion docs/tests/schema/config/version updates in the same milestone where the behavior lands.
+- If the plan ends with open questions, each question must also include a concise `Recommended answer:` line that states the default recommendation and any key assumption behind it.
 
 ## Steps
 
@@ -25,7 +26,8 @@ Output epic structure only. Do not create or edit files.
 3) Define work units (`101`, `102`, `201`, ...) with `Surface`, `Work`, `Tests`, `Docs`.
 4) Add dependencies, risks, rollback strategy, and open questions.
 5) For each milestone, include one final closeout unit.
-6) Validate that numbering is ordered, unit scope is bounded, and closeout units remain milestone-final.
+6) Add recommended answers for every open question.
+7) Validate that numbering is ordered, unit scope is bounded, closeout units remain milestone-final, and no open question is left without a recommendation.
 
 ## Required Structure
 
@@ -57,3 +59,4 @@ Unit quality bar:
 - Do not create/edit files.
 - Do not mark anything done.
 - Do not leave placeholder or generic unit text.
+- Do not leave any open question without a `Recommended answer:`.

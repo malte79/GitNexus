@@ -6,4 +6,4 @@ description: Compatibility alias for epic-plan. Plan an epic collaboratively for
 # eplan
 
 Alias for `epic-plan`.
-Use the same workflow and constraints.
+Use the same workflow and constraints, including adding a `Recommended answer:` line for every open question.

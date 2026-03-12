@@ -1,8 +1,10 @@
-# Epics Todo
+# Epics Todo Archive
 
-This document is a planning list only. It does not create actual epics by itself.
+This document is an archived planning snapshot. It is no longer the authoritative source for active epic state.
 
-The purpose is to keep the remaining roadmap current as the project changes. Completed epics stay here as context, but the main value of this file is to describe the next epics in the order they should be built.
+Active epic execution now lives in the filesystem workflow under `planning/epics/`. Historical completed epic files remain under `planning/epics/done/`.
+
+The purpose of keeping this archived list is to preserve the original roadmap context without implying that every remaining item should still become a real epic.
 
 ## Completed Foundations
 
@@ -87,7 +89,7 @@ This added real language-level Luau support on top of the working local product:
 - end-to-end Luau indexing/query support has been proven through the real `codenexus` product surface
 - Roblox and Rojo semantics remain deferred to Epic 08
 
-## Remaining Epic Sequence
+## Archived Remaining Sequence
 
 ### 08. Roblox And Rojo Resolution
 
@@ -103,59 +105,21 @@ This made the existing Luau support materially useful for real Rojo-based Roblox
 
 ### 09. Roblox Query Ergonomics
 
-Improve the usefulness of the new Luau/Roblox support for real agent workflows.
-
-Primary goals:
-
-- make returned Luau module tables first-class symbols
-- improve ranking for exact and near-exact Roblox/Luau concepts
-- enrich query/context results with concise Roblox-aware summaries
-- prove those improvements on a real Rojo repo, not just fixtures
-
-What this brings:
-
-- better lookup for module-style symbols like `SpotlightRegistry`
-- less noisy broad queries like `lighting show service`
-- more agent-friendly summaries using module name, runtime area, and Rojo context
-- a cleaner product experience before moving on to longer-horizon robustness work
+Completed in the filesystem epic workflow. Retained here only as historical roadmap context.
 
 ### 10. Background Service And Live Reload
 
-Add a real detached service lifecycle and automatic live adoption of rebuilt indexes.
-
-Primary goals:
-
-- add `codenexus start`, `codenexus stop`, and `codenexus restart`
-- keep `codenexus serve` as the foreground/debug path
-- let the running service adopt refreshed on-disk indexes without manual restart
-- make runtime metadata and status truthful for both background mode and live reload
-
-What this brings:
-
-- a cleaner day-to-day operator workflow
-- no need to manually restart the service after a normal successful reindex
-- a better foundation for longer-running agent workflows that want CodeNexus always available
+Completed in the filesystem epic workflow. Retained here only as historical roadmap context.
 
 ### 11. Branch And Repo State Intelligence
 
-Teach the repo-local system to reason about branch changes and longer-lived repo state.
+Completed in the filesystem epic workflow under the Epic 11 background freshness work. Retained here only as historical roadmap context.
 
-Primary goals:
+### 12. Future Ideas Bucket
 
-- detect branch changes cleanly
-- refine stale-state behavior across branches
-- decide whether separate per-branch indexes are required
-- make repo-state and runtime reporting less naive over time
+This is not an active epic anymore.
 
-What this brings:
-
-- fewer surprises when switching branches
-- a path toward branch-aware index management
-- a more durable repo-local operating model for real day-to-day use now that service state, CLI state, and freshness semantics are all already established
-
-### 12. Deferred Intelligence Upgrades
-
-This remains the intentionally late bucket for higher-end capabilities once the core product is stable.
+Treat it as a future-ideas bucket for intentionally late, optional intelligence work once the core product is stable.
 
 Likely contents:
 
@@ -165,13 +129,13 @@ Likely contents:
 - smarter delta refresh
 - other advanced retrieval or runtime intelligence layers
 
-What this brings:
+What this would bring:
 
 - deeper agent leverage after the product is already solid
 - differentiating intelligence features without destabilizing the now-working core product too early
 - a place for future world-projection ingestion once Luau and Rojo support exist
 
-## Why The Remaining Order Looks Like This
+## Why The Archived Order Looked Like This
 
 The product and runtime core now exist and have been proven in a real installed run against a live repo-local service.
 
@@ -180,16 +144,16 @@ The next completed epics made the existing product useful for the target Roblox/
 - Epic 07: Luau Core Support
 - Epic 08: Roblox And Rojo Resolution
 
-The final four deepen ergonomics, service lifecycle, robustness, and intelligence:
+The late roadmap then aimed to deepen ergonomics, service lifecycle, robustness, and intelligence:
 
 - Epic 09: Roblox Query Ergonomics
 - Epic 10: Background Service And Live Reload
 - Epic 11: Branch And Repo State Intelligence
-- Epic 12: Deferred Intelligence Upgrades
+- Epic 12: Future Ideas Bucket
 
 ## Planning Notes
 
-The roadmap is now past the foundational, architectural, CLI, runtime, and freshness work. Remaining epics should avoid reopening settled decisions from Epics 00-06 unless implementation reveals a real contradiction.
+The roadmap is now past the foundational, architectural, CLI, runtime, and freshness work. Future ideas should avoid reopening settled decisions from Epics 00-06 unless implementation reveals a real contradiction.
 
 When actual epics are created, each one should answer:
 
