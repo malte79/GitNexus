@@ -47,6 +47,246 @@ What each command does:
 - if live reload fails, use \`codenexus restart\` for a background service or restart foreground \`codenexus serve\` manually
 - if you need certainty immediately, run \`codenexus index\` manually instead of waiting for the background interval
 
+## Using The HTTP Service
+
+The richer structural features are exposed through the repo-local MCP HTTP service.
+
+Start the service from the repo you want to analyze:
+
+\`\`\`bash
+codenexus start
+codenexus status
+\`\`\`
+
+Use \`codenexus status\` to confirm the configured port. By default, CodeNexus uses port \`4747\`, so the service URL is usually:
+
+\`\`\`text
+http://127.0.0.1:4747/api/mcp
+\`\`\`
+
+The health endpoint is:
+
+\`\`\`text
+http://127.0.0.1:4747/api/health
+\`\`\`
+
+Quick health check:
+
+\`\`\`bash
+curl http://127.0.0.1:4747/api/health
+\`\`\`
+
+CodeNexus speaks MCP over Streamable HTTP at \`/api/mcp\`. The simplest way to use it is with an MCP client or a small SDK script.
+
+### Minimal Node Client
+
+\`\`\`js
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+const transport = new StreamableHTTPClientTransport(
+  new URL('http://127.0.0.1:4747/api/mcp'),
+);
+
+const client = new Client({
+  name: 'local-codenexus-client',
+  version: '0.1.0',
+});
+
+await client.connect(transport);
+
+const tools = await client.listTools();
+console.log(tools.tools.map((tool) => tool.name));
+
+const result = await client.callTool({
+  name: 'query',
+  arguments: {
+    query: 'lighting show service',
+  },
+});
+
+console.log(JSON.stringify(result, null, 2));
+
+await client.close();
+\`\`\`
+
+### Tool Use Cases And Example Calls
+
+#### \`query\`
+
+Use this to find the main symbols and execution flows related to a concept.
+
+Good for:
+- subsystem discovery
+- “where does this behavior live?”
+- finding the most relevant files before editing
+
+Example queries:
+- \`lighting show service\`
+- \`round start show logic\`
+- \`client wallet UI\`
+
+Example call:
+
+\`\`\`js
+await client.callTool({
+  name: 'query',
+  arguments: {
+    query: 'round start show logic',
+    limit: 5,
+    max_symbols: 10,
+  },
+});
+\`\`\`
+
+#### \`context\`
+
+Use this to inspect one symbol in depth: callers, callees, process participation, file location, and surrounding context.
+
+Good for:
+- “show me callers of this symbol”
+- understanding one module before changing it
+- disambiguating symbols with the same name
+
+Example queries:
+- \`SpotlightRegistry\`
+- \`LightingShowService\`
+- \`RoundCoordinator\`
+
+Example call:
+
+\`\`\`js
+await client.callTool({
+  name: 'context',
+  arguments: {
+    name: 'SpotlightRegistry',
+    include_content: false,
+  },
+});
+\`\`\`
+
+#### \`impact\`
+
+Use this to estimate blast radius before changing a symbol.
+
+Good for:
+- “what breaks if I change this module?”
+- fan-in and dependency-risk checks
+- refactor safety checks
+
+Example queries:
+- upstream impact of \`LightingShowService\`
+- upstream impact of \`UIService\`
+- downstream dependencies of \`RoundCoordinator\`
+
+Example call:
+
+\`\`\`js
+await client.callTool({
+  name: 'impact',
+  arguments: {
+    target: 'LightingShowService',
+    direction: 'upstream',
+    maxDepth: 3,
+  },
+});
+\`\`\`
+
+#### \`cypher\`
+
+Use this for custom graph questions that the higher-level tools do not answer directly.
+
+Good for:
+- subsystem dependency graph queries
+- custom caller or importer reports
+- one-off graph exploration
+
+Example queries:
+- modules that import across runtime boundaries
+- files in a specific community
+- callers of one function with a custom filter
+
+Example call:
+
+\`\`\`js
+await client.callTool({
+  name: 'cypher',
+  arguments: {
+    query: "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20",
+  },
+});
+\`\`\`
+
+#### \`detect_changes\`
+
+Use this to understand what your current git diff affects.
+
+Good for:
+- pre-commit review
+- tracing changed symbols into affected execution flows
+- checking whether a local edit touched a sensitive area
+
+Example queries:
+- unstaged changes
+- staged changes
+- compare current branch to \`main\`
+
+Example calls:
+
+\`\`\`js
+await client.callTool({
+  name: 'detect_changes',
+  arguments: {
+    scope: 'unstaged',
+  },
+});
+
+await client.callTool({
+  name: 'detect_changes',
+  arguments: {
+    scope: 'compare',
+    base_ref: 'main',
+  },
+});
+\`\`\`
+
+#### \`rename\`
+
+Use this to preview a coordinated multi-file rename driven by graph and text-search evidence.
+
+Good for:
+- cross-file symbol rename preview
+- safer refactors than blind search-and-replace
+- checking rename confidence before editing
+
+Example queries:
+- rename \`LightingShowService\` to \`ShowLightingService\`
+- rename \`UIService\` in one file path scope
+
+Example call:
+
+\`\`\`js
+await client.callTool({
+  name: 'rename',
+  arguments: {
+    symbol_name: 'LightingShowService',
+    new_name: 'ShowLightingService',
+    dry_run: true,
+  },
+});
+\`\`\`
+
+### Typical Workflows
+
+- Find the right subsystem:
+  Start with \`query\`, then use \`context\` on the top symbol.
+- Check change risk:
+  Use \`context\` first, then \`impact\`.
+- Investigate a local diff:
+  Use \`detect_changes\`, then drill into high-risk symbols with \`context\`.
+- Ask a custom graph question:
+  Use \`cypher\` when the higher-level tools are too opinionated.
+
 ## Suggested AGENTS.md Snippet
 
 \`\`\`md
@@ -65,6 +305,7 @@ Important:
 - background \`codenexus start\` enables automatic reindex on the configured interval (5 minutes by default)
 - a live service adopts rebuilt indexes automatically in the normal path
 - if live reload fails, use \`codenexus restart\` (background) or restart foreground \`codenexus serve\`
+- richer structural queries are available through the repo-local MCP HTTP service at \`/api/mcp\`
 \`\`\`
 
 ## Where CodeNexus Helps Most

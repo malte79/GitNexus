@@ -268,6 +268,12 @@ Contract:
 - `codenexus restart`
 - it explains automatic live index adoption in the normal path and recovery guidance when live reload fails
 - it explains that detached background mode usually keeps the repo fresh automatically while manual `codenexus index` remains the immediate certainty path
+- it documents how to use the repo-local HTTP service after `serve` or `start`, including:
+  - the health endpoint at `/api/health`
+  - the MCP endpoint at `/api/mcp`
+  - that `/api/mcp` is the richer structural query surface
+  - a minimal MCP client example
+  - brief use cases and example calls for each supported tool type
 - it includes a suggested `AGENTS.md` snippet
 - it includes workflow guidance for planning, implementing, and refactoring
 

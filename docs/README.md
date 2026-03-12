@@ -30,7 +30,7 @@ In v1, the governed set includes:
 
 - the `docs/` markdown tree
 - `planning/master-intent.md`
-- `planning/epics-todo.md`
+- `planning/archive/epics-todo.md`
 - `planning/epics/**/*.md`
 
 Other repo markdown is out of scope by default.

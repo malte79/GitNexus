@@ -4,7 +4,7 @@ version = 1
 include = [
   "docs/**/*.md",
   "planning/master-intent.md",
-  "planning/epics-todo.md",
+  "planning/archive/epics-todo.md",
   "planning/epics/**/*.md",
 ]
 exclude = []
@@ -30,6 +30,6 @@ require_docs_when_changed = [
 allow_no_docs_when_only_changed = [
   "gitnexus/test/**/*",
   "planning/master-intent.md",
-  "planning/epics-todo.md",
+  "planning/archive/epics-todo.md",
   "planning/epics/**/*.md",
 ]
