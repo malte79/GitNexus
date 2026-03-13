@@ -52,6 +52,31 @@ const getDefinitionNodeFromCaptures = (captureMap: Record<string, any>): any | n
   return null;
 };
 
+const resolveLuauModuleMethodId = (
+  filePath: string,
+  methodRef: { name: string; startLine: number; label: string; targetName?: string; targetLabel?: string },
+  symbolTable: SymbolTable,
+): string | null => {
+  if (methodRef.targetLabel) {
+    const directId = generateId(methodRef.targetLabel, `${filePath}:${methodRef.targetName || methodRef.name}:${methodRef.startLine}`);
+    if (symbolTable.lookupExact(filePath, methodRef.targetName || methodRef.name) === directId) {
+      return directId;
+    }
+  }
+
+  const targetName = methodRef.targetName || methodRef.name;
+  const exact = symbolTable.lookupExact(filePath, targetName);
+  if (!exact) return null;
+
+  if (!methodRef.targetLabel) {
+    return exact.startsWith('Method:') || exact.startsWith('Function:')
+      ? exact
+      : null;
+  }
+
+  return exact.startsWith(`${methodRef.targetLabel}:`) ? exact : null;
+};
+
 // ============================================================================
 // EXPORT DETECTION - Language-specific visibility detection
 // ============================================================================
@@ -466,8 +491,8 @@ const processParsingSequential = async (
         });
 
         for (const methodRef of candidate.methodRefs) {
-          const methodId = generateId(methodRef.label, `${file.path}:${methodRef.name}:${methodRef.startLine}`);
-          if (!graph.getNode(methodId)) continue;
+          const methodId = resolveLuauModuleMethodId(file.path, methodRef, symbolTable);
+          if (!methodId || !graph.getNode(methodId)) continue;
           graph.addRelationship({
             id: generateId('DEFINES', `${moduleId}->${methodId}`),
             sourceId: moduleId,

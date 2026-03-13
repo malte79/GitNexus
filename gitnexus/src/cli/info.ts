@@ -107,6 +107,10 @@ codenexus context SpotlightRegistry
 codenexus context CommandBridgeHandler --file-path typed/bridge/http
 \`\`\`
 
+Notes:
+- weak Luau returned-table wrappers may show only the delegate members that are explicitly exported by the returned table
+- when that happens, CodeNexus now says so directly instead of pretending the module is fully covered
+
 ### \`impact\`
 
 Good for:
@@ -119,7 +123,12 @@ CLI examples:
 \`\`\`bash
 codenexus impact LightingShowService --direction upstream
 codenexus impact ProtocolRouter --direction upstream --max-depth 4
+codenexus impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4
 \`\`\`
+
+Notes:
+- when process or community memberships are not grounded strongly enough, \`impact\` may return \`affected_areas\` alongside partial confidence so the system effect is still visible
+- this is additive guidance, not a hidden fallback blast-radius mode
 
 ### \`detect-changes\`
 
@@ -148,7 +157,10 @@ CLI examples:
 codenexus cypher "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20"
 \`\`\`
 
-When Cypher fails on a near miss such as \`type(r)\`, use the schema and starter guidance from the tool output or the direct MCP resources.
+When Cypher fails on a near miss such as \`type(r)\` or a missing property such as \`File.lineCount\`, use the schema and property guidance from the tool output or the direct MCP resources:
+- \`gitnexus://schema\`
+- \`gitnexus://properties\`
+- \`gitnexus://properties/File\`
 
 ### \`rename\`
 
@@ -280,6 +292,7 @@ Good for:
 - “show me callers of this symbol”
 - understanding one module before changing it
 - disambiguating symbols with the same name
+- explaining why a thin returned-module wrapper only exposes a small grounded member set
 
 Example queries:
 - \`SpotlightRegistry\`
@@ -306,6 +319,7 @@ Good for:
 - “what breaks if I change this module?”
 - fan-in and dependency-risk checks
 - refactor safety checks
+- seeing affected file areas even when process or community propagation is still partial
 
 Example queries:
 - upstream impact of \`LightingShowService\`

@@ -114,14 +114,16 @@ Returns processes ranked by relevance for the bound repo.`,
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', description: 'Name of function, class, or file to analyze' },
+        target: { type: 'string', description: 'Name of function, class, module, or file to analyze' },
+        uid: { type: 'string', description: 'Direct symbol UID from prior results' },
+        file_path: { type: 'string', description: 'File path to disambiguate common names' },
         direction: { type: 'string', description: 'upstream or downstream' },
         maxDepth: { type: 'number', description: 'Max relationship depth (default: 3)', default: 3 },
         relationTypes: { type: 'array', items: { type: 'string' }, description: 'Filter: CALLS, IMPORTS, EXTENDS, IMPLEMENTS' },
         includeTests: { type: 'boolean', description: 'Include test files (default: false)' },
         minConfidence: { type: 'number', description: 'Minimum confidence 0-1 (default: 0.7)' },
       },
-      required: ['target', 'direction'],
+      required: ['direction'],
     },
   },
 ];

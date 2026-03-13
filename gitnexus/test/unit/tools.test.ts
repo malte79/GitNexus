@@ -40,9 +40,12 @@ describe('GITNEXUS_TOOLS', () => {
     expect(cypherTool.inputSchema.required).toContain('query');
   });
 
-  it('impact tool requires target and direction', () => {
+  it('impact tool requires direction and exposes disambiguation inputs', () => {
     const impactTool = GITNEXUS_TOOLS.find(t => t.name === 'impact')!;
-    expect(impactTool.inputSchema.required).toEqual(expect.arrayContaining(['target', 'direction']));
+    expect(impactTool.inputSchema.required).toEqual(expect.arrayContaining(['direction']));
+    expect(impactTool.inputSchema.properties.target).toBeDefined();
+    expect(impactTool.inputSchema.properties.uid).toBeDefined();
+    expect(impactTool.inputSchema.properties.file_path).toBeDefined();
   });
 
   it('rename tool requires new_name', () => {

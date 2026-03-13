@@ -59,6 +59,11 @@ describe('CLI commands', () => {
         'stop',
         'restart',
       ]);
+
+      const impact = program.commands.find((command) => command.name() === 'impact');
+      expect(impact?.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining(['--uid', '--file-path', '--direction', '--max-depth']),
+      );
     });
 
     it('renders help for the new use-plane and manage-plane tree', async () => {

@@ -97,8 +97,10 @@ export function buildProgram(): Command {
     .action(createLazyAction(() => import('./context.js'), 'contextCommand'));
 
   program
-    .command('impact <target>')
+    .command('impact [target]')
     .description('Analyze the blast radius of changing a symbol in the bound repo')
+    .option('--uid <uid>', 'Direct symbol UID from prior results')
+    .option('--file-path <path>', 'File path to disambiguate common names')
     .requiredOption('--direction <direction>', 'Impact direction: upstream or downstream')
     .option('--max-depth <number>', 'Max relationship depth', (value) => Number.parseInt(value, 10))
     .option('--relation-type <type...>', 'Filter relation types (CALLS, IMPORTS, EXTENDS, IMPLEMENTS)')

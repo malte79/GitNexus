@@ -5,6 +5,12 @@
  */
 
 import type { LocalBackend } from './local/local-backend.js';
+import {
+  getNodeProperties,
+  getPropertyResourceUri,
+  listInspectableNodeTypes,
+  normalizeNodeType,
+} from './schema-properties.js';
 import { checkStaleness } from './staleness.js';
 
 export interface ResourceDefinition {
@@ -47,6 +53,12 @@ export function getResourceDefinitions(): ResourceDefinition[] {
       description: 'Node and edge schema for Cypher queries.',
       mimeType: 'text/yaml',
     },
+    {
+      uri: 'gitnexus://properties',
+      name: 'Graph Properties',
+      description: 'Inspectable node properties for common Cypher query targets.',
+      mimeType: 'text/yaml',
+    },
   ];
 }
 
@@ -64,6 +76,12 @@ export function getResourceTemplates(): ResourceTemplate[] {
       description: 'Step-by-step execution trace in the bound repo.',
       mimeType: 'text/yaml',
     },
+    {
+      uriTemplate: 'gitnexus://properties/{nodeType}',
+      name: 'Node Properties',
+      description: 'Inspectable properties for a specific node type.',
+      mimeType: 'text/yaml',
+    },
   ];
 }
 
@@ -72,6 +90,7 @@ function parseUri(uri: string): { resourceType: string; param?: string } {
   if (uri === 'gitnexus://clusters') return { resourceType: 'clusters' };
   if (uri === 'gitnexus://processes') return { resourceType: 'processes' };
   if (uri === 'gitnexus://schema') return { resourceType: 'schema' };
+  if (uri === 'gitnexus://properties') return { resourceType: 'properties' };
 
   const clusterMatch = uri.match(/^gitnexus:\/\/cluster\/(.+)$/);
   if (clusterMatch) {
@@ -81,6 +100,11 @@ function parseUri(uri: string): { resourceType: string; param?: string } {
   const processMatch = uri.match(/^gitnexus:\/\/process\/(.+)$/);
   if (processMatch) {
     return { resourceType: 'process', param: decodeURIComponent(processMatch[1]) };
+  }
+
+  const propertiesMatch = uri.match(/^gitnexus:\/\/properties\/(.+)$/);
+  if (propertiesMatch) {
+    return { resourceType: 'properties-detail', param: decodeURIComponent(propertiesMatch[1]) };
   }
 
   throw new Error(`Unknown resource URI: ${uri}`);
@@ -98,10 +122,14 @@ export async function readResource(uri: string, backend: LocalBackend): Promise<
       return getProcessesResource(backend);
     case 'schema':
       return getSchemaResource();
+    case 'properties':
+      return getPropertiesIndexResource();
     case 'cluster':
       return getClusterDetailResource(parsed.param!, backend);
     case 'process':
       return getProcessDetailResource(parsed.param!, backend);
+    case 'properties-detail':
+      return getPropertiesDetailResource(parsed.param!);
     default:
       throw new Error(`Unknown resource: ${uri}`);
   }
@@ -145,8 +173,10 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   lines.push('  - gitnexus://clusters');
   lines.push('  - gitnexus://processes');
   lines.push('  - gitnexus://schema');
+  lines.push('  - gitnexus://properties');
   lines.push('  - gitnexus://cluster/{name}');
   lines.push('  - gitnexus://process/{name}');
+  lines.push('  - gitnexus://properties/{nodeType}');
 
   return lines.join('\n');
 }
@@ -239,6 +269,39 @@ relationships:
 
 relationship_table: "All relationships use a single CodeRelation table with a type property. Properties: type (STRING), confidence (DOUBLE), reason (STRING), step (INT32)"
 `;
+}
+
+function getPropertiesIndexResource(): string {
+  const lines = [
+    '# CodeNexus Node Properties',
+    '',
+    'node_types:',
+  ];
+
+  for (const nodeType of listInspectableNodeTypes()) {
+    lines.push(`  - ${nodeType}`);
+    lines.push(`    uri: ${getPropertyResourceUri(nodeType)}`);
+  }
+
+  lines.push('');
+  lines.push('usage: "READ gitnexus://properties/{nodeType} to inspect available properties before writing Cypher against that node label."');
+  return lines.join('\n');
+}
+
+function getPropertiesDetailResource(nodeType: string): string {
+  const normalized = normalizeNodeType(nodeType);
+  const properties = getNodeProperties(normalized);
+  if (!properties) {
+    return `error: Unknown node type '${nodeType}'. Read gitnexus://properties for supported node labels.`;
+  }
+
+  return [
+    `node_type: ${normalized}`,
+    'properties:',
+    ...properties.map((propertyName) => `  - ${propertyName}`),
+    '',
+    `schema_uri: gitnexus://schema`,
+  ].join('\n');
 }
 
 async function getClusterDetailResource(name: string, backend: LocalBackend): Promise<string> {

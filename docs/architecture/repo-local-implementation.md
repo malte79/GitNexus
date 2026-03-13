@@ -82,5 +82,10 @@ Implementation posture:
 - `query` remains BM25-plus-graph retrieval with deterministic ranking adjustments
 - `summary` is a read-only overview derived from existing graph facts
 - `context` prefers direct relationships, but may supplement container symbols with member-based relationships and explicit partial-coverage reporting
-- `impact` prefers direct graph traversal, but may expand through contained members and report partial confidence when container-symbol coverage is incomplete
-- `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)`
+- `context` may recover file members from grounded file-level definitions when direct file container edges are missing, while keeping partial-confidence reporting explicit
+- `context` now explicitly distinguishes weak Luau returned-table wrappers from richer exported modules so thin wrapper modules do not look like hollow failures
+- `impact` prefers direct graph traversal, but may expand through contained members or grounded file-level definitions for file targets and report partial confidence when container-symbol coverage is incomplete
+- `impact` may surface `affected_areas` from direct file-level callers when process or community memberships are not grounded enough to populate `affected_processes` or `affected_modules`
+- `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`
+- `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)` and property misses such as `File.lineCount`
+- Cypher schema and property discoverability are exposed through `gitnexus://schema`, `gitnexus://properties`, and `gitnexus://properties/{nodeType}`

@@ -74,6 +74,16 @@ Shared contract:
   - the configured port is serving a different repo
 - they must not silently fall back to direct backend calls, stdio, or another transport
 - they must not invent a second semantic result schema beyond thin CLI rendering
+- `context`, `impact`, and `rename` use the same disambiguation model:
+  - symbol name or `--uid`
+  - optional `--file-path` when the symbol name is ambiguous
+- `codenexus context` may explain when a Luau module is a weak returned-table wrapper and therefore only exposes grounded delegate members from the returned table
+- `codenexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
+- `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
+- the primary Cypher recovery resources are:
+  - `gitnexus://schema`
+  - `gitnexus://properties`
+  - `gitnexus://properties/{nodeType}`
 
 ## `codenexus manage init`
 

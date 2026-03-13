@@ -41,6 +41,8 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('bridge http lifecycle status start stop studio automation');
     expect(output).toContain('CommandBridgeHandler');
     expect(output).toContain('ProtocolRouter');
+    expect(output).toContain('impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4');
+    expect(output).toContain('gitnexus://properties/File');
   });
 
   it('keeps the direct MCP path documented for advanced users', () => {
