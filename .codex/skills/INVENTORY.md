@@ -1,6 +1,6 @@
 # Skills Inventory
 
-Generated: 2026-03-08
+Generated: 2026-03-13
 
 1. `codereview` - Intelligent AI code-review gate for branch diffs focused on structural, correctness, reliability, security, and performance risks.
    - path: `.codex/skills/codereview/SKILL.md`
@@ -46,5 +46,7 @@ Generated: 2026-03-08
     - path: `.codex/skills/ecomplete/SKILL.md`
 22. `etight` - Alias for `epic-tighten`.
     - path: `.codex/skills/etight/SKILL.md`
+23. `release` - Publish the current main-branch checkout to the server-wide `codenexus` command by building and globally linking it.
+    - path: `.codex/skills/release/SKILL.md`
 
-Total skills: 22
+Total skills: 23
