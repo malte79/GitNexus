@@ -8,6 +8,7 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('## Command Shape');
     expect(output).toContain('codenexus help');
     expect(output).toContain('codenexus query <terms...>');
+    expect(output).toContain('codenexus query <terms...> --owners');
     expect(output).toContain('codenexus manage <subcommand>');
     expect(output).toContain('codenexus manage init');
     expect(output).toContain('codenexus manage index');
@@ -39,9 +40,12 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('### `rename`');
     expect(output).toContain('### `summary`');
     expect(output).toContain('bridge http lifecycle status start stop studio automation');
+    expect(output).toContain('typed bridge http lifecycle status start stop studio automation --owners');
     expect(output).toContain('CommandBridgeHandler');
     expect(output).toContain('ProtocolRouter');
     expect(output).toContain('impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4');
+    expect(output).toContain('member_coverage');
+    expect(output).toContain('summary --subsystems');
     expect(output).toContain('gitnexus://properties/File');
   });
 

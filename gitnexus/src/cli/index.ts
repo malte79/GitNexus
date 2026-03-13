@@ -83,6 +83,7 @@ export function buildProgram(): Command {
     .description('Query the bound repo for symbols and execution flows related to a concept')
     .option('--task-context <text>', 'What you are working on')
     .option('--goal <text>', 'What you want to find')
+    .option('--owners', 'Bias results toward likely production owners for broad subsystem discovery')
     .option('--limit <number>', 'Max processes to return', (value) => Number.parseInt(value, 10))
     .option('--max-symbols <number>', 'Max symbols per process', (value) => Number.parseInt(value, 10))
     .option('--include-content', 'Include full symbol source code')
@@ -135,6 +136,7 @@ export function buildProgram(): Command {
     .option('--limit <number>', 'Max clusters or processes to return', (value) => Number.parseInt(value, 10))
     .option('--no-clusters', 'Skip module or subsystem summary')
     .option('--no-processes', 'Skip process summary')
+    .option('--subsystems', 'Add a subsystem-oriented architectural summary derived from existing indexed facts')
     .action(createLazyAction(() => import('./summary.js'), 'summaryCommand'));
 
   program.addCommand(buildManageCommand());

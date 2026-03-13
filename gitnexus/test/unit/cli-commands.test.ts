@@ -61,14 +61,25 @@ describe('CLI commands', () => {
       ]);
 
       const impact = program.commands.find((command) => command.name() === 'impact');
+      const query = program.commands.find((command) => command.name() === 'query');
+      const summary = program.commands.find((command) => command.name() === 'summary');
       expect(impact?.options.map((option) => option.long)).toEqual(
         expect.arrayContaining(['--uid', '--file-path', '--direction', '--max-depth']),
+      );
+      expect(query?.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining(['--owners', '--limit', '--max-symbols']),
+      );
+      expect(summary?.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining(['--subsystems', '--limit']),
       );
     });
 
     it('renders help for the new use-plane and manage-plane tree', async () => {
       const { buildProgram } = await import('../../src/cli/index.js');
       const help = buildProgram().helpInformation();
+      const program = buildProgram();
+      const queryHelp = program.commands.find((command) => command.name() === 'query')?.helpInformation() || '';
+      const summaryHelp = program.commands.find((command) => command.name() === 'summary')?.helpInformation() || '';
 
       expect(help).toContain('codenexus');
       expect(help).toContain('help');
@@ -79,6 +90,8 @@ describe('CLI commands', () => {
       expect(help).toContain('cypher');
       expect(help).toContain('rename');
       expect(help).toContain('summary');
+      expect(queryHelp).toContain('--owners');
+      expect(summaryHelp).toContain('--subsystems');
       expect(help).toContain('manage');
       expect(help).not.toContain('\ninfo');
       expect(help).not.toContain('\ninit');

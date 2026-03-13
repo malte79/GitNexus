@@ -21,24 +21,28 @@ CodeNexus now separates use from administration:
 \`\`\`bash
 codenexus help
 codenexus query <terms...>
+codenexus query <terms...> --owners
 codenexus context <name>
 codenexus impact <target> --direction upstream
 codenexus detect-changes
 codenexus cypher <query...>
 codenexus rename <symbol> --new-name <name>
 codenexus summary
+codenexus summary --subsystems
 codenexus manage <subcommand>
 \`\`\`
 
 Use plane:
 - \`codenexus help\`: explain the CLI surface and the direct MCP path
 - \`codenexus query\`: find relevant symbols and execution flows
+- \`codenexus query --owners\`: bias broad discovery toward likely production owners and entrypoint surfaces
 - \`codenexus context\`: inspect one symbol in depth
 - \`codenexus impact\`: estimate blast radius before changing a symbol
 - \`codenexus detect-changes\`: analyze local git changes and affected flows
 - \`codenexus cypher\`: ask a custom read-only graph question
 - \`codenexus rename\`: preview or apply a coordinated rename
 - \`codenexus summary\`: show a compact repo or subsystem summary
+- \`codenexus summary --subsystems\`: show a subsystem-oriented architectural view derived from indexed graph facts, including owners, hot anchors, and hot processes
 
 Manage plane:
 - \`codenexus manage init\`: create repo-local CodeNexus config in \`.codenexus/config.toml\`
@@ -91,7 +95,12 @@ CLI examples:
 \`\`\`bash
 codenexus query round start show logic
 codenexus query bridge http lifecycle status start stop studio automation
+codenexus query typed bridge http lifecycle status start stop studio automation --owners
 \`\`\`
+
+Notes:
+- default \`query\` is still broad discovery
+- \`query --owners\` is the owner-biased mode for “show me the main production owners of this subsystem”
 
 ### \`context\`
 
@@ -129,6 +138,8 @@ codenexus impact onTransportClosed --file-path typed/plugin/runtime/runtime_mana
 Notes:
 - when process or community memberships are not grounded strongly enough, \`impact\` may return \`affected_areas\` alongside partial confidence so the system effect is still visible
 - this is additive guidance, not a hidden fallback blast-radius mode
+- \`impact\` also returns machine-readable confidence signals so you can see whether member coverage, edge coverage, or higher-level propagation is the weak part
+- signal fields include \`member_coverage\`, \`incoming_edges\`, \`outgoing_edges\`, and \`higher_level_propagation\`
 
 ### \`detect-changes\`
 
@@ -188,7 +199,13 @@ CLI examples:
 \`\`\`bash
 codenexus summary
 codenexus summary --limit 10 --no-processes
+codenexus summary --subsystems --limit 8
 \`\`\`
+
+Notes:
+- \`summary --subsystems\` stays read-only and is derived from existing graph facts only
+- subsystem rows include top owners, hot anchors, and hot processes so architectural hotspots are visible without hand-stitching clusters together
+- if subsystem labels are weak, CodeNexus should show fewer rows rather than inventing architecture
 
 ## Using The HTTP Service
 

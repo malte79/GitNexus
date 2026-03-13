@@ -1,11 +1,13 @@
 import path from 'node:path';
 
-export interface LuauModuleMethodRef {
+export interface LuauModuleMemberRef {
   name: string;
   startLine: number;
-  label: 'Method';
+  label: 'Method' | 'Function' | 'Property';
   targetName?: string;
+  targetBaseName?: string;
   targetLabel?: 'Method' | 'Function';
+  synthetic?: boolean;
 }
 
 export interface LuauModuleSymbolCandidate {
@@ -15,12 +17,15 @@ export interface LuauModuleSymbolCandidate {
   description: string;
   isExported: true;
   confidence: 'strong' | 'weak';
-  methodRefs: LuauModuleMethodRef[];
+  memberRefs: LuauModuleMemberRef[];
 }
 
-interface NamedModuleSeed {
-  declaration: any;
-  methods: LuauModuleMethodRef[];
+export interface LuauLocalTableContainerCandidate {
+  name: string;
+  startLine: number;
+  endLine: number;
+  description: string;
+  memberRefs: LuauModuleMemberRef[];
 }
 
 const getNamedChildren = (node: any): any[] => {
@@ -85,9 +90,17 @@ const getReturnedTableLiteral = (node: any): any | null => {
   return returned?.type === 'table_constructor' ? returned : null;
 };
 
+interface LuauModuleAnalysis {
+  namedModules: Map<string, any>;
+  returnedNames: Set<string>;
+  moduleMethods: Map<string, LuauModuleMemberRef[]>;
+  returnedLiteralNode: any | null;
+  weakWrapperBackingNames: Set<string>;
+}
+
 const getDelegateReturnTarget = (
   functionNode: any,
-): { targetName: string; targetLabel?: 'Method' | 'Function' } | null => {
+): { targetBaseName: string; targetName: string; targetLabel?: 'Method' | 'Function' } | null => {
   if (!functionNode || functionNode.type !== 'function_definition') return null;
 
   let returnNode: any | null = null;
@@ -115,38 +128,65 @@ const getDelegateReturnTarget = (
   if (!qualified) return null;
 
   return {
+    targetBaseName: qualified.baseName,
     targetName: qualified.methodName,
     ...(callee.type === 'method_index_expression' ? { targetLabel: 'Method' as const } : {}),
   };
 };
 
-const getTableLiteralMethodRefs = (tableNode: any): LuauModuleMethodRef[] => {
-  const refs: LuauModuleMethodRef[] = [];
+const getTableLiteralMemberRefs = (tableNode: any): LuauModuleMemberRef[] => {
+  const refs: LuauModuleMemberRef[] = [];
   for (const child of getNamedChildren(tableNode)) {
     if (child.type !== 'field') continue;
     const fieldName = child.namedChild(0);
     const fieldValue = child.namedChild(1);
     if (!fieldName || fieldName.type !== 'identifier') continue;
-    if (!fieldValue || fieldValue.type !== 'function_definition') continue;
-    const delegateTarget = getDelegateReturnTarget(fieldValue);
-    refs.push({
-      name: fieldName.text,
-      startLine: child.startPosition.row,
-      label: 'Method',
-      ...(delegateTarget ?? {}),
-    });
+    if (!fieldValue) continue;
+
+    if (fieldValue.type === 'function_definition') {
+      const delegateTarget = getDelegateReturnTarget(fieldValue);
+      refs.push({
+        name: fieldName.text,
+        startLine: child.startPosition.row,
+        label: 'Method',
+        ...(delegateTarget ?? {}),
+      });
+      continue;
+    }
+
+    if (fieldValue.type === 'identifier') {
+      refs.push({
+        name: fieldName.text,
+        startLine: child.startPosition.row,
+        label: 'Property',
+        targetName: fieldValue.text,
+        synthetic: true,
+      });
+      continue;
+    }
+
+    const qualifiedValue = getQualifiedNameParts(fieldValue);
+    if (qualifiedValue) {
+      refs.push({
+        name: fieldName.text,
+        startLine: child.startPosition.row,
+        label: 'Property',
+        targetBaseName: qualifiedValue.baseName,
+        targetName: qualifiedValue.methodName,
+        ...(fieldValue.type === 'method_index_expression' ? { targetLabel: 'Method' as const } : {}),
+        synthetic: true,
+      });
+    }
   }
   return refs;
 };
 
-export const extractLuauModuleSymbolCandidates = (
-  rootNode: any,
-  filePath: string,
-): LuauModuleSymbolCandidate[] => {
-  const namedModules = new Map<string, NamedModuleSeed>();
+const collectLuauModuleAnalysis = (rootNode: any): LuauModuleAnalysis => {
+  const namedModules = new Map<string, any>();
   const returnedNames = new Set<string>();
-  const moduleMethods = new Map<string, LuauModuleMethodRef[]>();
+  const moduleMethods = new Map<string, LuauModuleMemberRef[]>();
   let returnedLiteralNode: any | null = null;
+  const weakWrapperBackingNames = new Set<string>();
 
   for (const child of getNamedChildren(rootNode)) {
     if (child.type === 'variable_declaration') {
@@ -154,10 +194,7 @@ export const extractLuauModuleSymbolCandidates = (
       if (assignment) {
         const { target, value } = getVariableAssignmentParts(assignment);
         if (target?.type === 'identifier' && value?.type === 'table_constructor') {
-          namedModules.set(target.text, {
-            declaration: child,
-            methods: [],
-          });
+          namedModules.set(target.text, child);
         }
       }
       continue;
@@ -201,38 +238,88 @@ export const extractLuauModuleSymbolCandidates = (
       const returnedLiteral = getReturnedTableLiteral(child);
       if (returnedLiteral) {
         returnedLiteralNode = returnedLiteral;
+        for (const memberRef of getTableLiteralMemberRefs(returnedLiteral)) {
+          if (typeof memberRef.targetBaseName === 'string' && memberRef.targetBaseName.length > 0) {
+            weakWrapperBackingNames.add(memberRef.targetBaseName);
+          }
+        }
       }
     }
   }
 
+  return {
+    namedModules,
+    returnedNames,
+    moduleMethods,
+    returnedLiteralNode,
+    weakWrapperBackingNames,
+  };
+};
+
+export const extractLuauModuleSymbolCandidates = (
+  rootNode: any,
+  filePath: string,
+): LuauModuleSymbolCandidate[] => {
+  const { namedModules, returnedNames, moduleMethods, returnedLiteralNode } = collectLuauModuleAnalysis(rootNode);
+
   const candidates: LuauModuleSymbolCandidate[] = [];
-  for (const [name, seed] of namedModules.entries()) {
+  for (const [name, declaration] of namedModules.entries()) {
     if (!returnedNames.has(name)) continue;
     const refs = moduleMethods.get(name) ?? [];
     candidates.push({
       name,
-      startLine: seed.declaration.startPosition.row,
-      endLine: seed.declaration.endPosition.row,
+      startLine: declaration.startPosition.row,
+      endLine: declaration.endPosition.row,
       description: 'luau-module:strong:named-return-table',
       isExported: true,
       confidence: 'strong',
-      methodRefs: refs,
+      memberRefs: refs,
     });
   }
 
   if (candidates.length === 0 && returnedLiteralNode) {
-    const literalMethodRefs = getTableLiteralMethodRefs(returnedLiteralNode);
-    if (literalMethodRefs.length > 0) {
+    const literalMemberRefs = getTableLiteralMemberRefs(returnedLiteralNode);
+    if (literalMemberRefs.length > 0) {
+      const backingContainerNames = [...new Set(literalMemberRefs
+        .map((memberRef) => memberRef.targetBaseName)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .filter((name) => moduleMethods.has(name))
+      )].sort();
       candidates.push({
         name: getFileModuleBaseName(filePath),
         startLine: returnedLiteralNode.startPosition.row,
         endLine: returnedLiteralNode.endPosition.row,
-        description: 'luau-module:weak:return-table-literal',
+        description: backingContainerNames.length > 0
+          ? `luau-module:weak:return-table-literal:backing=${backingContainerNames.join(',')}`
+          : 'luau-module:weak:return-table-literal',
         isExported: true,
         confidence: 'weak',
-        methodRefs: literalMethodRefs,
+        memberRefs: literalMemberRefs,
       });
     }
+  }
+
+  return candidates;
+};
+
+export const extractLuauLocalTableContainerCandidates = (
+  rootNode: any,
+): LuauLocalTableContainerCandidate[] => {
+  const { namedModules, returnedNames, moduleMethods, weakWrapperBackingNames } = collectLuauModuleAnalysis(rootNode);
+
+  const candidates: LuauLocalTableContainerCandidate[] = [];
+  for (const [name, declaration] of namedModules.entries()) {
+    if (returnedNames.has(name)) continue;
+    if (!weakWrapperBackingNames.has(name)) continue;
+    const memberRefs = moduleMethods.get(name) ?? [];
+    if (memberRefs.length === 0) continue;
+    candidates.push({
+      name,
+      startLine: declaration.startPosition.row,
+      endLine: declaration.endPosition.row,
+      description: 'luau-module:local-table',
+      memberRefs,
+    });
   }
 
   return candidates;

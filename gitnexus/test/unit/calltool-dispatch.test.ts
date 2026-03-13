@@ -188,6 +188,57 @@ describe('LocalBackend.callTool', () => {
     expect(result.coverage.notes.join(' ')).toContain('processes failed');
   });
 
+  it('includes subsystem hot anchors and grounded owner candidates in subsystem summary mode', async () => {
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (f:File)')) {
+        return [{ filePath: 'typed/plugin/runtime/runtime_manager.lua' }];
+      }
+      if (cypher.includes('RETURN n.id AS id') && cypher.includes('COUNT(*) AS fanIn')) {
+        return [{ id: 'class:RuntimeManager', name: 'RuntimeManager', type: 'Module', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 8 }];
+      }
+      if (cypher.includes('MATCH (c:Community)')) {
+        return [{ id: 'comm:runtime', label: 'Runtime', heuristicLabel: 'Runtime', cohesion: 0.92, symbolCount: 18 }];
+      }
+      if (cypher.includes('MATCH (p:Process)')) {
+        return [];
+      }
+      if (cypher.includes('MATCH (f:File)-[:CodeRelation {type: \'DEFINES\'}]->(n)')) {
+        return [{ filePath: 'typed/plugin/runtime/runtime_manager.lua', id: 'module:RuntimeManager', name: 'RuntimeManager', type: 'Module', fanIn: 8 }];
+      }
+      if (cypher.includes('MATCH (src)-[r:CodeRelation]->(n)') && cypher.includes('n.filePath IN')) {
+        return [
+          { id: 'method:onTransportClosed', name: 'onTransportClosed', type: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 12 },
+          { id: 'method:step', name: 'step', type: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 9 },
+        ];
+      }
+      return [];
+    });
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('RETURN DISTINCT n.filePath AS filePath')) {
+        return [{ filePath: 'typed/plugin/runtime/runtime_manager.lua' }];
+      }
+      if (cypher.includes('RETURN p.heuristicLabel AS label')) {
+        return [{ label: 'OnTransportClosed → NowSeconds', hits: 4 }];
+      }
+      if (cypher.includes('RETURN SIZE(incomingEdges) AS fanIn')) {
+        return [{ fanIn: 12, fanOut: 18 }];
+      }
+      if (cypher.includes('RETURN n.id AS id') && cypher.includes('COUNT(DISTINCT src.id) AS fanIn')) {
+        return [{ id: 'module:RuntimeManager', name: 'RuntimeManager', type: 'Module', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 8 }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('summary', { showSubsystems: true, limit: 3 });
+    expect(result.subsystems[0].name).toBe('Runtime');
+    expect(result.subsystems[0].top_owners).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'RuntimeManager', type: 'Module' }),
+    ]));
+    expect(result.subsystems[0].hot_anchors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'onTransportClosed', type: 'Method', fan_in: 12 }),
+    ]));
+  });
+
   it('ranks Roblox module symbols and includes Roblox-aware summaries', async () => {
     (searchFTSFromKuzu as any).mockImplementation(async (query: string) => {
       if (query === 'SpotlightRegistry') {
@@ -680,6 +731,70 @@ describe('LocalBackend.callTool', () => {
     expect(result.coverage.note).toContain('weak returned-table wrapper');
   });
 
+  it('surfaces grounded backing-container members for weak Luau wrappers that explicitly delegate into a local table', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{
+          id: 'module:runtime_manager',
+          name: 'runtime_manager',
+          type: 'Module',
+          filePath: 'typed/plugin/runtime/runtime_manager.lua',
+          startLine: 801,
+          endLine: 806,
+          description: 'luau-module:weak:return-table-literal:backing=RuntimeManager',
+        }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        return [
+          { uid: 'method:new', name: 'new', kind: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 67, endLine: 135 },
+          { uid: 'prop:DEFAULTS', name: 'DEFAULTS', kind: 'Property', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 805, endLine: 805 },
+        ];
+      }
+      if (cypher.includes("container.description = 'luau-module:local-table'")) {
+        expect(params.backingContainers).toEqual(['RuntimeManager']);
+        return [
+          { uid: 'method:start', name: 'start', kind: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 408, endLine: 424, backingContainer: 'RuntimeManager', role: 'backing_container_member' },
+          { uid: 'method:stop', name: 'stop', kind: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 426, endLine: 443, backingContainer: 'RuntimeManager', role: 'backing_container_member' },
+        ];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(child)") && cypher.includes("'method:start'")) {
+        return [{ relType: 'CALLS', uid: 'func:boot', name: 'boot', filePath: 'typed/plugin/runtime/bootstrap.lua', kind: 'Function', viaMember: 'start' }];
+      }
+      if (cypher.includes("MATCH (child)-[r:CodeRelation]->(target)") && cypher.includes("'method:start'")) {
+        return [{ relType: 'CALLS', uid: 'module:Telemetry', name: 'Telemetry', filePath: 'typed/plugin/runtime/telemetry.lua', kind: 'Module', viaMember: 'start' }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', {
+      name: 'runtime_manager',
+      file_path: 'typed/plugin/runtime/runtime_manager.lua',
+    });
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.coverage.note).toContain('backing-container methods');
+    expect(result.members).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'new', kind: 'Method' }),
+      expect.objectContaining({ name: 'DEFAULTS', kind: 'Property' }),
+      expect.objectContaining({ name: 'start', role: 'backing_container_member', backing_container: 'RuntimeManager' }),
+      expect.objectContaining({ name: 'stop', role: 'backing_container_member', backing_container: 'RuntimeManager' }),
+    ]));
+    expect(result.incoming.calls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'boot', viaMember: 'start' }),
+    ]));
+  });
+
   it('does not infer module members from same-file file definitions when direct module edges are missing', async () => {
     (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
       if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
@@ -860,6 +975,18 @@ describe('LocalBackend.callTool', () => {
           { sourceId: 'func:dispatch', id: 'File:typed/bridge/http/routes/studio.py', name: 'studio.py', type: 'File', filePath: 'typed/bridge/http/routes/studio.py', relType: 'CALLS', confidence: 0.5 },
         ];
       }
+      if (cypher.includes("MATCH (f:File)-[:CodeRelation {type: 'DEFINES'}]->(n)")) {
+        return [
+          { filePath: 'typed/bridge/http/services/studio_automation.py', id: 'func:dispatchStudioCommand', name: 'dispatchStudioCommand', type: 'Function', fanIn: 0, startLine: 20 },
+          { filePath: 'typed/bridge/http/routes/studio.py', id: 'func:handleStudioRoute', name: 'handleStudioRoute', type: 'Function', fanIn: 0, startLine: 12 },
+        ];
+      }
+      if (cypher.includes('MATCH (src)-[r:CodeRelation]->(n)') && cypher.includes('n.filePath IN')) {
+        return [
+          { id: 'func:dispatchStudioCommand', name: 'dispatchStudioCommand', type: 'Function', filePath: 'typed/bridge/http/services/studio_automation.py', fanIn: 7, startLine: 20 },
+          { id: 'func:handleStudioRoute', name: 'handleStudioRoute', type: 'Function', filePath: 'typed/bridge/http/routes/studio.py', fanIn: 4, startLine: 12 },
+        ];
+      }
       if (cypher.includes("MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
         return [];
       }
@@ -874,12 +1001,26 @@ describe('LocalBackend.callTool', () => {
       direction: 'upstream',
     });
     expect(result.coverage.confidence).toBe('partial');
-    expect(result.affected_areas).toEqual([
-      { name: 'typed/bridge/http/routes', files: 1 },
-      { name: 'typed/bridge/http/services', files: 1 },
-    ]);
-    expect(result.coverage.note).toContain('typed/bridge/http/routes');
-    expect(result.coverage.note).toContain('typed/bridge/http/services');
+    expect(result.affected_areas).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'typed/bridge/http/routes',
+        files: 1,
+        top_owners: expect.arrayContaining([
+          expect.objectContaining({ name: 'handleStudioRoute', type: 'Function' }),
+        ]),
+      }),
+      expect.objectContaining({
+        name: 'typed/bridge/http/services',
+        files: 1,
+        top_owners: expect.arrayContaining([
+          expect.objectContaining({ name: 'dispatchStudioCommand', type: 'Function' }),
+        ]),
+      }),
+    ]));
+    expect(result.coverage.note).toContain('file-level callers');
+    expect(result.coverage.note).toContain('grounded owners and hot anchors');
+    expect(result.affected_modules).not.toEqual([]);
+    expect(result.coverage.signals.higher_level_propagation).toBe('medium');
   });
 
   it('supports impact disambiguation by file path', async () => {

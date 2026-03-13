@@ -23,7 +23,7 @@ try { Swift = _require('tree-sitter-swift'); } catch {}
 import { findSiblingChild, getLanguageFromFilename } from '../utils.js';
 import { detectFrameworkFromAST } from '../framework-detection.js';
 import { generateId } from '../../../lib/utils.js';
-import { extractLuauModuleSymbolCandidates } from '../luau-module-symbols.js';
+import { extractLuauLocalTableContainerCandidates, extractLuauModuleSymbolCandidates } from '../luau-module-symbols.js';
 import { extractLuauRobloxAliasesAndImports } from '../roblox/luau-resolution.js';
 import type { RobloxPathSpec } from '../roblox/types.js';
 
@@ -585,50 +585,79 @@ const resolveLuauModuleMethodId = (
 
   const targetName = methodRef.targetName || methodRef.name;
   const exact = result.symbols.find((symbol) =>
-    symbol.filePath === filePath &&
-    symbol.name === targetName &&
-    (
-      methodRef.targetLabel
-        ? symbol.type === methodRef.targetLabel
-        : symbol.type === 'Method' || symbol.type === 'Function'
-    ),
+        symbol.filePath === filePath &&
+        symbol.name === targetName &&
+        (
+          methodRef.targetLabel
+            ? symbol.type === methodRef.targetLabel
+            : symbol.type === 'Method' ||
+              symbol.type === 'Function' ||
+              symbol.type === 'Property' ||
+              symbol.type === 'Const' ||
+              symbol.type === 'Static' ||
+              symbol.type === 'CodeElement'
+        ),
   );
   return exact?.nodeId ?? null;
 };
 
-const appendLuauModuleSymbols = (
-  result: ParseWorkerResult,
-  rootNode: any,
+const createSyntheticLuauModuleMemberNode = (
+  moduleId: string,
   filePath: string,
-): void => {
-  const candidates = extractLuauModuleSymbolCandidates(rootNode, filePath);
-  if (candidates.length === 0) return;
+  memberRef: { name: string; startLine: number; label: string },
+) => ({
+  id: generateId('Property', `${moduleId}:${memberRef.name}:${memberRef.startLine}`),
+  label: 'Property',
+  properties: {
+    name: memberRef.name,
+    filePath,
+    startLine: memberRef.startLine,
+    endLine: memberRef.startLine,
+    language: SupportedLanguages.Luau,
+    isExported: true,
+    description: 'luau-module-export:returned-table-field',
+  },
+});
 
+const appendLuauContainerSymbols = (
+  result: ParseWorkerResult,
+  filePath: string,
+  containers: Array<{
+    name: string;
+    startLine: number;
+    endLine: number;
+    description: string;
+    confidence?: 'strong' | 'weak';
+    memberRefs: Array<{ name: string; startLine: number; label: string; targetName?: string; targetLabel?: string; synthetic?: boolean }>;
+  }>,
+  isExported: boolean,
+  defaultConfidence: number,
+) => {
   const existingIds = new Set(result.symbols
     .filter(sym => sym.filePath === filePath)
     .map(sym => sym.nodeId));
 
-  for (const candidate of candidates) {
-    const moduleId = generateId('Module', `${filePath}:${candidate.name}:${candidate.startLine}`);
+  for (const container of containers) {
+    const moduleId = generateId('Module', `${filePath}:${container.name}:${container.startLine}`);
     if (existingIds.has(moduleId)) continue;
 
     result.nodes.push({
       id: moduleId,
       label: 'Module',
       properties: {
-        name: candidate.name,
+        name: container.name,
         filePath,
-        startLine: candidate.startLine,
-        endLine: candidate.endLine,
+        startLine: container.startLine,
+        endLine: container.endLine,
         language: SupportedLanguages.Luau,
-        isExported: candidate.isExported,
-        description: candidate.description,
+        isExported,
+        description: container.description,
       },
     });
 
     result.symbols.push({
       filePath,
-      name: candidate.name,
+      name: container.name,
       nodeId: moduleId,
       type: 'Module',
     });
@@ -639,26 +668,65 @@ const appendLuauModuleSymbols = (
       sourceId: fileId,
       targetId: moduleId,
       type: 'DEFINES',
-      confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
-      reason: candidate.description,
+      confidence: container.confidence === 'strong' ? 1.0 : container.confidence === 'weak' ? 0.7 : defaultConfidence,
+      reason: container.description,
     });
 
     existingIds.add(moduleId);
 
-    for (const methodRef of candidate.methodRefs) {
-      const methodId = resolveLuauModuleMethodId(result, filePath, methodRef);
-      if (!methodId || !existingIds.has(methodId)) continue;
+    for (const memberRef of container.memberRefs) {
+      let memberId = resolveLuauModuleMethodId(result, filePath, memberRef);
+      if (!memberId && memberRef.synthetic) {
+        const syntheticNode = createSyntheticLuauModuleMemberNode(moduleId, filePath, memberRef);
+        if (!existingIds.has(syntheticNode.id)) {
+          result.nodes.push(syntheticNode);
+          result.symbols.push({
+            filePath,
+            name: memberRef.name,
+            nodeId: syntheticNode.id,
+            type: 'Property',
+          });
+          existingIds.add(syntheticNode.id);
+        }
+        memberId = syntheticNode.id;
+      }
+      if (!memberId || !existingIds.has(memberId)) continue;
 
       result.relationships.push({
-        id: generateId('DEFINES', `${moduleId}->${methodId}`),
+        id: generateId('DEFINES', `${moduleId}->${memberId}`),
         sourceId: moduleId,
-        targetId: methodId,
+        targetId: memberId,
         type: 'DEFINES',
-        confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
-        reason: candidate.description,
+        confidence: container.confidence === 'strong' ? 1.0 : container.confidence === 'weak' ? 0.7 : defaultConfidence,
+        reason: container.description,
       });
     }
   }
+};
+
+const appendLuauModuleSymbols = (
+  result: ParseWorkerResult,
+  rootNode: any,
+  filePath: string,
+): void => {
+  const candidates = extractLuauModuleSymbolCandidates(rootNode, filePath);
+  const localContainers = extractLuauLocalTableContainerCandidates(rootNode);
+  if (candidates.length === 0 && localContainers.length === 0) return;
+
+  appendLuauContainerSymbols(
+    result,
+    filePath,
+    candidates,
+    true,
+    0.7,
+  );
+  appendLuauContainerSymbols(
+    result,
+    filePath,
+    localContainers,
+    false,
+    0.85,
+  );
 };
 
 /**

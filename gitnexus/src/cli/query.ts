@@ -8,6 +8,7 @@ export async function queryCommand(
     limit?: number;
     maxSymbols?: number;
     includeContent?: boolean;
+    owners?: boolean;
   },
 ): Promise<void> {
   const query = terms?.join(' ').trim();
@@ -24,5 +25,6 @@ export async function queryCommand(
     ...(Number.isInteger(options.limit) ? { limit: options.limit } : {}),
     ...(Number.isInteger(options.maxSymbols) ? { max_symbols: options.maxSymbols } : {}),
     ...(options.includeContent ? { include_content: true } : {}),
+    ...(options.owners ? { owners: true } : {}),
   });
 }
