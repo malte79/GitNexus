@@ -94,6 +94,7 @@ export function buildProgram(): Command {
     .description('Show callers, callees, and process context for one symbol in the bound repo')
     .option('--uid <uid>', 'Direct symbol UID from prior results')
     .option('--file-path <path>', 'File path to disambiguate common names')
+    .option('--file <path>', 'Shorthand alias for --file-path')
     .option('--include-content', 'Include full symbol source code')
     .action(createLazyAction(() => import('./context.js'), 'contextCommand'));
 

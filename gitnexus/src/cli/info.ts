@@ -113,10 +113,11 @@ CLI examples:
 
 \`\`\`bash
 codenexus context SpotlightRegistry
-codenexus context CommandBridgeHandler --file-path typed/bridge/http
+codenexus context CommandBridgeHandler --file typed/bridge/http
 \`\`\`
 
 Notes:
+- \`context\` accepts both \`--file-path\` and the shorthand \`--file\` for symbol disambiguation
 - weak Luau returned-table wrappers may show only the delegate members that are explicitly exported by the returned table
 - when that happens, CodeNexus now says so directly instead of pretending the module is fully covered
 

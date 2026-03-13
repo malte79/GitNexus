@@ -61,8 +61,12 @@ describe('CLI commands', () => {
       ]);
 
       const impact = program.commands.find((command) => command.name() === 'impact');
+      const context = program.commands.find((command) => command.name() === 'context');
       const query = program.commands.find((command) => command.name() === 'query');
       const summary = program.commands.find((command) => command.name() === 'summary');
+      expect(context?.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining(['--uid', '--file-path', '--file', '--include-content']),
+      );
       expect(impact?.options.map((option) => option.long)).toEqual(
         expect.arrayContaining(['--uid', '--file-path', '--direction', '--max-depth']),
       );
