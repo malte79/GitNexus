@@ -7,7 +7,7 @@ import { SymbolTable } from './symbol-table.js';
 import { ASTCache } from './ast-cache.js';
 import { findSiblingChild, getLanguageFromFilename, yieldToEventLoop } from './utils.js';
 import { detectFrameworkFromAST } from './framework-detection.js';
-import { extractLuauModuleSymbolCandidates } from './luau-module-symbols.js';
+import { extractLuauLocalTableContainerCandidates, extractLuauModuleSymbolCandidates } from './luau-module-symbols.js';
 import { WorkerPool } from './workers/worker-pool.js';
 import type { ParseWorkerResult, ParseWorkerInput, ExtractedImport, ExtractedCall, ExtractedHeritage, ExtractedRoute } from './workers/parse-worker.js';
 
@@ -69,12 +69,101 @@ const resolveLuauModuleMethodId = (
   if (!exact) return null;
 
   if (!methodRef.targetLabel) {
-    return exact.startsWith('Method:') || exact.startsWith('Function:')
+    return (
+      exact.startsWith('Method:') ||
+      exact.startsWith('Function:') ||
+      exact.startsWith('Property:') ||
+      exact.startsWith('Const:') ||
+      exact.startsWith('Static:') ||
+      exact.startsWith('CodeElement:')
+    )
       ? exact
       : null;
   }
 
   return exact.startsWith(`${methodRef.targetLabel}:`) ? exact : null;
+};
+
+const createSyntheticLuauModuleMemberNode = (
+  moduleId: string,
+  filePath: string,
+  memberRef: { name: string; startLine: number; label: string },
+): GraphNode => ({
+  id: generateId('Property', `${moduleId}:${memberRef.name}:${memberRef.startLine}`),
+  label: 'Property',
+  properties: {
+    name: memberRef.name,
+    filePath,
+    startLine: memberRef.startLine,
+    endLine: memberRef.startLine,
+    language: 'luau',
+    isExported: true,
+    description: 'luau-module-export:returned-table-field',
+  },
+});
+
+const appendLuauContainerNode = (
+  graph: KnowledgeGraph,
+  symbolTable: SymbolTable,
+  filePath: string,
+  container: {
+    name: string;
+    startLine: number;
+    endLine: number;
+    description: string;
+    memberRefs: Array<{ name: string; startLine: number; label: string; targetName?: string; targetLabel?: string; synthetic?: boolean }>;
+  },
+  isExported: boolean,
+  confidence: number,
+) => {
+  const moduleId = generateId('Module', `${filePath}:${container.name}:${container.startLine}`);
+  if (graph.getNode(moduleId)) return;
+
+  graph.addNode({
+    id: moduleId,
+    label: 'Module',
+    properties: {
+      name: container.name,
+      filePath,
+      startLine: container.startLine,
+      endLine: container.endLine,
+      language: 'luau',
+      isExported,
+      description: container.description,
+    },
+  });
+  symbolTable.add(filePath, container.name, moduleId, 'Module');
+
+  const fileId = generateId('File', filePath);
+  graph.addRelationship({
+    id: generateId('DEFINES', `${fileId}->${moduleId}`),
+    sourceId: fileId,
+    targetId: moduleId,
+    type: 'DEFINES',
+    confidence,
+    reason: container.description,
+  });
+
+  for (const memberRef of container.memberRefs) {
+    let memberId = resolveLuauModuleMethodId(filePath, memberRef, symbolTable);
+    if (!memberId && memberRef.synthetic) {
+      const syntheticNode = createSyntheticLuauModuleMemberNode(moduleId, filePath, memberRef);
+      if (!graph.getNode(syntheticNode.id)) {
+        graph.addNode(syntheticNode);
+        symbolTable.add(filePath, memberRef.name, syntheticNode.id, 'Property');
+      }
+      memberId = syntheticNode.id;
+    }
+    if (!memberId || !graph.getNode(memberId)) continue;
+    graph.addRelationship({
+      id: generateId('DEFINES', `${moduleId}->${memberId}`),
+      sourceId: moduleId,
+      targetId: memberId,
+      type: 'DEFINES',
+      confidence,
+      reason: container.description,
+    });
+  }
 };
 
 // ============================================================================
@@ -461,47 +550,26 @@ const processParsingSequential = async (
     if (language === 'luau') {
       const candidates = extractLuauModuleSymbolCandidates(tree.rootNode, file.path);
       for (const candidate of candidates) {
-        const moduleId = generateId('Module', `${file.path}:${candidate.name}:${candidate.startLine}`);
-        if (graph.getNode(moduleId)) continue;
+        appendLuauContainerNode(
+          graph,
+          symbolTable,
+          file.path,
+          candidate,
+          candidate.isExported,
+          candidate.confidence === 'strong' ? 1.0 : 0.7,
+        );
+      }
 
-        const moduleNode: GraphNode = {
-          id: moduleId,
-          label: 'Module',
-          properties: {
-            name: candidate.name,
-            filePath: file.path,
-            startLine: candidate.startLine,
-            endLine: candidate.endLine,
-            language,
-            isExported: candidate.isExported,
-            description: candidate.description,
-          },
-        };
-        graph.addNode(moduleNode);
-        symbolTable.add(file.path, candidate.name, moduleId, 'Module');
-
-        const fileId = generateId('File', file.path);
-        graph.addRelationship({
-          id: generateId('DEFINES', `${fileId}->${moduleId}`),
-          sourceId: fileId,
-          targetId: moduleId,
-          type: 'DEFINES',
-          confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
-          reason: candidate.description,
-        });
-
-        for (const methodRef of candidate.methodRefs) {
-          const methodId = resolveLuauModuleMethodId(file.path, methodRef, symbolTable);
-          if (!methodId || !graph.getNode(methodId)) continue;
-          graph.addRelationship({
-            id: generateId('DEFINES', `${moduleId}->${methodId}`),
-            sourceId: moduleId,
-            targetId: methodId,
-            type: 'DEFINES',
-            confidence: candidate.confidence === 'strong' ? 1.0 : 0.7,
-            reason: candidate.description,
-          });
-        }
+      const localContainers = extractLuauLocalTableContainerCandidates(tree.rootNode);
+      for (const container of localContainers) {
+        appendLuauContainerNode(
+          graph,
+          symbolTable,
+          file.path,
+          container,
+          false,
+          0.85,
+        );
       }
     }
   }

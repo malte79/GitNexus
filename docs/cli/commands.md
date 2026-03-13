@@ -49,6 +49,7 @@ Contract:
   - `codenexus manage start`
 - keeps the direct MCP-over-HTTP path documented for advanced users
 - includes brief use cases and example calls for each supported structural command type
+- documents owner-biased discovery with `codenexus query --owners` and subsystem-oriented summary with `codenexus summary --subsystems`
 
 ## Top-Level Structural Commands
 
@@ -78,6 +79,7 @@ Shared contract:
   - symbol name or `--uid`
   - optional `--file-path` when the symbol name is ambiguous
 - `codenexus context` may explain when a Luau module is a weak returned-table wrapper and therefore only exposes grounded delegate members from the returned table
+- `codenexus context` may also surface grounded backing-container members for weak returned-table wrappers when the wrapper explicitly delegates into a named local table; those backing members are structural context, not exported module members
 - `codenexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
 - `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
 - the primary Cypher recovery resources are:

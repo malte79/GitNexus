@@ -14,7 +14,7 @@ run_test() {
 
 run_test test/integration/csv-pipeline.test.ts
 run_test test/integration/filesystem-walker.test.ts
-run_test test/integration/local-backend.test.ts vmForks
+npx tsx scripts/run-local-backend-integration.ts
 run_test test/integration/kuzu-pool.test.ts forks
 run_test test/integration/parsing.test.ts
 run_test test/integration/pipeline.test.ts

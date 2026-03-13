@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { initKuzu, executeQuery, executeParameterized, closeKuzu, isKuzuReady, reloadKuzu } from '../core/kuzu-adapter.js';
 import { getNodeProperties, getPropertyResourceUri } from '../schema-properties.js';
+import { generateId } from '../../lib/utils.js';
 import {
   loadRepo,
   resolveRepoBoundary,
@@ -245,6 +246,7 @@ export class LocalBackend {
     query: string;
     task_context?: string;
     goal?: string;
+    owners?: boolean;
     limit?: number;
     max_symbols?: number;
     include_content?: boolean;
@@ -258,12 +260,13 @@ export class LocalBackend {
     const processLimit = params.limit || 5;
     const maxSymbolsPerProcess = params.max_symbols || 10;
     const includeContent = params.include_content ?? false;
+    const ownerMode = params.owners ?? false;
     const searchQuery = params.query.trim();
     
     // Step 1: Run BM25 search to get matching symbols
     const searchLimit = processLimit * maxSymbolsPerProcess; // fetch enough raw results
     const bm25Results = await this.bm25Search(repo, searchQuery, searchLimit * 2);
-    const rankedMatches = await this.rankSearchResults(repo, searchQuery, bm25Results, searchLimit);
+    const rankedMatches = await this.rankSearchResults(repo, searchQuery, bm25Results, searchLimit, ownerMode);
     
     // Step 2: For each match with a nodeId, trace to process(es)
     const processMap = new Map<string, { id: string; label: string; heuristicLabel: string; processType: string; stepCount: number; totalScore: number; cohesionBoost: number; symbols: any[] }>();
@@ -410,6 +413,7 @@ export class LocalBackend {
     });
     
     return {
+      ...(ownerMode ? { mode: 'owners' } : {}),
       processes,
       process_symbols: dedupedSymbols,
       definitions: definitions.slice(0, 20), // cap standalone definitions
@@ -509,33 +513,285 @@ export class LocalBackend {
       .slice(0, 5);
   }
 
+  private rankRepresentativeSymbols<T extends { type: string; name: string; filePath?: string; fanIn?: number; fan_in?: number; startLine?: number }>(symbols: T[]): T[] {
+    return [...symbols]
+      .filter((symbol) => symbol.type !== 'File')
+      .filter((symbol) => !this.isLowSignalSummarySymbol(symbol.name))
+      .sort((a, b) => {
+        const aPriority = this.getOwnerSymbolPriority(a.type);
+        const bPriority = this.getOwnerSymbolPriority(b.type);
+        const aFanIn = a.fanIn ?? a.fan_in ?? 0;
+        const bFanIn = b.fanIn ?? b.fan_in ?? 0;
+        const aPrimary = a.filePath && this.isPrimarySourceFile(a.filePath) ? 1 : 0;
+        const bPrimary = b.filePath && this.isPrimarySourceFile(b.filePath) ? 1 : 0;
+        const aStart = a.startLine ?? Number.MAX_SAFE_INTEGER;
+        const bStart = b.startLine ?? Number.MAX_SAFE_INTEGER;
+        return (
+          bPriority - aPriority ||
+          bFanIn - aFanIn ||
+          bPrimary - aPrimary ||
+          aStart - bStart ||
+          a.name.localeCompare(b.name)
+        );
+      });
+  }
+
+  private classifyCoverageSignal(score: number): 'high' | 'medium' | 'low' {
+    if (score >= 0.75) return 'high';
+    if (score >= 0.35) return 'medium';
+    return 'low';
+  }
+
+  private getOwnerSymbolPriority(kind: string): number {
+    switch (kind) {
+      case 'Module':
+        return 5;
+      case 'Class':
+      case 'Interface':
+      case 'Struct':
+      case 'Namespace':
+        return 4;
+      case 'Method':
+      case 'Function':
+      case 'Constructor':
+        return 2;
+      case 'File':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  private rankOwnerCandidates<T extends { type: string; fanIn?: number; fan_in?: number; name: string; filePath?: string }>(owners: T[]): T[] {
+    return [...owners].sort((a, b) => {
+      const aPriority = this.getOwnerSymbolPriority(a.type);
+      const bPriority = this.getOwnerSymbolPriority(b.type);
+      const aFanIn = a.fanIn ?? a.fan_in ?? 0;
+      const bFanIn = b.fanIn ?? b.fan_in ?? 0;
+      const aPrimary = a.filePath && this.isPrimarySourceFile(a.filePath) ? 1 : 0;
+      const bPrimary = b.filePath && this.isPrimarySourceFile(b.filePath) ? 1 : 0;
+      return (
+        bPriority - aPriority ||
+        bFanIn - aFanIn ||
+        bPrimary - aPrimary ||
+        a.name.localeCompare(b.name)
+      );
+    });
+  }
+
+  private getWeakLuauBackingContainers(description?: string): string[] {
+    if (typeof description !== 'string') {
+      return [];
+    }
+    const match = description.match(/:backing=([^:]+)$/);
+    if (!match) {
+      return [];
+    }
+    return match[1]
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
+
+  private async getOwnerSymbolsForFiles(repo: RepoHandle, filePaths: string[]): Promise<any[]> {
+    const uniqueFilePaths = [...new Set(filePaths.filter((filePath) => typeof filePath === 'string' && filePath.length > 0))];
+    if (uniqueFilePaths.length === 0) {
+      return [];
+    }
+
+    const quotedFilePaths = uniqueFilePaths
+      .map((filePath) => `'${String(filePath).replace(/'/g, "''")}'`)
+      .join(', ');
+
+    const rows = await executeQuery(repo.id, `
+      MATCH (f:File)-[:CodeRelation {type: 'DEFINES'}]->(n)
+      WHERE f.filePath IN [${quotedFilePaths}]
+      OPTIONAL MATCH (src)-[r:CodeRelation]->(n)
+      WHERE r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+      RETURN f.filePath AS filePath, n.id AS id, n.name AS name, labels(n)[0] AS type,
+             COUNT(DISTINCT src.id) AS fanIn, n.startLine AS startLine
+      ORDER BY fanIn DESC, n.filePath ASC, n.name ASC
+    `).catch(() => []);
+
+    const grouped = new Map<string, any[]>();
+    for (const row of rows) {
+      const filePath = row.filePath || row[0];
+      if (!filePath) continue;
+      const owners = grouped.get(filePath) || [];
+      owners.push({
+        filePath,
+        id: row.id || row[1],
+        name: row.name || row[2],
+        type: this.getNodeKind({ id: row.id || row[1], type: row.type || row[3] }),
+        fanIn: row.fanIn || row[4] || 0,
+        startLine: row.startLine || row[5] || 0,
+      });
+      grouped.set(filePath, owners);
+    }
+
+    return uniqueFilePaths.flatMap((filePath) => {
+      const owners = grouped.get(filePath) || [];
+      const fileOwner = {
+        id: generateId('File', filePath),
+        name: path.basename(filePath),
+        type: 'File',
+        filePath,
+        fanIn: 0,
+      };
+      const rankedStructuralOwners = this.rankOwnerCandidates(
+        owners.filter((owner) => this.isPrimaryOwnerKind(owner.type)),
+      );
+      if (rankedStructuralOwners.length > 0) {
+        return rankedStructuralOwners.slice(0, 2);
+      }
+      const representativeAnchors = this.rankRepresentativeSymbols(
+        owners.filter((owner) => owner.type && owner.name),
+      );
+      if (representativeAnchors.length > 0) {
+        return representativeAnchors.slice(0, 2);
+      }
+      const rankedOwners = this.rankOwnerCandidates(
+        owners.filter((owner) => this.isOwnerLikeSymbolKind(owner.type) || owner.fanIn > 0),
+      );
+      if (rankedOwners.length > 0) {
+        return rankedOwners.slice(0, 2);
+      }
+      return [fileOwner];
+    });
+  }
+
+  private async getHotAnchorsForFiles(repo: RepoHandle, filePaths: string[], limit = 3): Promise<any[]> {
+    const uniqueFilePaths = [...new Set(filePaths.filter((filePath) => typeof filePath === 'string' && filePath.length > 0))];
+    if (uniqueFilePaths.length === 0) {
+      return [];
+    }
+    const quotedFilePaths = uniqueFilePaths
+      .map((filePath) => `'${String(filePath).replace(/'/g, "''")}'`)
+      .join(', ');
+    const rows = await executeQuery(repo.id, `
+      MATCH (src)-[r:CodeRelation]->(n)
+      WHERE n.filePath IN [${quotedFilePaths}]
+        AND r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+      RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath,
+             COUNT(DISTINCT src.id) AS fanIn, n.startLine AS startLine
+      ORDER BY fanIn DESC, name ASC
+      LIMIT 50
+    `).catch(() => []);
+    return this.rankRepresentativeSymbols(
+      rows
+        .map((row: any) => ({
+          id: row.id || row[0],
+          name: row.name || row[1],
+          type: this.getNodeKind({ id: row.id || row[0], type: row.type || row[2] }),
+          filePath: row.filePath || row[3],
+          fan_in: row.fanIn || row[4] || 0,
+          startLine: row.startLine || row[5] || 0,
+        }))
+        .filter((row: any) => row.filePath && this.isLikelyProductionFile(row.filePath)),
+    ).slice(0, limit);
+  }
+
+  private async getDetailedAffectedAreas(
+    repo: RepoHandle,
+    filePaths: string[],
+  ): Promise<Array<{ name: string; files: number; production_files: number; test_files: number; top_owners: any[]; hot_anchors: any[] }>> {
+    const areas = this.summarizeAffectedAreas(filePaths);
+    if (areas.length === 0) {
+      return [];
+    }
+    const filePathsByArea = new Map<string, string[]>();
+    for (const filePath of filePaths) {
+      if (!filePath) continue;
+      const normalized = filePath.replace(/\\/g, '/');
+      const area = path.posix.dirname(normalized);
+      if (!area || area === '.') continue;
+      const existing = filePathsByArea.get(area) || [];
+      existing.push(normalized);
+      filePathsByArea.set(area, existing);
+    }
+
+    return Promise.all(areas.map(async (area) => {
+      const areaFiles = [...new Set(filePathsByArea.get(area.name) || [])];
+      const [topOwners, hotAnchors] = await Promise.all([
+        this.getOwnerSymbolsForFiles(repo, areaFiles),
+        this.getHotAnchorsForFiles(repo, areaFiles),
+      ]);
+      const groundedOwners = topOwners.some((owner) => owner.type !== 'File')
+        ? topOwners.slice(0, 3)
+        : hotAnchors.slice(0, 3);
+      return {
+        ...area,
+        production_files: areaFiles.filter((filePath) => this.isLikelyProductionFile(filePath)).length,
+        test_files: areaFiles.filter((filePath) => isTestFilePath(filePath)).length,
+        top_owners: groundedOwners,
+        hot_anchors: hotAnchors.slice(0, 3),
+      };
+    }));
+  }
+
+  private isOwnerLikeSymbolKind(resultType: string): boolean {
+    return ['File', 'Module', 'Class', 'Interface', 'Struct', 'Namespace'].includes(resultType);
+  }
+
+  private isPrimaryOwnerKind(resultType: string): boolean {
+    return ['Module', 'Class', 'Interface', 'Struct', 'Namespace'].includes(resultType);
+  }
+
+  private getBroadOwnerShapePenalty(
+    resultType: string,
+    name: string,
+    filePath: string,
+    ownersMode: boolean,
+    anchorFiles: Set<string>,
+  ): number {
+    const basename = path.basename(filePath || '');
+    if (resultType === 'File' && /^__init__\./i.test(basename)) {
+      return ownersMode ? 4 : 2.5;
+    }
+    if (
+      resultType === 'Class' &&
+      anchorFiles.has(filePath) &&
+      /(Request|Response|Payload|Status|Snapshot|Result|Authority|Config|Options)$/i.test(name)
+    ) {
+      return ownersMode ? 5 : 3;
+    }
+    if (
+      resultType === 'File' &&
+      (/\.(json|ya?ml|toml)$/i.test(basename) || /(^|\/)(config|configs)\//i.test(filePath))
+    ) {
+      return ownersMode ? 6 : 3.5;
+    }
+    return 0;
+  }
+
   private computeBroadSearchPenalties(
     searchQuery: string,
     filePath: string,
+    ownersMode = false,
   ): { productionBoost: number; anchorBoost: number; testPenalty: number; secondaryPenalty: number; nonCodePenalty: number } {
-    const broadSearch = this.isBroadSearchQuery(searchQuery);
+    const broadSearch = ownersMode || this.isBroadSearchQuery(searchQuery);
     if (!broadSearch) {
       return { productionBoost: 0, anchorBoost: 0, testPenalty: 0, secondaryPenalty: 0, nonCodePenalty: 0 };
     }
 
-    const subsystemDiscovery = this.isSubsystemDiscoveryQuery(searchQuery);
+    const subsystemDiscovery = ownersMode || this.isSubsystemDiscoveryQuery(searchQuery);
     const testFocusedQuery = this.isTestFocusedQuery(searchQuery);
     const productionBoost = this.isLikelyProductionFile(filePath)
-      ? (subsystemDiscovery ? 4.5 : 3)
+      ? (ownersMode ? 6 : subsystemDiscovery ? 4.5 : 3)
       : 0;
     const testPenalty = isTestFilePath(filePath)
-      ? (testFocusedQuery ? 2.5 : subsystemDiscovery ? 12 : 8)
+      ? (testFocusedQuery ? 2.5 : ownersMode ? 16 : subsystemDiscovery ? 12 : 8)
       : 0;
     const secondaryPenalty = !this.isLikelyProductionFile(filePath) && !isTestFilePath(filePath)
-      ? (subsystemDiscovery ? 4 : 2.5)
+      ? (ownersMode ? 5 : subsystemDiscovery ? 4 : 2.5)
       : 0;
     const nonCodePenalty = subsystemDiscovery && !this.isLikelyCodeFile(filePath)
-      ? 6
+      ? (ownersMode ? 8 : 6)
       : 0;
 
     return {
       productionBoost,
-      anchorBoost: subsystemDiscovery ? 1 : 0,
+      anchorBoost: ownersMode ? 3 : subsystemDiscovery ? 1 : 0,
       testPenalty,
       secondaryPenalty,
       nonCodePenalty,
@@ -547,17 +803,20 @@ export class LocalBackend {
     return /^(src|typed|app|lib|pkg|internal)\//.test(normalized);
   }
 
-  private getBroadQueryActionPenalty(resultType: string, name: string, searchQuery: string): number {
-    if (!this.isSubsystemDiscoveryQuery(searchQuery)) {
+  private getBroadQueryActionPenalty(resultType: string, name: string, searchQuery: string, ownersMode = false): number {
+    if (!ownersMode && !this.isSubsystemDiscoveryQuery(searchQuery)) {
       return 0;
     }
 
     const genericActionName = /^(main|new|connect|disconnect|send|status|check|build|execute|handle|run|snapshot|log|copy|get|set|start|stop)$/i.test(name);
     if (resultType === 'Method') {
-      return genericActionName ? 4 : 2.75;
+      return ownersMode ? (genericActionName ? 7 : 5) : genericActionName ? 4 : 2.75;
     }
     if (resultType === 'Function') {
-      return genericActionName ? 3.5 : 2.25;
+      return ownersMode ? (genericActionName ? 6 : 4.5) : genericActionName ? 3.5 : 2.25;
+    }
+    if (ownersMode && resultType === 'Property') {
+      return 2;
     }
     return 0;
   }
@@ -611,22 +870,25 @@ export class LocalBackend {
     searchQuery: string,
     resultType: string,
     fileSignal: { communityCount: number; processCount: number } | undefined,
+    ownersMode = false,
   ): number {
-    if (!this.isSubsystemDiscoveryQuery(searchQuery) || !fileSignal) {
+    if ((!ownersMode && !this.isSubsystemDiscoveryQuery(searchQuery)) || !fileSignal) {
       return 0;
     }
 
-    const anchorMultiplier = resultType === 'Module' || resultType === 'File' || resultType === 'Class'
-      ? 1
-      : 0.5;
+    const anchorMultiplier = this.isOwnerLikeSymbolKind(resultType)
+      ? 1.2
+      : ownersMode
+        ? 0.15
+        : 0.5;
     return (
       Math.min(fileSignal.communityCount, 2) * 1.1 +
       Math.min(fileSignal.processCount, 2) * 0.9
     ) * anchorMultiplier;
   }
 
-  private getBroadQueryWeightedTerms(searchQuery: string): Array<{ term: string; weight: number }> {
-    if (!this.isSubsystemDiscoveryQuery(searchQuery)) {
+  private getBroadQueryWeightedTerms(searchQuery: string, ownersMode = false): Array<{ term: string; weight: number }> {
+    if (!ownersMode && !this.isSubsystemDiscoveryQuery(searchQuery)) {
       return [];
     }
 
@@ -658,16 +920,16 @@ export class LocalBackend {
       })
       .map((term) => {
         if (actionTerms.has(term)) {
-          return { term, weight: 0.2 };
+          return { term, weight: ownersMode ? 0.1 : 0.2 };
         }
         if (testTerms.has(term)) {
-          return { term, weight: 0.3 };
+          return { term, weight: ownersMode ? 0.2 : 0.3 };
         }
         if (highSignalTerms.has(term)) {
-          return { term, weight: 1.5 };
+          return { term, weight: ownersMode ? 1.8 : 1.5 };
         }
         if (mediumSignalTerms.has(term)) {
-          return { term, weight: 0.9 };
+          return { term, weight: ownersMode ? 1.2 : 0.9 };
         }
         return { term, weight: 1.1 };
       });
@@ -676,8 +938,9 @@ export class LocalBackend {
   private computeBroadQueryTermScore(
     searchQuery: string,
     result: { name: string; filePath: string; type: string; moduleSymbol?: string; description?: string },
+    ownersMode = false,
   ): { boost: number; penalty: number } {
-    const weightedTerms = this.getBroadQueryWeightedTerms(searchQuery);
+    const weightedTerms = this.getBroadQueryWeightedTerms(searchQuery, ownersMode);
     if (weightedTerms.length === 0) {
       return { boost: 0, penalty: 0 };
     }
@@ -699,19 +962,19 @@ export class LocalBackend {
     const signalTerms = weightedTerms.filter((entry) => entry.weight >= 0.9).length;
     const highSignalTerms = weightedTerms.filter((entry) => entry.weight >= 1.1);
     const matchedHighSignalTerms = highSignalTerms.filter((entry) => candidateTokens.has(entry.term)).length;
-    const anchorMultiplier = ['File', 'Module', 'Class'].includes(result.type)
-      ? 1.2
+    const anchorMultiplier = this.isOwnerLikeSymbolKind(result.type)
+      ? (ownersMode ? 1.5 : 1.2)
       : result.type === 'Method' || result.type === 'Function'
-        ? 0.7
+        ? (ownersMode ? 0.4 : 0.7)
         : 0.9;
     const boost = overlapWeight * anchorMultiplier;
     let penalty = signalTerms >= 2 && overlapWeight < 0.9
-      ? (['Method', 'Function'].includes(result.type) ? 3 : 1.75)
+      ? (['Method', 'Function'].includes(result.type) ? (ownersMode ? 4 : 3) : 1.75)
       : 0;
     if (highSignalTerms.length >= 1 && matchedHighSignalTerms === 0) {
-      penalty += ['Method', 'Function'].includes(result.type) ? 5 : 6;
+      penalty += ['Method', 'Function'].includes(result.type) ? (ownersMode ? 6 : 5) : 6;
     } else if (highSignalTerms.length >= 2 && matchedHighSignalTerms === 1) {
-      penalty += ['Method', 'Function'].includes(result.type) ? 1.5 : 2.5;
+      penalty += ['Method', 'Function'].includes(result.type) ? (ownersMode ? 2.5 : 1.5) : 2.5;
     }
     return { boost, penalty };
   }
@@ -734,15 +997,17 @@ export class LocalBackend {
   }
 
   private rankContainerMembers(rows: any[]): any[] {
-    const normalizedRows = rows.filter((row: any) => {
-      const kind = this.getNodeKind({ id: row.uid ?? row.id ?? row[0], type: row.kind ?? row[2] });
-      return kind !== 'File' && kind !== 'Module';
-    });
+    const normalizedRows = rows
+      .map((row: any) => ({
+        ...row,
+        kind: this.getNodeKind({ id: row.uid ?? row.id ?? row[0], type: row.kind ?? row[2] }),
+      }))
+      .filter((row: any) => row.kind !== 'File' && row.kind !== 'Module');
     if (normalizedRows.length === 0) {
       return [];
     }
 
-    const methodLikeRows = normalizedRows.filter((row: any) => ['Method', 'Constructor', 'Property'].includes(row.kind ?? row[2]));
+    const methodLikeRows = normalizedRows.filter((row: any) => ['Method', 'Constructor', 'Property'].includes(row.kind));
     const preferredRows = methodLikeRows.length > 0 ? methodLikeRows : normalizedRows;
 
     return preferredRows.sort((a: any, b: any) => {
@@ -754,7 +1019,7 @@ export class LocalBackend {
 
   private async getContainedMembers(
     repo: RepoHandle,
-    symbol: { id: string; kind?: string; filePath?: string; startLine?: number; endLine?: number },
+    symbol: { id: string; kind?: string; filePath?: string; startLine?: number; endLine?: number; description?: string },
   ): Promise<{ rows: any[]; inferred: boolean; source: MemberRecoverySource }> {
     const directRows = await executeParameterized(repo.id, `
       MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)
@@ -774,7 +1039,38 @@ export class LocalBackend {
                child.startLine AS startLine, child.endLine AS endLine
         LIMIT 100
       `, { symId: symbol.id });
-      const rankedDefineRows = this.rankContainerMembers(defineRows);
+      let combinedDefineRows = defineRows;
+      if (
+        symbol.kind === 'Module' &&
+        symbol.filePath &&
+        typeof symbol.description === 'string' &&
+        symbol.description.startsWith('luau-module:weak')
+      ) {
+        const syntheticExportRows = await executeParameterized(repo.id, `
+          MATCH (child:Property)
+          WHERE child.filePath = $filePath
+            AND child.description = 'luau-module-export:returned-table-field'
+          RETURN child.id AS uid, child.name AS name, 'Property' AS kind, child.filePath AS filePath,
+                 child.startLine AS startLine, child.endLine AS endLine
+          LIMIT 20
+        `, { filePath: symbol.filePath }).catch(() => []);
+        const backingContainers = this.getWeakLuauBackingContainers(symbol.description);
+        const backingRows = backingContainers.length > 0
+          ? await executeParameterized(repo.id, `
+              MATCH (container:Module)-[:CodeRelation {type: 'DEFINES'}]->(child)
+              WHERE container.filePath = $filePath
+                AND container.description = 'luau-module:local-table'
+                AND container.name IN $backingContainers
+              RETURN child.id AS uid, child.name AS name, labels(child)[0] AS kind, child.filePath AS filePath,
+                     child.startLine AS startLine, child.endLine AS endLine,
+                     container.name AS backingContainer,
+                     'backing_container_member' AS role
+              LIMIT 100
+            `, { filePath: symbol.filePath, backingContainers }).catch(() => [])
+          : [];
+        combinedDefineRows = [...defineRows, ...syntheticExportRows, ...backingRows];
+      }
+      const rankedDefineRows = this.rankContainerMembers(combinedDefineRows);
       if (rankedDefineRows.length > 0) {
         return { rows: rankedDefineRows, inferred: false, source: 'defines' };
       }
@@ -1018,8 +1314,8 @@ export class LocalBackend {
       });
   }
 
-  private async getBroadAnchorCandidates(repo: RepoHandle, searchQuery: string, rawResults: any[]): Promise<any[]> {
-    if (!this.isSubsystemDiscoveryQuery(searchQuery)) {
+  private async getBroadAnchorCandidates(repo: RepoHandle, searchQuery: string, rawResults: any[], ownersMode = false): Promise<any[]> {
+    if (!ownersMode && !this.isSubsystemDiscoveryQuery(searchQuery)) {
       return [];
     }
 
@@ -1028,7 +1324,7 @@ export class LocalBackend {
         .map((row: any) => row.filePath)
         .filter((filePath: string | undefined) => typeof filePath === 'string' && this.isLikelyProductionFile(filePath)),
     );
-    const exploratoryTerms = this.getBroadQueryWeightedTerms(searchQuery)
+    const exploratoryTerms = this.getBroadQueryWeightedTerms(searchQuery, ownersMode)
       .filter((entry) => entry.weight >= 1.1)
       .map((entry) => entry.term)
       .slice(0, 4);
@@ -1077,6 +1373,12 @@ export class LocalBackend {
       RETURN n.id AS nodeId, n.name AS name, 'Module' AS type, n.filePath AS filePath,
              n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
              n.description AS description
+      UNION
+      MATCH (n:Class)
+      WHERE n.filePath IN [${quotedFilePaths}]
+      RETURN n.id AS nodeId, n.name AS name, 'Class' AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description
     `);
 
     return rows.map((row: any) => ({
@@ -1122,9 +1424,9 @@ export class LocalBackend {
     return boost;
   }
 
-  private async rankSearchResults(repo: RepoHandle, searchQuery: string, rawResults: any[], limit: number): Promise<RankedSearchResult[]> {
+  private async rankSearchResults(repo: RepoHandle, searchQuery: string, rawResults: any[], limit: number, ownersMode = false): Promise<RankedSearchResult[]> {
     const exactAliasCandidates = await this.getExactAliasCandidates(repo, searchQuery);
-    const broadAnchorCandidates = await this.getBroadAnchorCandidates(repo, searchQuery, rawResults);
+    const broadAnchorCandidates = await this.getBroadAnchorCandidates(repo, searchQuery, rawResults, ownersMode);
     const dedupedRaw = [...rawResults, ...exactAliasCandidates, ...broadAnchorCandidates].filter((result, index, array) => {
       const key = result.nodeId || `${result.type}:${result.filePath}:${result.name}:${result.startLine || ''}`;
       return array.findIndex((candidate) => {
@@ -1140,11 +1442,17 @@ export class LocalBackend {
     ]);
 
     const hasMappedCandidates = dedupedRaw.some((result: any) => this.isRojoMappedResult(rojoProject, result.filePath));
-    const preferMappedResults = this.isBroadSearchQuery(searchQuery) && hasMappedCandidates;
-    const subsystemDiscovery = this.isSubsystemDiscoveryQuery(searchQuery);
+    const preferMappedResults = (ownersMode || this.isBroadSearchQuery(searchQuery)) && hasMappedCandidates;
+    const subsystemDiscovery = ownersMode || this.isSubsystemDiscoveryQuery(searchQuery);
     const broadQueryFileSignals = subsystemDiscovery
       ? await this.getBroadQueryFileSignals(repo, filePaths)
       : new Map<string, { communityCount: number; processCount: number }>();
+    const anchorFiles = new Set(
+      dedupedRaw
+        .filter((result: any) => this.isOwnerLikeSymbolKind(this.getNodeKind(result)))
+        .map((result: any) => result.filePath)
+        .filter(Boolean),
+    );
 
     const ranked = dedupedRaw.map((result: any) => {
       const resultType = this.getNodeKind(result);
@@ -1153,28 +1461,44 @@ export class LocalBackend {
       const rojoMappingBoost = preferMappedResults
         ? (rojoTarget ? 5 : -5)
         : 0;
-      const { productionBoost, anchorBoost, testPenalty, secondaryPenalty, nonCodePenalty } = this.computeBroadSearchPenalties(searchQuery, result.filePath);
+      const { productionBoost, anchorBoost, testPenalty, secondaryPenalty, nonCodePenalty } = this.computeBroadSearchPenalties(searchQuery, result.filePath, ownersMode);
       const primarySourceBoost = subsystemDiscovery && this.isPrimarySourceFile(result.filePath) ? 2.5 : 0;
       const anchorTypeBoost = subsystemDiscovery
-        ? (resultType === 'Class' || resultType === 'Module' || resultType === 'File'
-          ? anchorBoost + 1.5
+        ? (resultType === 'File' || resultType === 'Module'
+          ? anchorBoost + (ownersMode ? 3.5 : 2)
+          : resultType === 'Class'
+            ? anchorBoost + (ownersMode ? 1.25 : 1.5)
+          : this.isOwnerLikeSymbolKind(resultType)
+            ? anchorBoost + 1
           : resultType === 'Method'
             ? 0
             : 0)
         : 0;
-      const actionPenalty = this.getBroadQueryActionPenalty(resultType, result.name, searchQuery);
+      const actionPenalty = this.getBroadQueryActionPenalty(resultType, result.name, searchQuery, ownersMode);
       const { boost: broadTermBoost, penalty: broadTermPenalty } = this.computeBroadQueryTermScore(searchQuery, {
         name: result.name,
         filePath: result.filePath,
         type: resultType,
         moduleSymbol,
         description: result.description,
-      });
+      }, ownersMode);
       const graphSignalBoost = this.computeBroadQuerySignalBoost(
         searchQuery,
         resultType,
         broadQueryFileSignals.get(result.filePath),
+        ownersMode,
       );
+      const sameFileAnchorPenalty = subsystemDiscovery &&
+        anchorFiles.has(result.filePath) &&
+        !this.isOwnerLikeSymbolKind(resultType)
+        ? (ownersMode ? 5.5 : 3.5)
+        : 0;
+      const ownerShapePenalty = subsystemDiscovery
+        ? this.getBroadOwnerShapePenalty(resultType, result.name, result.filePath, ownersMode, anchorFiles)
+        : 0;
+      const weakWrapperPenalty = ownersMode && resultType === 'Module' && result.description?.startsWith('luau-module:weak')
+        ? 1.5
+        : 0;
       const score = (result.bm25Score ?? result.score ?? 0) + this.computeSearchBoost(searchQuery, {
         name: result.name,
         filePath: result.filePath,
@@ -1183,7 +1507,7 @@ export class LocalBackend {
         dataModelPath: rojoTarget?.dataModelPath,
         moduleSymbol,
         description: result.description,
-      }) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty;
+      }) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty - sameFileAnchorPenalty - weakWrapperPenalty - ownerShapePenalty;
 
       return {
         nodeId: result.nodeId,
@@ -1356,7 +1680,157 @@ export class LocalBackend {
       .sort((a, b) => b.symbolCount - a.symbolCount);
   }
 
-  private async overview(repo: RepoHandle, params: { showClusters?: boolean; showProcesses?: boolean; limit?: number }): Promise<any> {
+  private async getSubsystemSummary(repo: RepoHandle, limit: number): Promise<any[]> {
+    const rawLimit = Math.max(limit * 5, 100);
+    const clusters = await executeQuery(repo.id, `
+      MATCH (c:Community)
+      RETURN c.id AS id, c.label AS label, c.heuristicLabel AS heuristicLabel, c.cohesion AS cohesion, c.symbolCount AS symbolCount
+      ORDER BY c.symbolCount DESC, c.heuristicLabel ASC
+      LIMIT ${rawLimit}
+    `);
+    const aggregated = this.aggregateClusters(clusters.map((c: any) => ({
+      id: c.id || c[0],
+      label: c.label || c[1],
+      heuristicLabel: c.heuristicLabel || c[2],
+      cohesion: c.cohesion || c[3],
+      symbolCount: c.symbolCount || c[4],
+    }))).slice(0, limit);
+
+    const subsystems = await Promise.all(aggregated.map(async (cluster: any) => {
+      const label = cluster.heuristicLabel || cluster.label;
+      const [fileRows, processRows, pressureRows] = await Promise.all([
+        executeParameterized(repo.id, `
+          MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+          WHERE c.heuristicLabel = $label OR c.label = $label
+          RETURN DISTINCT n.filePath AS filePath
+        `, { label }).catch(() => []),
+        executeParameterized(repo.id, `
+          MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+          WHERE c.heuristicLabel = $label OR c.label = $label
+          MATCH (n)-[:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)
+          RETURN p.heuristicLabel AS label, COUNT(DISTINCT n.id) AS hits
+          ORDER BY hits DESC, label ASC
+          LIMIT 3
+        `, { label }).catch(() => []),
+        executeParameterized(repo.id, `
+          MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+          WHERE c.heuristicLabel = $label OR c.label = $label
+          OPTIONAL MATCH (src)-[rin:CodeRelation]->(n)
+          WHERE rin.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+          WITH COLLECT(DISTINCT rin) AS incomingEdges, COLLECT(DISTINCT n) AS members
+          UNWIND members AS member
+          OPTIONAL MATCH (member)-[rout:CodeRelation]->(dst)
+          WHERE rout.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+          RETURN SIZE(incomingEdges) AS fanIn, COUNT(DISTINCT rout) AS fanOut
+        `, { label }).catch(() => []),
+      ]);
+
+      const filePaths = fileRows.map((row: any) => row.filePath || row[0]).filter(Boolean);
+      const subsystemOwnerRows = await executeParameterized(repo.id, `
+        MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+        WHERE (c.heuristicLabel = $label OR c.label = $label)
+          AND n.filePath IS NOT NULL
+        OPTIONAL MATCH (src)-[r:CodeRelation]->(n)
+        WHERE r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, COUNT(DISTINCT src.id) AS fanIn
+        ORDER BY fanIn DESC, n.name ASC
+        LIMIT 50
+      `, { label }).catch(() => []);
+      const directSubsystemOwners = this.rankOwnerCandidates(
+        subsystemOwnerRows
+          .map((row: any) => ({
+            id: row.id || row[0],
+            name: row.name || row[1],
+            type: this.getNodeKind({ id: row.id || row[0], type: row.type || row[2] }),
+            filePath: row.filePath || row[3],
+            fan_in: row.fanIn || row[4] || 0,
+          }))
+          .filter((row: any) =>
+            row.filePath &&
+            this.isLikelyProductionFile(row.filePath) &&
+            this.isPrimaryOwnerKind(row.type),
+          ),
+      );
+      const quotedFilePaths = [...new Set(filePaths)]
+        .map((filePath) => `'${String(filePath).replace(/'/g, "''")}'`)
+        .join(', ');
+      const hotAnchorRows = quotedFilePaths
+        ? await executeQuery(repo.id, `
+            MATCH (src)-[r:CodeRelation]->(n)
+            WHERE n.filePath IN [${quotedFilePaths}]
+              AND r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS']
+            RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, COUNT(DISTINCT src.id) AS fanIn
+            ORDER BY fanIn DESC, name ASC
+            LIMIT 25
+          `).catch(() => [])
+        : [];
+      const hotAnchors = hotAnchorRows
+        .map((row: any) => ({
+          id: row.id || row[0],
+          name: row.name || row[1],
+          type: this.getNodeKind({ id: row.id || row[0], type: row.type || row[2] }),
+          filePath: row.filePath || row[3],
+          fan_in: row.fanIn || row[4] || 0,
+        }))
+        .filter((row: any) =>
+          row.filePath &&
+          this.isLikelyProductionFile(row.filePath) &&
+          row.fan_in > 0 &&
+          !this.isLowSignalSummarySymbol(row.name),
+        )
+        .sort((a: any, b: any) =>
+          b.fan_in - a.fan_in ||
+          this.getOwnerSymbolPriority(b.type) - this.getOwnerSymbolPriority(a.type) ||
+          a.name.localeCompare(b.name),
+        )
+        .filter((row: any, index: number, array: any[]) => array.findIndex((candidate) => candidate.id === row.id) === index)
+        .slice(0, 3);
+      const supplementalOwners = this.rankOwnerCandidates(
+        (await this.getOwnerSymbolsForFiles(repo, filePaths))
+          .filter((row: any) => row.filePath && this.isLikelyProductionFile(row.filePath))
+          .map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            type: row.type,
+            filePath: row.filePath,
+            fan_in: row.fanIn,
+          })),
+      );
+      let topOwners = [...directSubsystemOwners, ...supplementalOwners]
+        .filter((row, index, array) => array.findIndex((candidate) => candidate.id === row.id) === index)
+        .slice(0, 3);
+      if (topOwners.length > 0 && topOwners.every((row: any) => row.type === 'File') && hotAnchors.length > 0) {
+        topOwners = hotAnchors.slice(0, 3);
+      }
+      const productionFiles = filePaths.filter((filePath: string) => this.isLikelyProductionFile(filePath)).length;
+      const testFiles = filePaths.filter((filePath: string) => isTestFilePath(filePath)).length;
+      const pressure = pressureRows[0] || {};
+
+      return {
+        name: label,
+        symbol_count: cluster.symbolCount,
+        cohesion: cluster.cohesion,
+        top_owners: topOwners,
+        production_files: productionFiles,
+        test_files: testFiles,
+        fan_in_pressure: pressure.fanIn || pressure[0] || 0,
+        fan_out_pressure: pressure.fanOut || pressure[1] || 0,
+        hot_anchors: hotAnchors,
+        hot_processes: processRows.map((row: any) => ({
+          name: row.label || row[0],
+          hits: row.hits || row[1] || 0,
+        })),
+      };
+    }));
+
+    return subsystems.sort((a, b) =>
+      b.symbol_count - a.symbol_count ||
+      b.fan_in_pressure - a.fan_in_pressure ||
+      a.name.localeCompare(b.name),
+    );
+  }
+
+  private async overview(repo: RepoHandle, params: { showClusters?: boolean; showProcesses?: boolean; showSubsystems?: boolean; limit?: number }): Promise<any> {
     await this.ensureInitialized(repo.id);
     
     const limit = params.limit || 20;
@@ -1475,6 +1949,17 @@ export class LocalBackend {
       }
     }
 
+    if (params.showSubsystems === true) {
+      try {
+        result.subsystems = await this.getSubsystemSummary(repo, limit);
+        result.coverage.sections.subsystems = 'grounded';
+      } catch (error: any) {
+        result.subsystems = null;
+        result.coverage.sections.subsystems = 'partial';
+        result.coverage.notes.push(`subsystems unavailable: ${error?.message || 'query failed'}`);
+      }
+    }
+
     if (result.coverage.notes.length > 0) {
       result.coverage.confidence = 'partial';
     }
@@ -1577,8 +2062,10 @@ export class LocalBackend {
       filePath,
       startLine: sym.startLine || sym[4],
       endLine: sym.endLine || sym[5],
+      description: symbolDescription,
     });
     const memberIds = [...new Set(memberRows.map((row: any) => row.uid || row[0]).filter(Boolean))];
+    const hasBackingContainerMembers = memberRows.some((row: any) => (row.role || row[7]) === 'backing_container_member');
 
     // Categorized incoming refs
     const incomingRows = await executeParameterized(repo.id, `
@@ -1682,12 +2169,14 @@ export class LocalBackend {
       : memberSource === 'file_defines'
         ? 'Direct container edges were not available for this symbol, so related members were recovered from grounded file-level definitions in the same source file. Results are materially better, but container ownership is still partial.'
         : symbolKind === 'Module' && typeof symbolDescription === 'string' && symbolDescription.startsWith('luau-module:weak') && memberRows.length > 0
-          ? 'This Luau module is a weak returned-table wrapper, so only grounded delegate members referenced directly from the returned table are shown. Internal same-file tables and methods are intentionally not treated as exported module members unless the wrapper points to them explicitly.'
-        : partialCoverage
-          ? 'Direct relationships on this container symbol are sparse. Member-based relationships are shown where available, but graph coverage may still be incomplete.'
-          : memberRelationshipCount > 0
-            ? 'Includes additional relationships gathered through contained members.'
-            : 'Relationships are grounded in direct graph edges for this symbol.';
+          ? hasBackingContainerMembers
+            ? 'This Luau module is a weak returned-table wrapper. CodeNexus is showing both the grounded exported wrapper members and the grounded backing-container methods that the wrapper explicitly delegates into. Backing-container members are structural context, not exported module members.'
+            : 'This Luau module is a weak returned-table wrapper. CodeNexus is showing the grounded members referenced directly from the returned table, including delegate methods and explicit exported fields. Internal same-file tables and methods are intentionally not treated as exported module members unless the wrapper points to them explicitly.'
+          : partialCoverage
+            ? 'Direct relationships on this container symbol are sparse. Member-based relationships are shown where available, but graph coverage may still be incomplete.'
+            : memberRelationshipCount > 0
+              ? 'Includes additional relationships gathered through contained members.'
+              : 'Relationships are grounded in direct graph edges for this symbol.';
     
     return {
       status: 'found',
@@ -1719,6 +2208,8 @@ export class LocalBackend {
         name: row.name || row[1],
         kind: this.getNodeKind({ id: row.uid || row[0], type: row.kind || row[2] }),
         filePath: row.filePath || row[3],
+        ...((row.role || row[7]) ? { role: row.role || row[7] } : {}),
+        ...((row.backingContainer || row[6]) ? { backing_container: row.backingContainer || row[6] } : {}),
       })),
       coverage: {
         confidence,
@@ -2139,6 +2630,7 @@ export class LocalBackend {
       filePath: sym.filePath,
       startLine: sym.startLine,
       endLine: sym.endLine,
+      description: sym.description,
     });
     const memberIds = [...new Set(memberRows.map((row: any) => row.id || row.uid || row[0]).filter(Boolean))];
     const traversalSourceIds = [symId, ...memberIds];
@@ -2194,6 +2686,7 @@ export class LocalBackend {
     const directCount = (grouped[1] || []).length;
     let affectedProcesses: any[] = [];
     let affectedModules: any[] = [];
+    let propagationSource: 'direct' | 'file_owner' | 'none' = 'none';
 
     if (impacted.length > 0) {
       const allIds = impacted.map(i => `'${i.id.replace(/'/g, "''")}'`).join(', ');
@@ -2238,10 +2731,85 @@ export class LocalBackend {
           impact: directModuleSet.has(name) ? 'direct' : 'indirect',
         };
       });
+      if (affectedProcesses.length > 0 || affectedModules.length > 0) {
+        propagationSource = 'direct';
+      }
 
     }
 
-    // Risk scoring
+    const directFileImpacts = (grouped[1] || []).filter((item: any) => item.type === 'File' && item.filePath);
+    const affectedAreas = await this.getDetailedAffectedAreas(
+      repo,
+      directFileImpacts.map((item: any) => item.filePath),
+    );
+    const directFileImpactNames = [...new Set(directFileImpacts.map((item: any) => path.basename(item.filePath)))].slice(0, 4);
+    if (propagationSource === 'none' && directFileImpacts.length > 0) {
+      const ownerSymbols = await this.getOwnerSymbolsForFiles(repo, directFileImpacts.map((item: any) => item.filePath));
+      if (ownerSymbols.length > 0) {
+        const ownerIds = ownerSymbols.map((item: any) => `'${item.id.replace(/'/g, "''")}'`).join(', ');
+        const [ownerProcessRows, ownerModuleRows] = await Promise.all([
+          executeQuery(repo.id, `
+            MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)
+            WHERE s.id IN [${ownerIds}]
+            RETURN p.heuristicLabel AS name, COUNT(DISTINCT s.id) AS hits, MIN(r.step) AS minStep, p.stepCount AS stepCount
+            ORDER BY hits DESC
+            LIMIT 20
+          `).catch(() => []),
+          executeQuery(repo.id, `
+            MATCH (s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+            WHERE s.id IN [${ownerIds}]
+            RETURN c.heuristicLabel AS name, COUNT(DISTINCT s.id) AS hits
+            ORDER BY hits DESC
+            LIMIT 20
+          `).catch(() => []),
+        ]);
+
+        if (ownerProcessRows.length > 0 || ownerModuleRows.length > 0) {
+          propagationSource = 'file_owner';
+          affectedProcesses = ownerProcessRows.map((r: any) => ({
+            name: r.name || r[0],
+            hits: r.hits || r[1],
+            broken_at_step: r.minStep ?? r[2],
+            step_count: r.stepCount ?? r[3],
+            source: 'file_owner',
+          }));
+          affectedModules = ownerModuleRows.map((r: any) => ({
+            name: r.name || r[0],
+            hits: r.hits || r[1],
+            impact: 'via_file_owner',
+          }));
+        } else {
+          propagationSource = 'file_owner';
+          affectedModules = ownerSymbols.slice(0, 8).map((owner: any) => ({
+            name: owner.name,
+            filePath: owner.filePath,
+            hits: owner.fanIn || 0,
+            impact: 'via_file_owner',
+            kind: owner.type,
+          }));
+        }
+      }
+    }
+
+    if (
+      propagationSource === 'file_owner' &&
+      affectedModules.length > 0 &&
+      affectedModules.every((item: any) => item.kind === 'File') &&
+      affectedAreas.some((area) => area.top_owners.length > 0)
+    ) {
+      affectedModules = affectedAreas
+        .flatMap((area) => area.top_owners.map((owner: any) => ({
+          name: owner.name,
+          filePath: owner.filePath,
+          hits: owner.fanIn || owner.fan_in || 0,
+          impact: 'via_area_owner',
+          kind: owner.type,
+          area: area.name,
+        })))
+        .filter((item, index, array) => array.findIndex((candidate) => candidate.name === item.name && candidate.filePath === item.filePath) === index)
+        .slice(0, 8);
+    }
+
     const processCount = affectedProcesses.length;
     const moduleCount = affectedModules.length;
     let risk = 'LOW';
@@ -2255,9 +2823,39 @@ export class LocalBackend {
     if ((inferredMembers || (impacted.length === 0 && ['Class', 'Module', 'File'].includes(symType))) && impacted.length === 0) {
       risk = 'UNKNOWN';
     }
-    const directFileImpacts = (grouped[1] || []).filter((item: any) => item.type === 'File' && item.filePath);
-    const affectedAreas = this.summarizeAffectedAreas(directFileImpacts.map((item: any) => item.filePath));
-    const directFileImpactNames = [...new Set(directFileImpacts.map((item: any) => path.basename(item.filePath)))].slice(0, 4);
+
+    const incomingSignal = this.classifyCoverageSignal(
+      directCount > 0 ? 1 : memberRows.length > 0 ? 0.5 : 0.15,
+    );
+    const outgoingSignal = this.classifyCoverageSignal(
+      impacted.length >= directCount && directCount > 0 ? 0.8 : impacted.length > 0 ? 0.5 : 0.15,
+    );
+    const memberSignal = this.classifyCoverageSignal(
+      memberRows.length === 0
+        ? (['Class', 'Module', 'File'].includes(symType) ? 0.2 : 1)
+        : memberSource === 'contains' || memberSource === 'defines'
+          ? 1
+          : memberSource === 'file_defines'
+            ? 0.65
+            : 0.5,
+    );
+    const propagationSignal = this.classifyCoverageSignal(
+      affectedProcesses.length > 0 || affectedModules.length > 0
+        ? propagationSource === 'direct' ? 1 : 0.65
+        : affectedAreas.some((area) => area.top_owners.length > 0 || area.hot_anchors.length > 0)
+          ? 0.6
+          : affectedAreas.length > 0 ? 0.45 : 0.1,
+    );
+    const overallConfidence =
+      memberSource === 'range' || memberSource === 'file_defines'
+        ? 'partial'
+        : propagationSignal === 'high' && memberSignal !== 'low'
+          ? 'grounded'
+          : memberRows.length > 0 && propagationSignal !== 'low'
+            ? 'expanded'
+            : memberRows.length > 0 || affectedAreas.length > 0
+              ? 'partial'
+              : 'grounded';
 
     return {
       target: {
@@ -2271,16 +2869,11 @@ export class LocalBackend {
       impactedCount: impacted.length,
       risk,
       coverage: {
-        confidence:
-          memberSource === 'range' || memberSource === 'file_defines'
-            ? 'partial'
-            : impacted.length === 0 && (memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symType))
-              ? 'partial'
-              : memberRows.length > 0
-                ? 'expanded'
-                : 'grounded',
+        confidence: overallConfidence,
         note:
-          memberSource === 'range'
+          propagationSource === 'file_owner'
+            ? `Direct impact is landing on file-level callers (${directFileImpactNames.join(', ')}). Higher-level architectural context is being derived from grounded owners and hot anchors across affected areas (${affectedAreas.map((area) => area.name).join(', ')}), so subsystem context is stronger but still bounded by file-owner evidence rather than explicit process membership.`
+            : memberSource === 'range'
             ? directCount > 0 && processCount === 0 && moduleCount === 0 && affectedAreas.length > 0
               ? `Direct container edges were not available for this symbol, so impact expansion used same-file source ranges filtered to immediate container members. Direct impact is landing in ${affectedAreas.map((area) => area.name).join(', ')}, but grounded process/module memberships are still missing there, so coverage remains partial.`
               : 'Direct container edges were not available for this symbol, so impact expansion used same-file source ranges filtered to immediate container members. Coverage is improved, but still partial.'
@@ -2293,6 +2886,12 @@ export class LocalBackend {
                 : memberRows.length > 0
                   ? 'Impact includes relationships gathered through contained members for this symbol.'
                   : 'Impact is grounded in direct graph traversal for this symbol.',
+        signals: {
+          member_coverage: memberSignal,
+          incoming_edges: incomingSignal,
+          outgoing_edges: outgoingSignal,
+          higher_level_propagation: propagationSignal,
+        },
       },
       summary: {
         direct: directCount,
