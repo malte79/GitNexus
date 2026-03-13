@@ -5,6 +5,7 @@ export async function contextCommand(
   options: {
     uid?: string;
     filePath?: string;
+    file?: string;
     includeContent?: boolean;
   },
 ): Promise<void> {
@@ -17,7 +18,7 @@ export async function contextCommand(
   await runRepoToolCommand('context', {
     ...(name ? { name } : {}),
     ...(options.uid ? { uid: options.uid } : {}),
-    ...(options.filePath ? { file_path: options.filePath } : {}),
+    ...(options.filePath || options.file ? { file_path: options.filePath ?? options.file } : {}),
     ...(options.includeContent ? { include_content: true } : {}),
   });
 }
