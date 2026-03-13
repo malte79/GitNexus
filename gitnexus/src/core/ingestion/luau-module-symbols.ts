@@ -4,6 +4,8 @@ export interface LuauModuleMethodRef {
   name: string;
   startLine: number;
   label: 'Method';
+  targetName?: string;
+  targetLabel?: 'Method' | 'Function';
 }
 
 export interface LuauModuleSymbolCandidate {
@@ -83,6 +85,41 @@ const getReturnedTableLiteral = (node: any): any | null => {
   return returned?.type === 'table_constructor' ? returned : null;
 };
 
+const getDelegateReturnTarget = (
+  functionNode: any,
+): { targetName: string; targetLabel?: 'Method' | 'Function' } | null => {
+  if (!functionNode || functionNode.type !== 'function_definition') return null;
+
+  let returnNode: any | null = null;
+  const stack = [...getNamedChildren(functionNode)];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    if (current.type === 'return_statement') {
+      if (returnNode) return null;
+      returnNode = current;
+      continue;
+    }
+    for (const child of getNamedChildren(current)) {
+      stack.push(child);
+    }
+  }
+
+  if (!returnNode) return null;
+  const expressionList = getNamedChildren(returnNode).find(child => child.type === 'expression_list');
+  const returned = expressionList?.namedChild?.(0) ?? null;
+  if (!returned || returned.type !== 'function_call') return null;
+
+  const callee = returned.childForFieldName?.('name') ?? returned.namedChild?.(0) ?? null;
+  const qualified = getQualifiedNameParts(callee);
+  if (!qualified) return null;
+
+  return {
+    targetName: qualified.methodName,
+    ...(callee.type === 'method_index_expression' ? { targetLabel: 'Method' as const } : {}),
+  };
+};
+
 const getTableLiteralMethodRefs = (tableNode: any): LuauModuleMethodRef[] => {
   const refs: LuauModuleMethodRef[] = [];
   for (const child of getNamedChildren(tableNode)) {
@@ -91,10 +128,12 @@ const getTableLiteralMethodRefs = (tableNode: any): LuauModuleMethodRef[] => {
     const fieldValue = child.namedChild(1);
     if (!fieldName || fieldName.type !== 'identifier') continue;
     if (!fieldValue || fieldValue.type !== 'function_definition') continue;
+    const delegateTarget = getDelegateReturnTarget(fieldValue);
     refs.push({
       name: fieldName.text,
       startLine: child.startPosition.row,
       label: 'Method',
+      ...(delegateTarget ?? {}),
     });
   }
   return refs;

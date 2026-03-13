@@ -25,6 +25,14 @@ The HTTP runtime is the primary execution path for:
 
 Those commands are thin clients over the repo-local MCP HTTP service. They do not bypass it and do not auto-start it. When the service is unavailable, they fail clearly and point users to `codenexus manage start`.
 
+The same HTTP-served tool contracts also own:
+
+- symbol disambiguation inputs such as `uid` and `file_path`
+- bounded read-only Cypher recovery resources:
+  - `gitnexus://schema`
+  - `gitnexus://properties`
+  - `gitnexus://properties/{nodeType}`
+
 ## Config Discovery
 
 `codenexus manage serve` and `codenexus manage start` resolve the active repo boundary and then read:

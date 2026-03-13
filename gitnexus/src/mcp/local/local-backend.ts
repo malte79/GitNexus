@@ -9,6 +9,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { initKuzu, executeQuery, executeParameterized, closeKuzu, isKuzuReady, reloadKuzu } from '../core/kuzu-adapter.js';
+import { getNodeProperties, getPropertyResourceUri } from '../schema-properties.js';
 import {
   loadRepo,
   resolveRepoBoundary,
@@ -96,6 +97,8 @@ interface RankedSearchResult {
   dataModelPath?: string;
   boundaryImports?: Array<{ name: string; filePath: string; runtimeArea?: string }>;
 }
+
+type MemberRecoverySource = 'contains' | 'defines' | 'file_defines' | 'range' | 'none';
 
 export class LocalBackend {
   private repo: RepoHandle | null = null;
@@ -461,6 +464,15 @@ export class LocalBackend {
     return this.normalizeSearchText(trimmed).includes(' ');
   }
 
+  private isSubsystemDiscoveryQuery(searchQuery: string): boolean {
+    const normalized = this.normalizeSearchText(searchQuery);
+    if (!this.isBroadSearchQuery(searchQuery)) {
+      return false;
+    }
+
+    return /\b(runtime|lifecycle|bridge|protocol|http|plugin|shell|projection|studio|server|client|world|subsystem|transport|router|executor|manager|orchestrator)\b/.test(normalized);
+  }
+
   private isTestFocusedQuery(searchQuery: string): boolean {
     const normalized = this.normalizeSearchText(searchQuery);
     if (!/\b(test|tests|testing|spec|smoke|playtest|harness|fixture|fixtures|matrix)\b/.test(normalized)) {
@@ -472,10 +484,236 @@ export class LocalBackend {
   private isLikelyProductionFile(filePath: string): boolean {
     const normalized = filePath.toLowerCase().replace(/\\/g, '/');
     if (isTestFilePath(normalized)) return false;
-    if (/(^|\/)(docs?|archive|examples|vendor|scripts?|fixtures?)(\/|$)/.test(normalized)) {
+    if (/(^|\/)(artifacts|docs?|archive|examples|planning|vendor|scripts?|fixtures?)(\/|$)/.test(normalized)) {
       return false;
     }
     return true;
+  }
+
+  private isLikelyCodeFile(filePath: string): boolean {
+    return /\.(c|cc|cpp|cs|cxx|go|h|hpp|hxx|hh|java|js|jsx|kt|lua|luau|mjs|py|php|rb|rs|swift|ts|tsx)$/i.test(filePath);
+  }
+
+  private summarizeAffectedAreas(filePaths: string[]): Array<{ name: string; files: number }> {
+    const counts = new Map<string, number>();
+    for (const filePath of filePaths) {
+      if (!filePath) continue;
+      const normalized = filePath.replace(/\\/g, '/');
+      const area = path.posix.dirname(normalized);
+      if (!area || area === '.') continue;
+      counts.set(area, (counts.get(area) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, files]) => ({ name, files }))
+      .sort((a, b) => b.files - a.files || a.name.localeCompare(b.name))
+      .slice(0, 5);
+  }
+
+  private computeBroadSearchPenalties(
+    searchQuery: string,
+    filePath: string,
+  ): { productionBoost: number; anchorBoost: number; testPenalty: number; secondaryPenalty: number; nonCodePenalty: number } {
+    const broadSearch = this.isBroadSearchQuery(searchQuery);
+    if (!broadSearch) {
+      return { productionBoost: 0, anchorBoost: 0, testPenalty: 0, secondaryPenalty: 0, nonCodePenalty: 0 };
+    }
+
+    const subsystemDiscovery = this.isSubsystemDiscoveryQuery(searchQuery);
+    const testFocusedQuery = this.isTestFocusedQuery(searchQuery);
+    const productionBoost = this.isLikelyProductionFile(filePath)
+      ? (subsystemDiscovery ? 4.5 : 3)
+      : 0;
+    const testPenalty = isTestFilePath(filePath)
+      ? (testFocusedQuery ? 2.5 : subsystemDiscovery ? 12 : 8)
+      : 0;
+    const secondaryPenalty = !this.isLikelyProductionFile(filePath) && !isTestFilePath(filePath)
+      ? (subsystemDiscovery ? 4 : 2.5)
+      : 0;
+    const nonCodePenalty = subsystemDiscovery && !this.isLikelyCodeFile(filePath)
+      ? 6
+      : 0;
+
+    return {
+      productionBoost,
+      anchorBoost: subsystemDiscovery ? 1 : 0,
+      testPenalty,
+      secondaryPenalty,
+      nonCodePenalty,
+    };
+  }
+
+  private isPrimarySourceFile(filePath: string): boolean {
+    const normalized = filePath.toLowerCase().replace(/\\/g, '/');
+    return /^(src|typed|app|lib|pkg|internal)\//.test(normalized);
+  }
+
+  private getBroadQueryActionPenalty(resultType: string, name: string, searchQuery: string): number {
+    if (!this.isSubsystemDiscoveryQuery(searchQuery)) {
+      return 0;
+    }
+
+    const genericActionName = /^(main|new|connect|disconnect|send|status|check|build|execute|handle|run|snapshot|log|copy|get|set|start|stop)$/i.test(name);
+    if (resultType === 'Method') {
+      return genericActionName ? 4 : 2.75;
+    }
+    if (resultType === 'Function') {
+      return genericActionName ? 3.5 : 2.25;
+    }
+    return 0;
+  }
+
+  private async getBroadQueryFileSignals(
+    repo: RepoHandle,
+    filePaths: string[],
+  ): Promise<Map<string, { communityCount: number; processCount: number }>> {
+    const uniqueFilePaths = [...new Set(filePaths.filter(Boolean))];
+    if (uniqueFilePaths.length === 0) {
+      return new Map();
+    }
+
+    const quotedFilePaths = uniqueFilePaths
+      .map((filePath) => `'${String(filePath).replace(/'/g, "''")}'`)
+      .join(', ');
+
+    const [communityRows, processRows] = await Promise.all([
+      executeQuery(repo.id, `
+        MATCH (f:File)-[:CodeRelation {type: 'DEFINES'}]->(s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+        WHERE f.filePath IN [${quotedFilePaths}]
+        RETURN f.filePath AS filePath, COUNT(DISTINCT c.id) AS communityCount
+      `).catch(() => []),
+      executeQuery(repo.id, `
+        MATCH (f:File)-[:CodeRelation {type: 'DEFINES'}]->(s)-[:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)
+        WHERE f.filePath IN [${quotedFilePaths}]
+        RETURN f.filePath AS filePath, COUNT(DISTINCT p.id) AS processCount
+      `).catch(() => []),
+    ]);
+
+    const out = new Map<string, { communityCount: number; processCount: number }>();
+    for (const row of communityRows) {
+      const filePath = row.filePath || row[0];
+      if (!filePath) continue;
+      out.set(filePath, {
+        communityCount: row.communityCount || row[1] || 0,
+        processCount: out.get(filePath)?.processCount || 0,
+      });
+    }
+    for (const row of processRows) {
+      const filePath = row.filePath || row[0];
+      if (!filePath) continue;
+      const existing = out.get(filePath) || { communityCount: 0, processCount: 0 };
+      existing.processCount = row.processCount || row[1] || 0;
+      out.set(filePath, existing);
+    }
+    return out;
+  }
+
+  private computeBroadQuerySignalBoost(
+    searchQuery: string,
+    resultType: string,
+    fileSignal: { communityCount: number; processCount: number } | undefined,
+  ): number {
+    if (!this.isSubsystemDiscoveryQuery(searchQuery) || !fileSignal) {
+      return 0;
+    }
+
+    const anchorMultiplier = resultType === 'Module' || resultType === 'File' || resultType === 'Class'
+      ? 1
+      : 0.5;
+    return (
+      Math.min(fileSignal.communityCount, 2) * 1.1 +
+      Math.min(fileSignal.processCount, 2) * 0.9
+    ) * anchorMultiplier;
+  }
+
+  private getBroadQueryWeightedTerms(searchQuery: string): Array<{ term: string; weight: number }> {
+    if (!this.isSubsystemDiscoveryQuery(searchQuery)) {
+      return [];
+    }
+
+    const stopwords = new Set([
+      'a', 'an', 'and', 'as', 'at', 'by', 'for', 'from', 'in', 'into', 'of', 'on', 'or', 'the', 'to', 'with',
+    ]);
+    const actionTerms = new Set([
+      'build', 'check', 'connect', 'copy', 'disconnect', 'execute', 'get', 'handle', 'log', 'run', 'send', 'set', 'start', 'status', 'stop',
+    ]);
+    const testTerms = new Set([
+      'e2e', 'fixture', 'fixtures', 'harness', 'matrix', 'playtest', 'smoke', 'spec', 'test', 'testing', 'tests',
+    ]);
+    const highSignalTerms = new Set([
+      'automation', 'bridge', 'connected', 'http', 'plugin', 'projection', 'protocol', 'shell', 'studio', 'transport', 'world',
+    ]);
+    const mediumSignalTerms = new Set([
+      'client', 'executor', 'lifecycle', 'manager', 'orchestrator', 'router', 'runtime', 'server',
+    ]);
+
+    const seen = new Set<string>();
+    return this.normalizeSearchText(searchQuery)
+      .split(' ')
+      .filter(Boolean)
+      .filter((term) => term.length >= 2 && !stopwords.has(term))
+      .filter((term) => {
+        if (seen.has(term)) return false;
+        seen.add(term);
+        return true;
+      })
+      .map((term) => {
+        if (actionTerms.has(term)) {
+          return { term, weight: 0.2 };
+        }
+        if (testTerms.has(term)) {
+          return { term, weight: 0.3 };
+        }
+        if (highSignalTerms.has(term)) {
+          return { term, weight: 1.5 };
+        }
+        if (mediumSignalTerms.has(term)) {
+          return { term, weight: 0.9 };
+        }
+        return { term, weight: 1.1 };
+      });
+  }
+
+  private computeBroadQueryTermScore(
+    searchQuery: string,
+    result: { name: string; filePath: string; type: string; moduleSymbol?: string; description?: string },
+  ): { boost: number; penalty: number } {
+    const weightedTerms = this.getBroadQueryWeightedTerms(searchQuery);
+    if (weightedTerms.length === 0) {
+      return { boost: 0, penalty: 0 };
+    }
+
+    const candidateTokens = new Set(
+      [
+        result.name,
+        path.basename(result.filePath || ''),
+        result.filePath || '',
+        result.moduleSymbol || '',
+      ]
+        .map((value) => this.normalizeSearchText(value))
+        .flatMap((value) => value.split(' '))
+        .filter(Boolean),
+    );
+    const overlapWeight = weightedTerms.reduce((total, entry) => (
+      candidateTokens.has(entry.term) ? total + entry.weight : total
+    ), 0);
+    const signalTerms = weightedTerms.filter((entry) => entry.weight >= 0.9).length;
+    const highSignalTerms = weightedTerms.filter((entry) => entry.weight >= 1.1);
+    const matchedHighSignalTerms = highSignalTerms.filter((entry) => candidateTokens.has(entry.term)).length;
+    const anchorMultiplier = ['File', 'Module', 'Class'].includes(result.type)
+      ? 1.2
+      : result.type === 'Method' || result.type === 'Function'
+        ? 0.7
+        : 0.9;
+    const boost = overlapWeight * anchorMultiplier;
+    let penalty = signalTerms >= 2 && overlapWeight < 0.9
+      ? (['Method', 'Function'].includes(result.type) ? 3 : 1.75)
+      : 0;
+    if (highSignalTerms.length >= 1 && matchedHighSignalTerms === 0) {
+      penalty += ['Method', 'Function'].includes(result.type) ? 5 : 6;
+    } else if (highSignalTerms.length >= 2 && matchedHighSignalTerms === 1) {
+      penalty += ['Method', 'Function'].includes(result.type) ? 1.5 : 2.5;
+    }
+    return { boost, penalty };
   }
 
   private isLowSignalSummarySymbol(name: string): boolean {
@@ -495,10 +733,29 @@ export class LocalBackend {
     return '';
   }
 
+  private rankContainerMembers(rows: any[]): any[] {
+    const normalizedRows = rows.filter((row: any) => {
+      const kind = this.getNodeKind({ id: row.uid ?? row.id ?? row[0], type: row.kind ?? row[2] });
+      return kind !== 'File' && kind !== 'Module';
+    });
+    if (normalizedRows.length === 0) {
+      return [];
+    }
+
+    const methodLikeRows = normalizedRows.filter((row: any) => ['Method', 'Constructor', 'Property'].includes(row.kind ?? row[2]));
+    const preferredRows = methodLikeRows.length > 0 ? methodLikeRows : normalizedRows;
+
+    return preferredRows.sort((a: any, b: any) => {
+      const aStart = a.startLine ?? a[4] ?? Number.MAX_SAFE_INTEGER;
+      const bStart = b.startLine ?? b[4] ?? Number.MAX_SAFE_INTEGER;
+      return aStart - bStart;
+    });
+  }
+
   private async getContainedMembers(
     repo: RepoHandle,
     symbol: { id: string; kind?: string; filePath?: string; startLine?: number; endLine?: number },
-  ): Promise<{ rows: any[]; inferred: boolean }> {
+  ): Promise<{ rows: any[]; inferred: boolean; source: MemberRecoverySource }> {
     const directRows = await executeParameterized(repo.id, `
       MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)
       RETURN child.id AS uid, child.name AS name, labels(child)[0] AS kind, child.filePath AS filePath,
@@ -507,15 +764,41 @@ export class LocalBackend {
     `, { symId: symbol.id });
 
     if (directRows.length > 0) {
-      return { rows: directRows, inferred: false };
+      return { rows: this.rankContainerMembers(directRows), inferred: false, source: 'contains' };
+    }
+
+    if (['Module', 'File'].includes(symbol.kind || '')) {
+      const defineRows = await executeParameterized(repo.id, `
+        MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)
+        RETURN child.id AS uid, child.name AS name, labels(child)[0] AS kind, child.filePath AS filePath,
+               child.startLine AS startLine, child.endLine AS endLine
+        LIMIT 100
+      `, { symId: symbol.id });
+      const rankedDefineRows = this.rankContainerMembers(defineRows);
+      if (rankedDefineRows.length > 0) {
+        return { rows: rankedDefineRows, inferred: false, source: 'defines' };
+      }
+    }
+
+    if (symbol.kind === 'File' && symbol.filePath) {
+      const fileDefinedRows = await executeParameterized(repo.id, `
+        MATCH (f:File {filePath: $filePath})-[r:CodeRelation {type: 'DEFINES'}]->(child)
+        RETURN child.id AS uid, child.name AS name, labels(child)[0] AS kind, child.filePath AS filePath,
+               child.startLine AS startLine, child.endLine AS endLine
+        LIMIT 200
+      `, { filePath: symbol.filePath });
+      const rankedFileDefinedRows = this.rankContainerMembers(fileDefinedRows);
+      if (rankedFileDefinedRows.length > 0) {
+        return { rows: rankedFileDefinedRows, inferred: true, source: 'file_defines' };
+      }
     }
 
     const kind = symbol.kind || '';
     if (!['Class', 'Interface'].includes(kind)) {
-      return { rows: [], inferred: false };
+      return { rows: [], inferred: false, source: 'none' };
     }
     if (!symbol.filePath || symbol.startLine === undefined || symbol.endLine === undefined) {
-      return { rows: [], inferred: false };
+      return { rows: [], inferred: false, source: 'none' };
     }
 
     const inferredRows = await executeParameterized(repo.id, `
@@ -568,7 +851,7 @@ export class LocalBackend {
     });
 
     const filteredRows = this.filterImmediateContainedMembers(inferredRows);
-    return { rows: filteredRows, inferred: filteredRows.length > 0 };
+    return { rows: filteredRows, inferred: filteredRows.length > 0, source: filteredRows.length > 0 ? 'range' : 'none' };
   }
 
   private filterImmediateContainedMembers(rows: any[]): any[] {
@@ -735,6 +1018,81 @@ export class LocalBackend {
       });
   }
 
+  private async getBroadAnchorCandidates(repo: RepoHandle, searchQuery: string, rawResults: any[]): Promise<any[]> {
+    if (!this.isSubsystemDiscoveryQuery(searchQuery)) {
+      return [];
+    }
+
+    const candidateFilePathSet = new Set(
+      rawResults
+        .map((row: any) => row.filePath)
+        .filter((filePath: string | undefined) => typeof filePath === 'string' && this.isLikelyProductionFile(filePath)),
+    );
+    const exploratoryTerms = this.getBroadQueryWeightedTerms(searchQuery)
+      .filter((entry) => entry.weight >= 1.1)
+      .map((entry) => entry.term)
+      .slice(0, 4);
+    for (const term of exploratoryTerms) {
+      try {
+        const rows = await executeParameterized(repo.id, `
+          MATCH (n:File)
+          WHERE lower(n.filePath) CONTAINS $term OR lower(n.name) CONTAINS $term
+          RETURN n.filePath AS filePath
+          UNION
+          MATCH (n:Module)
+          WHERE lower(n.filePath) CONTAINS $term OR lower(n.name) CONTAINS $term
+          RETURN n.filePath AS filePath
+          LIMIT 10
+        `, { term });
+        for (const row of rows) {
+          const filePath = row.filePath || row[0];
+          if (typeof filePath === 'string' && this.isLikelyProductionFile(filePath)) {
+            candidateFilePathSet.add(filePath);
+          }
+        }
+      } catch {
+        // ignore term-anchor enrichment failures
+      }
+    }
+
+    const candidateFilePaths = [...candidateFilePathSet].slice(0, 30);
+
+    if (candidateFilePaths.length === 0) {
+      return [];
+    }
+
+    const quotedFilePaths = candidateFilePaths
+      .map((filePath) => `'${String(filePath).replace(/'/g, "''")}'`)
+      .join(', ');
+
+    const rows = await executeQuery(repo.id, `
+      MATCH (n:File)
+      WHERE n.filePath IN [${quotedFilePaths}]
+      RETURN n.id AS nodeId, n.name AS name, 'File' AS type, n.filePath AS filePath,
+             0 AS startLine, 0 AS endLine, n.runtimeArea AS runtimeArea,
+             '' AS description
+      UNION
+      MATCH (n:Module)
+      WHERE n.filePath IN [${quotedFilePaths}]
+      RETURN n.id AS nodeId, n.name AS name, 'Module' AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description
+    `);
+
+    return rows.map((row: any) => ({
+      nodeId: row.nodeId || row[0],
+      name: row.name || row[1] || path.basename(row.filePath || row[3] || ''),
+      type: row.type || row[2],
+      filePath: row.filePath || row[3],
+      startLine: row.startLine || row[4],
+      endLine: row.endLine || row[5],
+      runtimeArea: row.runtimeArea || row[6],
+      description: row.description || row[7],
+      score: 0,
+      bm25Score: 0,
+    }));
+  }
+
   private computeSearchBoost(
     searchQuery: string,
     result: { name: string; filePath: string; type: string; runtimeArea?: string; dataModelPath?: string; moduleSymbol?: string; description?: string },
@@ -766,7 +1124,8 @@ export class LocalBackend {
 
   private async rankSearchResults(repo: RepoHandle, searchQuery: string, rawResults: any[], limit: number): Promise<RankedSearchResult[]> {
     const exactAliasCandidates = await this.getExactAliasCandidates(repo, searchQuery);
-    const dedupedRaw = [...rawResults, ...exactAliasCandidates].filter((result, index, array) => {
+    const broadAnchorCandidates = await this.getBroadAnchorCandidates(repo, searchQuery, rawResults);
+    const dedupedRaw = [...rawResults, ...exactAliasCandidates, ...broadAnchorCandidates].filter((result, index, array) => {
       const key = result.nodeId || `${result.type}:${result.filePath}:${result.name}:${result.startLine || ''}`;
       return array.findIndex((candidate) => {
         const candidateKey = candidate.nodeId || `${candidate.type}:${candidate.filePath}:${candidate.name}:${candidate.startLine || ''}`;
@@ -782,8 +1141,10 @@ export class LocalBackend {
 
     const hasMappedCandidates = dedupedRaw.some((result: any) => this.isRojoMappedResult(rojoProject, result.filePath));
     const preferMappedResults = this.isBroadSearchQuery(searchQuery) && hasMappedCandidates;
-    const broadSearch = this.isBroadSearchQuery(searchQuery);
-    const testFocusedQuery = this.isTestFocusedQuery(searchQuery);
+    const subsystemDiscovery = this.isSubsystemDiscoveryQuery(searchQuery);
+    const broadQueryFileSignals = subsystemDiscovery
+      ? await this.getBroadQueryFileSignals(repo, filePaths)
+      : new Map<string, { communityCount: number; processCount: number }>();
 
     const ranked = dedupedRaw.map((result: any) => {
       const resultType = this.getNodeKind(result);
@@ -792,13 +1153,28 @@ export class LocalBackend {
       const rojoMappingBoost = preferMappedResults
         ? (rojoTarget ? 5 : -5)
         : 0;
-      const productionBoost = broadSearch && this.isLikelyProductionFile(result.filePath) ? 3 : 0;
-      const testPenalty = broadSearch && isTestFilePath(result.filePath)
-        ? (testFocusedQuery ? 3.5 : 8)
+      const { productionBoost, anchorBoost, testPenalty, secondaryPenalty, nonCodePenalty } = this.computeBroadSearchPenalties(searchQuery, result.filePath);
+      const primarySourceBoost = subsystemDiscovery && this.isPrimarySourceFile(result.filePath) ? 2.5 : 0;
+      const anchorTypeBoost = subsystemDiscovery
+        ? (resultType === 'Class' || resultType === 'Module' || resultType === 'File'
+          ? anchorBoost + 1.5
+          : resultType === 'Method'
+            ? 0
+            : 0)
         : 0;
-      const nonSourcePenalty = broadSearch && !this.isLikelyProductionFile(result.filePath) && !isTestFilePath(result.filePath)
-        ? 2.5
-        : 0;
+      const actionPenalty = this.getBroadQueryActionPenalty(resultType, result.name, searchQuery);
+      const { boost: broadTermBoost, penalty: broadTermPenalty } = this.computeBroadQueryTermScore(searchQuery, {
+        name: result.name,
+        filePath: result.filePath,
+        type: resultType,
+        moduleSymbol,
+        description: result.description,
+      });
+      const graphSignalBoost = this.computeBroadQuerySignalBoost(
+        searchQuery,
+        resultType,
+        broadQueryFileSignals.get(result.filePath),
+      );
       const score = (result.bm25Score ?? result.score ?? 0) + this.computeSearchBoost(searchQuery, {
         name: result.name,
         filePath: result.filePath,
@@ -807,7 +1183,7 @@ export class LocalBackend {
         dataModelPath: rojoTarget?.dataModelPath,
         moduleSymbol,
         description: result.description,
-      }) + rojoMappingBoost + productionBoost - testPenalty - nonSourcePenalty;
+      }) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty;
 
       return {
         nodeId: result.nodeId,
@@ -836,6 +1212,12 @@ export class LocalBackend {
     return this.cypher(repo, { query });
   }
 
+  private extractCypherVariableLabel(query: string, variableName: string): string | null {
+    const variablePattern = new RegExp(`\\(${variableName}:([\\w\`]+)`, 'i');
+    const match = query.match(variablePattern);
+    return match?.[1]?.replace(/`/g, '') ?? null;
+  }
+
   private buildCypherError(query: string, errorMessage: string): any {
     const starterQueries = [
       "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20",
@@ -852,10 +1234,32 @@ export class LocalBackend {
       };
     }
 
+    const propertyErrorMatch = errorMessage.match(/Cannot find property ([A-Za-z_][A-Za-z0-9_]*) for ([A-Za-z_][A-Za-z0-9_]*)/i);
+    if (propertyErrorMatch) {
+      const propertyName = propertyErrorMatch[1];
+      const variableName = propertyErrorMatch[2];
+      const nodeType = this.extractCypherVariableLabel(query, variableName);
+      const availableProperties = nodeType ? getNodeProperties(nodeType) : null;
+      const propertyResource = nodeType ? getPropertyResourceUri(nodeType) : 'gitnexus://properties';
+      const hint = availableProperties
+        ? `Property \`${propertyName}\` is not available on ${nodeType}. Available properties include: ${availableProperties.join(', ')}.`
+        : `Property \`${propertyName}\` is not available on \`${variableName}\`. Read gitnexus://properties and gitnexus://schema to inspect available node properties.`;
+
+      return {
+        error: errorMessage,
+        hint,
+        schema_resource: 'gitnexus://schema',
+        property_resource: propertyResource,
+        ...(availableProperties ? { available_properties: availableProperties } : {}),
+        starter_queries: starterQueries,
+      };
+    }
+
     return {
       error: errorMessage,
       hint: 'Use read-only Cypher over the single CodeRelation table and filter edge kinds with the `type` property.',
       schema_resource: 'gitnexus://schema',
+      property_resource: 'gitnexus://properties',
       starter_queries: starterQueries,
     };
   }
@@ -1103,7 +1507,7 @@ export class LocalBackend {
     if (uid) {
       symbols = await executeParameterized(repo.id, `
         MATCH (n {id: $uid})
-        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea${include_content ? ', n.content AS content' : ''}
+        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea, n.description AS description${include_content ? ', n.content AS content' : ''}
         LIMIT 1
       `, { uid });
     } else {
@@ -1124,7 +1528,7 @@ export class LocalBackend {
 
       symbols = await executeParameterized(repo.id, `
         MATCH (n) ${whereClause}
-        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea${include_content ? ', n.content AS content' : ''}
+        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea, n.description AS description${include_content ? ', n.content AS content' : ''}
         LIMIT 10
       `, queryParams);
     }
@@ -1165,8 +1569,9 @@ export class LocalBackend {
     const dataModelPath = rojoProject?.getTargetsForFile(filePath)?.[0]?.dataModelPath;
     const symbolKind = this.getNodeKind({ id: symId, type: sym.type || sym[2] });
     const moduleSymbol = symbolKind === 'Module' ? (sym.name || sym[1]) : primaryModules.get(filePath);
+    const symbolDescription = sym.description || sym[7];
 
-    const { rows: memberRows, inferred: inferredMembers } = await this.getContainedMembers(repo, {
+    const { rows: memberRows, inferred: inferredMembers, source: memberSource } = await this.getContainedMembers(repo, {
       id: symId,
       kind: symbolKind,
       filePath,
@@ -1222,20 +1627,38 @@ export class LocalBackend {
           LIMIT 40
         `);
       } catch (e) { logQueryError('context:outgoing-via-members', e); }
+      if (processRows.length === 0) {
+        try {
+          processRows = await executeQuery(repo.id, `
+            MATCH (child)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)
+            WHERE child.id IN [${quotedMemberIds}]
+            RETURN p.id AS pid, p.heuristicLabel AS label, r.step AS step, p.stepCount AS stepCount,
+                   child.name AS viaMember
+            LIMIT 30
+          `);
+        } catch (e) { logQueryError('context:processes-via-members', e); }
+      }
     }
     
     // Helper to categorize refs
     const categorize = (rows: any[]) => {
       const cats: Record<string, any[]> = {};
+      const seen = new Set<string>();
       for (const row of rows) {
         const relType = (row.relType || row[0] || '').toLowerCase();
+        const kind = this.getNodeKind({ id: row.uid || row[1], type: row.kind || row[4] });
         const entry = {
           uid: row.uid || row[1],
           name: row.name || row[2],
           filePath: row.filePath || row[3],
-          kind: row.kind || row[4],
+          kind,
           ...(row.viaMember || row[5] ? { viaMember: row.viaMember || row[5] } : {}),
         };
+        const dedupeKey = `${relType}:${entry.uid}:${entry.viaMember || ''}`;
+        if (seen.has(dedupeKey)) {
+          continue;
+        }
+        seen.add(dedupeKey);
         if (!cats[relType]) cats[relType] = [];
         cats[relType].push(entry);
       }
@@ -1247,20 +1670,24 @@ export class LocalBackend {
     const partialCoverage =
       directRelationshipCount === 0 &&
       (memberRelationshipCount > 0 || memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symbolKind));
-    const confidence = inferredMembers
+    const confidence = memberSource === 'range' || memberSource === 'file_defines'
       ? 'partial'
       : partialCoverage
         ? 'partial'
         : memberRelationshipCount > 0
           ? 'expanded'
           : 'grounded';
-    const coverageNote = inferredMembers
+    const coverageNote = memberSource === 'range'
       ? 'Direct container edges were not available for this symbol, so related members were inferred from same-file source ranges and filtered down to immediate container members. Results are materially better than raw symbol-only coverage, but graph coverage may still be incomplete.'
-      : partialCoverage
-        ? 'Direct relationships on this container symbol are sparse. Member-based relationships are shown where available, but graph coverage may still be incomplete.'
-        : memberRelationshipCount > 0
-          ? 'Includes additional relationships gathered through contained members.'
-          : 'Relationships are grounded in direct graph edges for this symbol.';
+      : memberSource === 'file_defines'
+        ? 'Direct container edges were not available for this symbol, so related members were recovered from grounded file-level definitions in the same source file. Results are materially better, but container ownership is still partial.'
+        : symbolKind === 'Module' && typeof symbolDescription === 'string' && symbolDescription.startsWith('luau-module:weak') && memberRows.length > 0
+          ? 'This Luau module is a weak returned-table wrapper, so only grounded delegate members referenced directly from the returned table are shown. Internal same-file tables and methods are intentionally not treated as exported module members unless the wrapper points to them explicitly.'
+        : partialCoverage
+          ? 'Direct relationships on this container symbol are sparse. Member-based relationships are shown where available, but graph coverage may still be incomplete.'
+          : memberRelationshipCount > 0
+            ? 'Includes additional relationships gathered through contained members.'
+            : 'Relationships are grounded in direct graph edges for this symbol.';
     
     return {
       status: 'found',
@@ -1273,9 +1700,10 @@ export class LocalBackend {
         endLine: sym.endLine || sym[5],
         ...(sym.runtimeArea || sym[6] ? { runtimeArea: sym.runtimeArea || sym[6] } : {}),
         ...(moduleSymbol ? { module_symbol: moduleSymbol } : {}),
+        ...(typeof symbolDescription === 'string' && symbolDescription ? { description: symbolDescription } : {}),
         ...(dataModelPath ? { data_model_path: dataModelPath } : {}),
         ...(boundaryImports.get(filePath)?.length ? { boundary_imports: boundaryImports.get(filePath) } : {}),
-        ...(include_content && (sym.content || sym[7]) ? { content: sym.content || sym[7] } : {}),
+        ...(include_content && (sym.content || sym[8]) ? { content: sym.content || sym[8] } : {}),
       },
       incoming: categorize([...incomingRows, ...incomingViaMembersRows]),
       outgoing: categorize([...outgoingRows, ...outgoingViaMembersRows]),
@@ -1284,11 +1712,12 @@ export class LocalBackend {
         name: r.label || r[1],
         step_index: r.step || r[2],
         step_count: r.stepCount || r[3],
+        ...(r.viaMember || r[4] ? { via_member: r.viaMember || r[4] } : {}),
       })),
       members: memberRows.map((row: any) => ({
         uid: row.uid || row[0],
         name: row.name || row[1],
-        kind: row.kind || row[2],
+        kind: this.getNodeKind({ id: row.uid || row[0], type: row.kind || row[2] }),
         filePath: row.filePath || row[3],
       })),
       coverage: {
@@ -1662,7 +2091,9 @@ export class LocalBackend {
   }
 
   private async impact(repo: RepoHandle, params: {
-    target: string;
+    target?: string;
+    uid?: string;
+    file_path?: string;
     direction: 'upstream' | 'downstream';
     maxDepth?: number;
     relationTypes?: string[];
@@ -1671,7 +2102,7 @@ export class LocalBackend {
   }): Promise<any> {
     await this.ensureInitialized(repo.id);
     
-    const { target, direction } = params;
+    const { target, direction, uid, file_path } = params;
     const maxDepth = params.maxDepth || 3;
     const rawRelTypes = params.relationTypes && params.relationTypes.length > 0
       ? params.relationTypes.filter(t => VALID_RELATION_TYPES.has(t))
@@ -1683,24 +2114,31 @@ export class LocalBackend {
     const relTypeFilter = relationTypes.map(t => `'${t}'`).join(', ');
     const confidenceFilter = minConfidence > 0 ? ` AND r.confidence >= ${minConfidence}` : '';
 
-    const targets = await executeParameterized(repo.id, `
-      MATCH (n)
-      WHERE n.name = $targetName
-      RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath,
-             n.startLine AS startLine, n.endLine AS endLine
-      LIMIT 1
-    `, { targetName: target });
-    if (targets.length === 0) return { error: `Target '${target}' not found` };
-    
-    const sym = targets[0];
-    const symId = sym.id || sym[0];
-    const symType = this.getNodeKind({ id: symId, type: sym.type || sym[2] });
-    const { rows: memberRows, inferred: inferredMembers } = await this.getContainedMembers(repo, {
+    if (!target && !uid) {
+      return { error: 'Either "target" or "uid" parameter is required.' };
+    }
+
+    const lookupResult = await this.context(repo, {
+      name: target,
+      uid,
+      file_path,
+    });
+    if (lookupResult.status === 'ambiguous') {
+      return lookupResult;
+    }
+    if (lookupResult.error) {
+      return lookupResult;
+    }
+
+    const sym = lookupResult.symbol;
+    const symId = sym.uid || sym.id;
+    const symType = this.getNodeKind({ id: symId, type: sym.kind || sym.type });
+    const { rows: memberRows, inferred: inferredMembers, source: memberSource } = await this.getContainedMembers(repo, {
       id: symId,
       kind: symType,
-      filePath: sym.filePath || sym[3],
-      startLine: sym.startLine || sym[4],
-      endLine: sym.endLine || sym[5],
+      filePath: sym.filePath,
+      startLine: sym.startLine,
+      endLine: sym.endLine,
     });
     const memberIds = [...new Set(memberRows.map((row: any) => row.id || row.uid || row[0]).filter(Boolean))];
     const traversalSourceIds = [symId, ...memberIds];
@@ -1734,7 +2172,7 @@ export class LocalBackend {
               depth,
               id: relId,
               name: rel.name || rel[2],
-              type: rel.type || rel[3],
+              type: this.getNodeKind({ id: relId, type: rel.type || rel[3] }),
               filePath,
               relationType: rel.relType || rel[5],
               confidence: rel.confidence || rel[6] || 1.0,
@@ -1800,6 +2238,7 @@ export class LocalBackend {
           impact: directModuleSet.has(name) ? 'direct' : 'indirect',
         };
       });
+
     }
 
     // Risk scoring
@@ -1816,13 +2255,16 @@ export class LocalBackend {
     if ((inferredMembers || (impacted.length === 0 && ['Class', 'Module', 'File'].includes(symType))) && impacted.length === 0) {
       risk = 'UNKNOWN';
     }
+    const directFileImpacts = (grouped[1] || []).filter((item: any) => item.type === 'File' && item.filePath);
+    const affectedAreas = this.summarizeAffectedAreas(directFileImpacts.map((item: any) => item.filePath));
+    const directFileImpactNames = [...new Set(directFileImpacts.map((item: any) => path.basename(item.filePath)))].slice(0, 4);
 
     return {
       target: {
         id: symId,
-        name: sym.name || sym[1],
+        name: sym.name,
         type: symType,
-        filePath: sym.filePath || sym[3],
+        filePath: sym.filePath,
         member_count: memberRows.length,
       },
       direction,
@@ -1830,7 +2272,7 @@ export class LocalBackend {
       risk,
       coverage: {
         confidence:
-          inferredMembers
+          memberSource === 'range' || memberSource === 'file_defines'
             ? 'partial'
             : impacted.length === 0 && (memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symType))
               ? 'partial'
@@ -1838,13 +2280,19 @@ export class LocalBackend {
                 ? 'expanded'
                 : 'grounded',
         note:
-          inferredMembers
-            ? 'Direct container edges were not available for this symbol, so impact expansion used same-file source ranges filtered to immediate container members. Coverage is improved, but still partial.'
+          memberSource === 'range'
+            ? directCount > 0 && processCount === 0 && moduleCount === 0 && affectedAreas.length > 0
+              ? `Direct container edges were not available for this symbol, so impact expansion used same-file source ranges filtered to immediate container members. Direct impact is landing in ${affectedAreas.map((area) => area.name).join(', ')}, but grounded process/module memberships are still missing there, so coverage remains partial.`
+              : 'Direct container edges were not available for this symbol, so impact expansion used same-file source ranges filtered to immediate container members. Coverage is improved, but still partial.'
+            : memberSource === 'file_defines'
+              ? 'Direct container edges were not available for this symbol, so impact expansion used grounded file-level definitions to recover likely members. Coverage is improved, but still partial.'
             : impacted.length === 0 && (memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symType))
               ? 'No affected symbols were found through direct graph traversal. For container-style symbols, impact coverage may still be incomplete even after expanding through contained members.'
-              : memberRows.length > 0
-                ? 'Impact includes relationships gathered through contained members for this symbol.'
-                : 'Impact is grounded in direct graph traversal for this symbol.',
+              : directCount > 0 && processCount === 0 && moduleCount === 0 && directFileImpactNames.length > 0
+                ? `Direct impact is currently landing on file-level callers (${directFileImpactNames.join(', ')}), and the strongest affected areas are ${affectedAreas.map((area) => area.name).join(', ')}. The graph still does not attach grounded process or module memberships to those direct callers, so structural blast radius remains partial.`
+                : memberRows.length > 0
+                  ? 'Impact includes relationships gathered through contained members for this symbol.'
+                  : 'Impact is grounded in direct graph traversal for this symbol.',
       },
       summary: {
         direct: directCount,
@@ -1853,6 +2301,7 @@ export class LocalBackend {
       },
       affected_processes: affectedProcesses,
       affected_modules: affectedModules,
+      affected_areas: affectedAreas,
       byDepth: grouped,
     };
   }

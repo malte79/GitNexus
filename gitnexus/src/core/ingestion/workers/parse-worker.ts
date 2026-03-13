@@ -571,6 +571,31 @@ const getDefinitionNodeFromCaptures = (captureMap: Record<string, any>): any | n
   return null;
 };
 
+const resolveLuauModuleMethodId = (
+  result: ParseWorkerResult,
+  filePath: string,
+  methodRef: { name: string; startLine: number; label: string; targetName?: string; targetLabel?: string },
+): string | null => {
+  if (methodRef.targetLabel) {
+    const directId = generateId(methodRef.targetLabel, `${filePath}:${methodRef.targetName || methodRef.name}:${methodRef.startLine}`);
+    if (result.symbols.some((symbol) => symbol.filePath === filePath && symbol.nodeId === directId)) {
+      return directId;
+    }
+  }
+
+  const targetName = methodRef.targetName || methodRef.name;
+  const exact = result.symbols.find((symbol) =>
+    symbol.filePath === filePath &&
+    symbol.name === targetName &&
+    (
+      methodRef.targetLabel
+        ? symbol.type === methodRef.targetLabel
+        : symbol.type === 'Method' || symbol.type === 'Function'
+    ),
+  );
+  return exact?.nodeId ?? null;
+};
+
 const appendLuauModuleSymbols = (
   result: ParseWorkerResult,
   rootNode: any,
@@ -621,8 +646,8 @@ const appendLuauModuleSymbols = (
     existingIds.add(moduleId);
 
     for (const methodRef of candidate.methodRefs) {
-      const methodId = generateId(methodRef.label, `${filePath}:${methodRef.name}:${methodRef.startLine}`);
-      if (!existingIds.has(methodId)) continue;
+      const methodId = resolveLuauModuleMethodId(result, filePath, methodRef);
+      if (!methodId || !existingIds.has(methodId)) continue;
 
       result.relationships.push({
         id: generateId('DEFINES', `${moduleId}->${methodId}`),

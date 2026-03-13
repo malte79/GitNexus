@@ -543,6 +543,229 @@ describe('LocalBackend.callTool', () => {
     expect(result.schema_resource).toBe('gitnexus://schema');
   });
 
+  it('adds property-specific Cypher guidance for missing node properties', async () => {
+    (executeQuery as any).mockRejectedValue(new Error('Binder exception: Cannot find property lineCount for f.'));
+    const result = await backend.callTool('cypher', { query: "MATCH (f:File) RETURN f.lineCount AS lines" });
+    expect(result.error).toContain('lineCount');
+    expect(result.hint).toContain('Property `lineCount` is not available on File');
+    expect(result.property_resource).toBe('gitnexus://properties/File');
+    expect(result.available_properties).toContain('filePath');
+  });
+
+  it('demotes test-heavy matches for broad subsystem discovery queries', async () => {
+    (searchFTSFromKuzu as any).mockResolvedValue([
+      {
+        nodeId: 'func:test_matrix',
+        name: 'test_execute_smoke_lifecycle_runs_preflight_stop',
+        type: 'Function',
+        filePath: 'tests/test_run_connected_studio_smoke_matrix.py',
+        score: 6.4,
+        rank: 1,
+      },
+      {
+        nodeId: 'func:main',
+        name: 'main',
+        type: 'Function',
+        filePath: 'scripts/run_connected_studio_smoke_matrix.py',
+        score: 5.7,
+        rank: 2,
+      },
+      {
+        nodeId: 'class:CommandBridgeHandler',
+        name: 'CommandBridgeHandler',
+        type: 'Class',
+        filePath: 'typed/bridge/http/runtime/core.py',
+        score: 2.2,
+        rank: 3,
+      },
+      {
+        nodeId: 'module:TransportClient',
+        name: 'TransportClient',
+        type: 'Module',
+        filePath: 'typed/plugin/runtime/transport_client.lua',
+        score: 5.2,
+        rank: 4,
+      },
+    ]);
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n:File)')) {
+        return [
+          { nodeId: 'file:studio_system_features', name: 'studio_system_features.py', type: 'File', filePath: 'typed/bridge/http/services/studio_system_features.py', startLine: 0, endLine: 0 },
+          { nodeId: 'class:CommandBridgeHandler', name: 'CommandBridgeHandler', type: 'Class', filePath: 'typed/bridge/http/runtime/core.py', startLine: 1, endLine: 100 },
+        ];
+      }
+      return [];
+    });
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n:File)') && cypher.includes('lower(n.filePath) CONTAINS $term')) {
+        if (params.term === 'studio' || params.term === 'connected') {
+          return [{ filePath: 'typed/bridge/http/services/studio_system_features.py' }];
+        }
+        return [];
+      }
+      if (cypher.includes('MATCH (m:Module)')) {
+        return [];
+      }
+      if (cypher.includes('MATCH (n:Module)') && cypher.includes('UNION') && params.compactQuery) {
+        return [];
+      }
+      if (cypher.includes("MATCH (src {filePath: $filePath})-[r:CodeRelation {type: 'IMPORTS'}]->(dst)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $nodeId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $nodeId})-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+        if (params.nodeId === 'class:CommandBridgeHandler') {
+          return [{ cohesion: 0.9, module: 'Bridge' }];
+        }
+        return [];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('query', { query: 'connected studio smoke matrix test harness playtest log e2e' });
+    expect(result.definitions[0]).toMatchObject({
+      name: 'studio_system_features.py',
+      filePath: 'typed/bridge/http/services/studio_system_features.py',
+    });
+    expect(result.definitions[0].filePath).not.toContain('tests/');
+    expect(result.definitions[0].filePath).not.toBe('typed/plugin/runtime/transport_client.lua');
+  });
+
+  it('surfaces member-derived process participation for module containers when direct process edges are missing', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{ id: 'module:runtime_manager', name: 'runtime_manager', type: 'Module', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 801, endLine: 806, description: 'luau-module:weak:return-table-literal' }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        return [
+          { uid: 'method:new', name: 'new', kind: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 67, endLine: 135 },
+        ];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(child)") && cypher.includes("'method:new'")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (child)-[r:CodeRelation]->(target)") && cypher.includes("'method:new'")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (child)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)") && cypher.includes("'method:new'")) {
+        return [{ pid: 'proc:new', label: 'RuntimeManagerNew', step: 1, stepCount: 4, viaMember: 'new' }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', {
+      name: 'runtime_manager',
+      file_path: 'typed/plugin/runtime/runtime_manager.lua',
+    });
+    expect(result.members).toEqual([
+      expect.objectContaining({ name: 'new', kind: 'Method' }),
+    ]);
+    expect(result.processes).toEqual([
+      expect.objectContaining({ name: 'RuntimeManagerNew', via_member: 'new' }),
+    ]);
+    expect(result.coverage.note).toContain('weak returned-table wrapper');
+  });
+
+  it('does not infer module members from same-file file definitions when direct module edges are missing', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{ id: 'module:runtime_manager', name: 'runtime_manager', type: 'Module', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 801, endLine: 806 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(child)") && cypher.includes("'method:new'")) {
+        return [{ relType: 'CALLS', uid: 'func:boot', name: 'boot', filePath: 'typed/plugin/runtime/bootstrap.lua', kind: 'Function', viaMember: 'new' }];
+      }
+      if (cypher.includes("MATCH (child)-[r:CodeRelation]->(target)") && cypher.includes("'method:new'")) {
+        return [{ relType: 'CALLS', uid: 'module:TransportClient', name: 'TransportClient', filePath: 'typed/plugin/runtime/transport_client.lua', kind: 'Module', viaMember: 'start' }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', {
+      name: 'runtime_manager',
+      file_path: 'typed/plugin/runtime/runtime_manager.lua',
+    });
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.coverage.note).toContain('graph coverage may still be incomplete');
+    expect(result.members).toEqual([]);
+    expect(result.incoming).toEqual({});
+  });
+
+  it('recovers file members from grounded file definitions when direct file edges are missing', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n {id: $uid})')) {
+        return [{ id: 'file:runtime_manager', name: 'runtime_manager.lua', type: 'File', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 1, endLine: 900 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (f:File {filePath: $filePath})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        expect(params.filePath).toBe('typed/plugin/runtime/runtime_manager.lua');
+        return [
+          { uid: 'method:new', name: 'new', kind: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 67, endLine: 135 },
+          { uid: 'method:start', name: 'start', kind: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 408, endLine: 424 },
+          { uid: 'func:nowSeconds', name: 'nowSeconds', kind: 'Function', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 19, endLine: 21 },
+        ];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(child)") && cypher.includes("'method:new'")) {
+        return [{ relType: 'CALLS', uid: 'func:boot', name: 'boot', filePath: 'typed/plugin/runtime/bootstrap.lua', kind: 'Function', viaMember: 'new' }];
+      }
+      if (cypher.includes("MATCH (child)-[r:CodeRelation]->(target)") && cypher.includes("'method:new'")) {
+        return [{ relType: 'CALLS', uid: 'module:TransportClient', name: 'TransportClient', filePath: 'typed/plugin/runtime/transport_client.lua', kind: 'Module', viaMember: 'start' }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', { uid: 'file:runtime_manager' });
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.coverage.note).toContain('grounded file-level definitions');
+    expect(result.members.map((member: any) => member.name)).toEqual(['new', 'start']);
+    expect(result.incoming.calls[0]).toMatchObject({
+      name: 'boot',
+      viaMember: 'new',
+    });
+  });
+
   it('reports partial context coverage for central Python classes using inferred immediate members when container edges are missing', async () => {
     (executeParameterized as any).mockImplementation(async (repoId: string, cypher: string) => {
       if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
@@ -594,7 +817,7 @@ describe('LocalBackend.callTool', () => {
 
   it('reports partial impact coverage for central Python classes using inferred members when no affected symbols are found', async () => {
     (executeParameterized as any).mockImplementation(async (repoId: string, cypher: string) => {
-      if (cypher.includes('MATCH (n)') && cypher.includes('WHERE n.name = $targetName')) {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
         return [{ id: 'class:CommandBridgeHandler', name: 'CommandBridgeHandler', type: 'Class', filePath: 'src/bridge/handler.py', startLine: 1, endLine: 40 }];
       }
       if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
@@ -615,6 +838,127 @@ describe('LocalBackend.callTool', () => {
     expect(result.target.member_count).toBe(1);
     expect(result.coverage.note).toContain('immediate container members');
     expect(result.risk).toBe('UNKNOWN');
+  });
+
+  it('reports affected areas when central-symbol impact lands on file-level callers without process or module memberships', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{ id: 'class:CommandBridgeHandler', name: 'CommandBridgeHandler', type: 'Class', filePath: 'src/bridge/handler.py', startLine: 1, endLine: 40 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes('MATCH (child:Function)') && cypher.includes('child.filePath = $filePath')) {
+        return [{ uid: 'func:dispatch', name: 'dispatch', kind: 'Function', filePath: 'src/bridge/handler.py', startLine: 5, endLine: 10 }];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)')) {
+        return [
+          { sourceId: 'func:dispatch', id: 'File:typed/bridge/http/services/studio_automation.py', name: 'studio_automation.py', type: 'File', filePath: 'typed/bridge/http/services/studio_automation.py', relType: 'CALLS', confidence: 0.5 },
+          { sourceId: 'func:dispatch', id: 'File:typed/bridge/http/routes/studio.py', name: 'studio.py', type: 'File', filePath: 'typed/bridge/http/routes/studio.py', relType: 'CALLS', confidence: 0.5 },
+        ];
+      }
+      if (cypher.includes("MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+        return [];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('impact', {
+      target: 'CommandBridgeHandler',
+      direction: 'upstream',
+    });
+    expect(result.coverage.confidence).toBe('partial');
+    expect(result.affected_areas).toEqual([
+      { name: 'typed/bridge/http/routes', files: 1 },
+      { name: 'typed/bridge/http/services', files: 1 },
+    ]);
+    expect(result.coverage.note).toContain('typed/bridge/http/routes');
+    expect(result.coverage.note).toContain('typed/bridge/http/services');
+  });
+
+  it('supports impact disambiguation by file path', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName AND n.filePath CONTAINS $filePath')) {
+        return [{ id: 'func:onTransportClosed', name: 'onTransportClosed', type: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 562, endLine: 575 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $nodeId})-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)') && cypher.includes("'func:onTransportClosed'")) {
+        return [{ sourceId: 'func:onTransportClosed', id: 'func:handleClose', name: 'handleClose', type: 'Function', filePath: 'typed/plugin/runtime/runtime_core.lua', relType: 'CALLS', confidence: 1 }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('impact', {
+      target: 'onTransportClosed',
+      file_path: 'typed/plugin/runtime/runtime_manager.lua',
+      direction: 'upstream',
+    });
+    expect(result.target).toMatchObject({
+      name: 'onTransportClosed',
+      filePath: 'typed/plugin/runtime/runtime_manager.lua',
+    });
+    expect(result.impactedCount).toBe(1);
+  });
+
+  it('does not infer impact processes or modules from unrelated same-file symbols', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{ id: 'func:onTransportClosed', name: 'onTransportClosed', type: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', startLine: 562, endLine: 575 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)') && cypher.includes("'func:onTransportClosed'")) {
+        return [{ sourceId: 'func:onTransportClosed', id: 'func:handleClose', name: 'handleClose', type: 'Function', filePath: 'typed/plugin/runtime/runtime_manager.lua', relType: 'CALLS', confidence: 1 }];
+      }
+      if (cypher.includes("MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)") && cypher.includes("'func:handleClose'")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)") && cypher.includes("'func:handleClose'")) {
+        return [];
+      }
+      if (cypher.includes('s.filePath IN')) {
+        return [{ name: 'Runtime', hits: 3 }];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('impact', {
+      target: 'onTransportClosed',
+      direction: 'upstream',
+    });
+    expect(result.affected_processes).toEqual([]);
+    expect(result.affected_modules).toEqual([]);
+    expect(result.summary).toMatchObject({
+      processes_affected: 0,
+      modules_affected: 0,
+    });
   });
 
   it('disconnect clears the bound repo and closes Kuzu', async () => {

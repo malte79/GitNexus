@@ -32,6 +32,7 @@ describe('getResourceDefinitions', () => {
       'gitnexus://clusters',
       'gitnexus://processes',
       'gitnexus://schema',
+      'gitnexus://properties',
     ]);
   });
 });
@@ -42,6 +43,7 @@ describe('getResourceTemplates', () => {
     expect(templates.map(t => t.uriTemplate)).toEqual([
       'gitnexus://cluster/{clusterName}',
       'gitnexus://process/{processName}',
+      'gitnexus://properties/{nodeType}',
     ]);
   });
 });
@@ -58,6 +60,21 @@ describe('readResource', () => {
     const backend = createMockBackend();
     const result = await readResource('gitnexus://schema', backend);
     expect(result).toContain('CodeNexus Graph Schema');
+  });
+
+  it('routes gitnexus://properties correctly', async () => {
+    const backend = createMockBackend();
+    const result = await readResource('gitnexus://properties', backend);
+    expect(result).toContain('CodeNexus Node Properties');
+    expect(result).toContain('gitnexus://properties/File');
+  });
+
+  it('routes gitnexus://properties/{nodeType} correctly', async () => {
+    const backend = createMockBackend();
+    const result = await readResource('gitnexus://properties/File', backend);
+    expect(result).toContain('node_type: File');
+    expect(result).toContain('filePath');
+    expect(result).toContain('runtimeArea');
   });
 
   it('routes gitnexus://clusters correctly', async () => {

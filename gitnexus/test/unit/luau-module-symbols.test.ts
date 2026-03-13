@@ -54,6 +54,52 @@ describe('extractLuauModuleSymbolCandidates', () => {
     expect(candidates[0].methodRefs.map((method) => method.name).sort()).toEqual(['hide', 'render']);
   });
 
+  it('records delegate targets for weak returned-table wrappers around existing module methods', () => {
+    const tree = parser.parse(`
+      local RuntimeManager = {}
+
+      function RuntimeManager.new(config)
+        return config
+      end
+
+      return {
+        new = function(config)
+          return RuntimeManager.new(config)
+        end,
+      }
+    `);
+
+    const candidates = extractLuauModuleSymbolCandidates(tree.rootNode, 'typed/plugin/runtime/runtime_manager.lua');
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].methodRefs).toHaveLength(1);
+    expect(candidates[0].methodRefs[0]).toMatchObject({
+      name: 'new',
+      targetName: 'new',
+    });
+  });
+
+  it('records delegate targets for weak returned-table wrappers around top-level functions', () => {
+    const tree = parser.parse(`
+      local function buildPayload(config)
+        return config
+      end
+
+      return {
+        createPayload = function(config)
+          return Helpers.buildPayload(config)
+        end,
+      }
+    `);
+
+    const candidates = extractLuauModuleSymbolCandidates(tree.rootNode, 'typed/plugin/runtime/helpers.lua');
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].methodRefs).toHaveLength(1);
+    expect(candidates[0].methodRefs[0]).toMatchObject({
+      name: 'createPayload',
+      targetName: 'buildPayload',
+    });
+  });
+
   it('does not synthesize a module symbol for a plain local table that is never returned', () => {
     const tree = parser.parse(`
       local InternalCache = {}
