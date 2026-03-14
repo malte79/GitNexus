@@ -43,13 +43,15 @@ Contract:
 
 - read-only
 - prints Markdown only
-- explains the use-plane versus manage-plane split
-- explains that top-level structural commands still depend on the repo-local HTTP service
-- documents the normal remediation path when the service is unavailable:
+- explains what CodeNexus is and the split between everyday analysis commands and `manage` lifecycle commands
+- documents the normal remediation path when the service is unavailable or stale:
   - `codenexus manage start`
-- keeps the direct MCP-over-HTTP path documented for advanced users
+  - `codenexus manage index`
+  - `codenexus manage restart`
+- includes a short example workflow for normal CLI use
 - includes brief use cases and example calls for each supported structural command type
 - documents owner-biased discovery with `codenexus query --owners` and subsystem-oriented summary with `codenexus summary --subsystems`
+- does not mention GitNexus naming, `gitnexus://` resources, API endpoints, MCP, or transport internals in the default help output
 
 ## Top-Level Structural Commands
 
