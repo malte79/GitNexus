@@ -113,7 +113,7 @@ Returns processes ranked by relevance for the bound repo.`,
   },
   {
     name: 'impact',
-    description: `Analyze the blast radius of changing a code symbol in the bound repo.`,
+    description: `Analyze the blast radius of changing a code symbol in the bound repo, including change-risk versus local refactor-pressure signals.`,
     inputSchema: {
       type: 'object',
       properties: {

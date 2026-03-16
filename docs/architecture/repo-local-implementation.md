@@ -83,7 +83,7 @@ Implementation posture:
 - `summary` is a read-only overview derived from existing graph facts
 - `summary --subsystems` is the concise subsystem-oriented architectural view for daily use, including grounded owners, hotspots, lifecycle chokepoints, and production-versus-test split
 - `summary --subsystems-detailed` keeps the fuller subsystem breakdown behind an explicit alternate flag on the same surface
-- concise subsystem output now prefers specific, structurally grounded subsystem rows and may omit weakly grounded hotspot placement rather than forcing a signal into an unrelated bucket
+- concise subsystem output now prefers specific, structurally grounded subsystem rows and architecturally representative owners and hotspots; weakly grounded or helper-level labels may be omitted rather than forced into an unrelated bucket
 - `context` prefers direct relationships, but may supplement container symbols with member-based relationships and explicit partial-coverage reporting
 - `context` and `impact` share the same deterministic obvious-name lookup stack for unambiguous module surfaces: exact symbol, exported module symbol, file basename, then safe shorthand derived from indexed facts
 - `context` may recover file members from grounded file-level definitions when direct file container edges are missing, while keeping partial-confidence reporting explicit
@@ -92,6 +92,6 @@ Implementation posture:
 - `impact` prefers direct graph traversal, but may expand through contained members or grounded file-level definitions for file targets and report partial confidence when container-symbol coverage is incomplete
 - `impact` may surface `affected_areas` from direct file-level callers when process or community memberships are not grounded enough to populate `affected_processes` or `affected_modules`
 - `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`
-- `impact` now exposes machine-readable `risk_dimensions` and `shape.file` so operators can separate blast radius from internal overload on one surface
+- `impact` now exposes machine-readable `risk_dimensions`, `risk_split`, and `shape.file` so operators can separate change risk, local refactor pressure, and raw overload shape on one surface
 - `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)` and property misses such as `File.lineCount`
 - Cypher schema and property discoverability are exposed through `gitnexus://schema`, `gitnexus://properties`, and `gitnexus://properties/{nodeType}`

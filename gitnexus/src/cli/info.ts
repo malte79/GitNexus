@@ -169,6 +169,7 @@ Notes:
 
 Look for:
 - \`risk_dimensions\` to separate centrality, coupling breadth, lifecycle complexity, internal concentration, and boundary ambiguity
+- \`risk_split\` to distinguish high change-risk seams from local refactor pressure more explicitly
 - \`shape.file\` to understand overload through line count, function count, largest members, and grounded seams
 `;
 }
