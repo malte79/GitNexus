@@ -18,10 +18,10 @@ Generated: 2026-03-16
    - path: `.codex/skills/merge/SKILL.md`
 8. `warmup` - Read-only orientation pass for CodeNexus repo state, self-index health, core surfaces, and git state.
    - path: `.codex/skills/warmup/SKILL.md`
-9. `refactor` - Targeted maximum-heavy refactor strike on one named component while preserving public behavior unless explicitly approved.
+9. `refactor` - Targeted maximum-heavy leaderboard-exit refactor strike on one named component with CodeNexus-first seam analysis.
    - path: `.codex/skills/refactor/SKILL.md`
-10. `refactor-rank` - Repo-wide structural component ranking by refactor need using CodeNexus subsystem, impact, and shape signals.
-    - path: `.codex/skills/refactor-rank/SKILL.md`
+10. `refactor-list` - Repo-wide structural component ranking by refactor need using CodeNexus subsystem, impact, and shape signals.
+    - path: `.codex/skills/refactor-list/SKILL.md`
 11. `epic-plan` - Plan an epic collaboratively for the optional filesystem-based epic workflow.
     - path: `.codex/skills/epic-plan/SKILL.md`
 12. `epic-create` - Create a new epic file in `planning/epics/backlog` from an agreed plan.

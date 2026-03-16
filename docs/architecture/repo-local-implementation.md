@@ -10,7 +10,11 @@ This document maps the locked CodeNexus runtime contract onto the current repo-l
 |---|---|---|
 | repo boundary resolution | [git.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/git.ts) | nearest git root, current branch, current commit, dirty-worktree checks |
 | `.codenexus` paths and file contracts | [repo-manager.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/repo-manager.ts) | config, meta, runtime paths; schema validation; repo-state evaluation |
-| repo-bound query engine | [local-backend.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend.ts) | one bound repo, one Kuzu handle, one active tool surface |
+| repo-bound query engine coordinator | [local-backend.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend.ts) | one bound repo, one Kuzu handle, one active tool surface, and delegation across the repo-local analysis stack |
+| repo-local search/query support | [local-backend-search-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-search-support.ts) | BM25-backed query retrieval, alias resolution, broad-query weighting, Rojo enrichment, and owner-oriented ranking |
+| repo-local summary support | [local-backend-summary-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-support.ts) | concise subsystem summary shaping, overview assembly, cluster aggregation, and direct cluster/process detail queries |
+| repo-local analysis support | [local-backend-analysis-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-analysis-support.ts) | shared `context`, `impact`, `detect_changes`, `rename`, and overload-shape analysis |
+| repo-local shared backend primitives | [local-backend-common.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-common.ts), [local-backend-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-types.ts) | shared repo-local constants, logging helpers, and internal MCP/backend types |
 | agent-facing tool schema | [tools.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/tools.ts) | single-repo tool contracts with no repo routing |
 | agent-facing resources | [resources.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/resources.ts) | single-repo resource URIs with no repo discovery |
 | top-level CLI entrypoint | [index.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index.ts) | use-plane versus manage-plane command tree |
@@ -79,6 +83,11 @@ The bound MCP tool surface is now:
 
 Implementation posture:
 
+- `LocalBackend` is now a coordinator over three internal support seams rather than a single monolithic implementation file:
+  - search/query retrieval and ranking live in [local-backend-search-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-search-support.ts)
+  - subsystem/overview assembly lives in [local-backend-summary-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-support.ts)
+  - context/impact/change-analysis and overload-shape logic live in [local-backend-analysis-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-analysis-support.ts)
+- shared repo-local backend constants and internal types live in [local-backend-common.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-common.ts) and [local-backend-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-types.ts); they do not introduce a second public MCP or CLI contract
 - `query` remains BM25-plus-graph retrieval with deterministic ranking adjustments
 - `summary` is a read-only overview derived from existing graph facts
 - `summary --subsystems` is the concise subsystem-oriented architectural view for daily use, including grounded owners, hotspots, lifecycle chokepoints, and production-versus-test split
