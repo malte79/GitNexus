@@ -29,7 +29,8 @@ export const GITNEXUS_TOOLS: ToolDefinition[] = [
       properties: {
         showClusters: { type: 'boolean', description: 'Include subsystem or module summary (default: true)', default: true },
         showProcesses: { type: 'boolean', description: 'Include process summary (default: true)', default: true },
-        showSubsystems: { type: 'boolean', description: 'Include subsystem-oriented architectural summary (default: false)', default: false },
+        showSubsystems: { type: 'boolean', description: 'Include the concise subsystem-oriented architectural summary (default: false)', default: false },
+        showSubsystemDetails: { type: 'boolean', description: 'Use the detailed subsystem-oriented architectural summary (default: false)', default: false },
         limit: { type: 'number', description: 'Max clusters or processes to return (default: 20)', default: 20 },
       },
       required: [],

@@ -14,7 +14,7 @@ This document maps the locked CodeNexus runtime contract onto the current repo-l
 | agent-facing tool schema | [tools.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/tools.ts) | single-repo tool contracts with no repo routing |
 | agent-facing resources | [resources.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/resources.ts) | single-repo resource URIs with no repo discovery |
 | top-level CLI entrypoint | [index.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index.ts) | use-plane versus manage-plane command tree |
-| top-level help surface | [info.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/info.ts) | Markdown guidance for the use plane and direct MCP path |
+| top-level help surface | [info.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/info.ts) | Markdown guidance for the use plane and everyday CLI workflow |
 | CLI MCP client wrapper | [mcp-command-client.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/mcp-command-client.ts) | repo-match checks, bounded service connection, and tool passthrough |
 | lifecycle shims | [init.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/init.ts), [index-command.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/index-command.ts), [status.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/status.ts), [serve.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/serve.ts), [start.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/start.ts), [stop.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/stop.ts), [restart.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/cli/restart.ts) | repo activation, index lifecycle, status, and service lifecycle |
 | service runtime | [service-runtime.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/server/service-runtime.ts) | bind the HTTP server, own graceful shutdown, maintain runtime metadata, and run background auto-index polling |
@@ -81,7 +81,8 @@ Implementation posture:
 
 - `query` remains BM25-plus-graph retrieval with deterministic ranking adjustments
 - `summary` is a read-only overview derived from existing graph facts
-- `summary --subsystems` extends that overview with subsystem owners, hot anchors, production-versus-test split, and hot process hints while remaining read-only and on-demand
+- `summary --subsystems` is the concise subsystem-oriented architectural view for daily use, including grounded owners, hotspots, lifecycle chokepoints, and production-versus-test split
+- `summary --subsystems-detailed` keeps the fuller subsystem breakdown behind an explicit alternate flag on the same surface
 - `context` prefers direct relationships, but may supplement container symbols with member-based relationships and explicit partial-coverage reporting
 - `context` may recover file members from grounded file-level definitions when direct file container edges are missing, while keeping partial-confidence reporting explicit
 - `context` now explicitly distinguishes weak Luau returned-table wrappers from richer exported modules so thin wrapper modules do not look like hollow failures
@@ -89,5 +90,6 @@ Implementation posture:
 - `impact` prefers direct graph traversal, but may expand through contained members or grounded file-level definitions for file targets and report partial confidence when container-symbol coverage is incomplete
 - `impact` may surface `affected_areas` from direct file-level callers when process or community memberships are not grounded enough to populate `affected_processes` or `affected_modules`
 - `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`
+- `impact` now exposes machine-readable `risk_dimensions` and `shape.file` so operators can separate blast radius from internal overload on one surface
 - `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)` and property misses such as `File.lineCount`
 - Cypher schema and property discoverability are exposed through `gitnexus://schema`, `gitnexus://properties`, and `gitnexus://properties/{nodeType}`

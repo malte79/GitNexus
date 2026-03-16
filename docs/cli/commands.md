@@ -50,7 +50,7 @@ Contract:
   - `codenexus manage restart`
 - includes a short example workflow for normal CLI use
 - includes brief use cases and example calls for each supported structural command type
-- documents owner-biased discovery with `codenexus query --owners` and subsystem-oriented summary with `codenexus summary --subsystems`
+- documents owner-biased discovery with `codenexus query --owners`, concise subsystem summary with `codenexus summary --subsystems`, and the explicit detailed alternate `codenexus summary --subsystems-detailed`
 - does not mention GitNexus naming, `gitnexus://` resources, API endpoints, MCP, or transport internals in the default help output
 
 ## Top-Level Structural Commands
@@ -84,6 +84,10 @@ Shared contract:
 - `codenexus context` may explain when a Luau module is a weak returned-table wrapper and therefore only exposes grounded delegate members from the returned table
 - `codenexus context` may also surface grounded backing-container members for weak returned-table wrappers when the wrapper explicitly delegates into a named local table; those backing members are structural context, not exported module members
 - `codenexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
+- `codenexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
+- `codenexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
+- `codenexus summary --subsystems` is the concise subsystem view for daily use
+- `codenexus summary --subsystems-detailed` is the explicit detailed subsystem breakdown
 - `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
 - the primary Cypher recovery resources are:
   - `gitnexus://schema`

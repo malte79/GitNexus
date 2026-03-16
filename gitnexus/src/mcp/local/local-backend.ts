@@ -12,6 +12,7 @@ import { initKuzu, executeQuery, executeParameterized, closeKuzu, isKuzuReady, r
 import { getNodeProperties, getPropertyResourceUri } from '../schema-properties.js';
 import { generateId } from '../../lib/utils.js';
 import {
+  getRepoState,
   loadRepo,
   resolveRepoBoundary,
   type RepoMeta,
@@ -78,6 +79,15 @@ interface RepoHandle {
   stats?: RepoMeta['stats'];
 }
 
+interface RepoFreshnessSummary {
+  state: string;
+  indexed_at: string | null;
+  loaded_service_commit: string | null;
+  indexed_commit: string | null;
+  current_commit: string | null;
+  detail_flags: string[];
+}
+
 interface RojoTargetSummary {
   dataModelPath: string;
   runtimeArea: 'shared' | 'client' | 'server' | 'other';
@@ -137,17 +147,7 @@ export class LocalBackend {
       lastCommit: indexedRepo.meta.indexed_head,
       stats: indexedRepo.meta.stats,
     };
-
-    const stats = indexedRepo.meta.stats || {};
-    this.contextCache = {
-      projectName: this.repo.name,
-      stats: {
-        fileCount: stats.files || 0,
-        functionCount: stats.nodes || 0,
-        communityCount: stats.communities || 0,
-        processCount: stats.processes || 0,
-      },
-    };
+    this.updateRepoHandleFromIndexedRepo(indexedRepo);
     this.initialized = false;
     return true;
   }
@@ -165,7 +165,56 @@ export class LocalBackend {
   async reload(): Promise<void> {
     const repo = await this.resolveRepo();
     await reloadKuzu(repo.id, repo.kuzuPath);
+    await this.refreshRepoHandle(repo.repoPath);
     this.initialized = true;
+  }
+
+  private updateRepoHandleFromIndexedRepo(indexedRepo: Awaited<ReturnType<typeof loadRepo>>): void {
+    if (!indexedRepo || !this.repo) {
+      return;
+    }
+
+    this.repo = {
+      ...this.repo,
+      repoPath: indexedRepo.repoPath,
+      storagePath: indexedRepo.storagePath,
+      kuzuPath: indexedRepo.kuzuPath,
+      indexedAt: indexedRepo.meta.indexed_at,
+      lastCommit: indexedRepo.meta.indexed_head,
+      stats: indexedRepo.meta.stats,
+    };
+
+    const stats = indexedRepo.meta.stats || {};
+    this.contextCache = {
+      projectName: this.repo.name,
+      stats: {
+        fileCount: stats.files || 0,
+        functionCount: stats.nodes || 0,
+        communityCount: stats.communities || 0,
+        processCount: stats.processes || 0,
+      },
+    };
+  }
+
+  private async refreshRepoHandle(repoRoot: string): Promise<void> {
+    const indexedRepo = await loadRepo(repoRoot);
+    this.updateRepoHandleFromIndexedRepo(indexedRepo);
+  }
+
+  private async getRepoFreshnessSummary(repoRoot: string): Promise<RepoFreshnessSummary | null> {
+    const state = await getRepoState(repoRoot);
+    if (!state) {
+      return null;
+    }
+
+    return {
+      state: state.baseState,
+      indexed_at: state.meta?.indexed_at ?? null,
+      loaded_service_commit: state.liveHealth?.loaded_index.indexed_head ?? state.runtime?.loaded_index.indexed_head ?? null,
+      indexed_commit: state.meta?.indexed_head ?? null,
+      current_commit: state.currentHead || null,
+      detail_flags: [...state.detailFlags],
+    };
   }
 
   // ─── Lazy KuzuDB Init ────────────────────────────────────────────
@@ -1398,6 +1447,7 @@ export class LocalBackend {
   private computeSearchBoost(
     searchQuery: string,
     result: { name: string; filePath: string; type: string; runtimeArea?: string; dataModelPath?: string; moduleSymbol?: string; description?: string },
+    ownersMode = false,
   ): number {
     const normalizedQuery = this.normalizeSearchText(searchQuery);
     const normalizedName = this.normalizeSearchText(result.name);
@@ -1414,9 +1464,19 @@ export class LocalBackend {
     if (fileBase.includes(normalizedQuery)) boost += 1;
     if (dataModelPath && dataModelPath.includes(normalizedQuery)) boost += 1.5;
 
-    if (normalizedQuery.includes('client') && result.runtimeArea === 'client') boost += 0.75;
-    if (normalizedQuery.includes('server') && result.runtimeArea === 'server') boost += 0.75;
-    if (normalizedQuery.includes('shared') && result.runtimeArea === 'shared') boost += 0.75;
+    if (normalizedQuery.includes('client')) {
+      boost += result.runtimeArea === 'client' ? (ownersMode ? 2.5 : 1.25) : result.runtimeArea ? (ownersMode ? -3 : -1.25) : 0;
+    }
+    if (normalizedQuery.includes('server')) {
+      boost += result.runtimeArea === 'server' ? (ownersMode ? 2.5 : 1.25) : result.runtimeArea ? (ownersMode ? -3 : -1.25) : 0;
+    }
+    if (normalizedQuery.includes('shared')) {
+      boost += result.runtimeArea === 'shared' ? (ownersMode ? 2.5 : 1.25) : result.runtimeArea ? (ownersMode ? -3 : -1.25) : 0;
+    }
+    if (normalizedQuery.includes('ui')) {
+      const uiPath = /(^|\/)ui(\/|$)/i.test(result.filePath) || (dataModelPath && /(^| )ui( |$)/i.test(dataModelPath));
+      boost += uiPath ? (ownersMode ? 2 : 1.1) : ownersMode ? -1.5 : -0.4;
+    }
 
     if (result.type === 'Module' && result.description?.startsWith('luau-module:strong')) boost += 1;
     if (result.type === 'Module' && result.description?.startsWith('luau-module:weak')) boost -= 0.5;
@@ -1507,7 +1567,7 @@ export class LocalBackend {
         dataModelPath: rojoTarget?.dataModelPath,
         moduleSymbol,
         description: result.description,
-      }) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty - sameFileAnchorPenalty - weakWrapperPenalty - ownerShapePenalty;
+      }, ownersMode) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty - sameFileAnchorPenalty - weakWrapperPenalty - ownerShapePenalty;
 
       return {
         nodeId: result.nodeId,
@@ -1680,6 +1740,250 @@ export class LocalBackend {
       .sort((a, b) => b.symbolCount - a.symbolCount);
   }
 
+  private humanizeSummaryLabel(label: string): string {
+    return label
+      .replace(/[-_]+/g, ' ')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private isLowSignalSubsystemLabel(label: string): boolean {
+    const normalized = this.humanizeSummaryLabel(label).toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+    if (normalized.includes('→')) {
+      return true;
+    }
+    return new Set([
+      'adapter',
+      'adapters',
+      'component',
+      'components',
+      'runtime',
+      'system',
+      'systems',
+      'tool',
+      'tools',
+      'unit',
+      'scenarios',
+    ]).has(normalized);
+  }
+
+  private isBroadSubsystemLabel(label: string): boolean {
+    const normalized = this.humanizeSummaryLabel(label).toLowerCase();
+    return new Set([
+      'app',
+      'client',
+      'common',
+      'core',
+      'game',
+      'server',
+      'shared',
+      'world',
+    ]).has(normalized);
+  }
+
+  private normalizeSubsystemPhraseSegment(segment: string): string {
+    const humanized = this.humanizeSummaryLabel(segment);
+    return humanized
+      .replace(/\b(Adapters|Components|Modules|Systems|Tools)\b$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private getPathSummaryPhrase(filePath: string): string | null {
+    const normalized = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
+    const segments = normalized.split('/').filter(Boolean);
+    if (segments.length === 0) {
+      return null;
+    }
+
+    const ignoredSegments = new Set([
+      'src',
+      'typed',
+      'app',
+      'lib',
+      'pkg',
+      'internal',
+      'server',
+      'client',
+      'shared',
+      'replicatedstorage',
+      'serverscriptservice',
+      'starterplayerscripts',
+      'starterplayer',
+    ]);
+    const directorySegments = segments.slice(0, -1).filter((segment) => !ignoredSegments.has(segment.toLowerCase()));
+    const tail = directorySegments.slice(-2);
+    if (tail.length === 0) {
+      const basename = path.basename(normalized, path.extname(normalized));
+      return basename ? this.humanizeSummaryLabel(basename) : null;
+    }
+    const normalizedTail = tail
+      .map((segment) => this.normalizeSubsystemPhraseSegment(segment))
+      .filter(Boolean);
+    if (normalizedTail.length === 2 && this.isBroadSubsystemLabel(normalizedTail[0]) && !this.isLowSignalSubsystemLabel(normalizedTail[1])) {
+      return normalizedTail[1];
+    }
+    return normalizedTail.join(' ');
+  }
+
+  private deriveSubsystemLabel(
+    rawLabel: string,
+    filePaths: string[],
+    topOwners: Array<{ filePath?: string; fan_in?: number; fanIn?: number }>,
+    hotAnchors: Array<{ filePath?: string; fan_in?: number; fanIn?: number }>,
+  ): string {
+    const humanizedRaw = this.humanizeSummaryLabel(rawLabel);
+    if (!this.isLowSignalSubsystemLabel(rawLabel) && !this.isBroadSubsystemLabel(rawLabel)) {
+      return humanizedRaw || rawLabel;
+    }
+
+    const candidateScores = new Map<string, number>();
+    const addCandidate = (phrase: string | null | undefined, weight: number) => {
+      if (!phrase) return;
+      const normalized = this.humanizeSummaryLabel(phrase);
+      if (!normalized || this.isLowSignalSubsystemLabel(normalized)) {
+        return;
+      }
+      candidateScores.set(normalized, (candidateScores.get(normalized) || 0) + weight);
+    };
+
+    for (const owner of topOwners) {
+      addCandidate(owner.filePath ? this.getPathSummaryPhrase(owner.filePath) : null, owner.fan_in || owner.fanIn || 4);
+    }
+    for (const anchor of hotAnchors) {
+      addCandidate(anchor.filePath ? this.getPathSummaryPhrase(anchor.filePath) : null, anchor.fan_in || anchor.fanIn || 3);
+    }
+    for (const filePath of filePaths.slice(0, 12)) {
+      addCandidate(this.getPathSummaryPhrase(filePath), 1);
+    }
+
+    const bestCandidate = [...candidateScores.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+    if (bestCandidate && (this.isLowSignalSubsystemLabel(rawLabel) || this.isBroadSubsystemLabel(rawLabel))) {
+      return bestCandidate;
+    }
+    return bestCandidate || humanizedRaw || rawLabel;
+  }
+
+  private buildConciseSubsystemSummary(
+    repo: RepoHandle,
+    result: any,
+  limit: number,
+  ): any {
+    const toTitleWords = (value: string): string => value
+      .split(' ')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    const toDisplayLabel = (entry: any): string | null => {
+      if (!entry) return null;
+      const kind = this.getNodeKind({ id: entry.id, type: entry.type });
+      const rawName = typeof entry.name === 'string' ? entry.name.trim() : '';
+      const filePath = typeof entry.filePath === 'string' ? entry.filePath : '';
+      const fileStem = filePath
+        ? this.humanizeSummaryLabel(path.basename(filePath, path.extname(filePath)))
+        : '';
+      const ownerLike = this.isOwnerLikeSymbolKind(kind);
+      if (kind === 'File' && fileStem) {
+        return toTitleWords(fileStem);
+      }
+      if (ownerLike && rawName) {
+        return toTitleWords(this.humanizeSummaryLabel(rawName));
+      }
+      if (fileStem) {
+        return toTitleWords(fileStem);
+      }
+      if (!rawName) {
+        return null;
+      }
+      if (kind === 'Method' || kind === 'Function' || this.isLowSignalSummarySymbol(rawName)) {
+        return fileStem ? toTitleWords(fileStem) : toTitleWords(this.humanizeSummaryLabel(rawName));
+      }
+      return toTitleWords(this.humanizeSummaryLabel(rawName));
+    };
+
+    const toSubsystemDisplayName = (value: string): string => {
+      const normalized = this.normalizeSubsystemPhraseSegment(value);
+      const display = this.humanizeSummaryLabel(normalized || value);
+      return toTitleWords(display);
+    };
+    const rankableSubsystems = (result.subsystems || []).filter((subsystem: any) => typeof subsystem?.name === 'string' && subsystem.name.trim());
+    const seenSubsystemNames = new Set<string>();
+    const uniqueSubsystems = rankableSubsystems.filter((subsystem: any) => {
+      const key = toSubsystemDisplayName(subsystem.name).toLowerCase();
+      if (seenSubsystemNames.has(key)) {
+        return false;
+      }
+      seenSubsystemNames.add(key);
+      return true;
+    });
+    const preferredSubsystems = uniqueSubsystems.filter((subsystem: any) =>
+      !this.isLowSignalSubsystemLabel(subsystem.name) && !this.isBroadSubsystemLabel(subsystem.name),
+    );
+    const fallbackSubsystems = uniqueSubsystems.filter((subsystem: any) =>
+      this.isLowSignalSubsystemLabel(subsystem.name) || this.isBroadSubsystemLabel(subsystem.name),
+    );
+    const selectedSubsystems = [...preferredSubsystems, ...fallbackSubsystems].slice(0, Math.max(1, limit));
+
+    const subsystems = selectedSubsystems.map((subsystem: any) => ({
+      name: toSubsystemDisplayName(subsystem.name),
+      production_files: subsystem.production_files,
+      test_files: subsystem.test_files,
+      top_owners: (subsystem.top_owners || [])
+        .map((owner: any) => toDisplayLabel(owner))
+        .filter((owner: string | null, index: number, owners: Array<string | null>) => owner && owners.indexOf(owner) === index)
+        .slice(0, 2),
+      top_hotspots: (subsystem.hot_anchors || [])
+        .map((anchor: any) => toDisplayLabel(anchor))
+        .filter((anchor: string | null, index: number, anchors: Array<string | null>) => anchor && anchors.indexOf(anchor) === index)
+        .slice(0, 2),
+      top_lifecycle_chokepoints: (subsystem.hot_processes || []).slice(0, 1).map((process: any) => process.name),
+      pressure: {
+        fan_in: subsystem.fan_in_pressure,
+        fan_out: subsystem.fan_out_pressure,
+      },
+    }));
+
+    const topHotspots = subsystems
+      .flatMap((subsystem: any) => subsystem.top_hotspots.map((anchor: any) => ({ name: anchor, subsystem: subsystem.name })))
+      .filter((anchor: any, index: number, array: any[]) =>
+        array.findIndex((candidate) => candidate.name === anchor.name && candidate.subsystem === anchor.subsystem) === index,
+      )
+      .slice(0, 2);
+
+    const lifecycleChokepoints = subsystems
+      .flatMap((subsystem: any) =>
+        subsystem.top_lifecycle_chokepoints.map((process: any) => ({
+          name: process,
+          subsystem: subsystem.name,
+        })),
+      )
+      .filter((process: any, index: number, array: any[]) =>
+        array.findIndex((candidate) => candidate.name === process.name && candidate.subsystem === process.subsystem) === index,
+      )
+      .slice(0, 2);
+
+    return {
+      repo: result.repo,
+      stats: repo.stats,
+      indexedAt: result.indexedAt,
+      lastCommit: result.lastCommit,
+      freshness: result.freshness ? {
+        state: result.freshness.state,
+        indexed_commit: result.freshness.indexed_commit,
+        current_commit: result.freshness.current_commit,
+      } : null,
+      production_vs_test: result.production_vs_test,
+      top_hotspots: topHotspots,
+      top_lifecycle_chokepoints: lifecycleChokepoints,
+      subsystems,
+    };
+  }
+
   private async getSubsystemSummary(repo: RepoHandle, limit: number): Promise<any[]> {
     const rawLimit = Math.max(limit * 5, 100);
     const clusters = await executeQuery(repo.id, `
@@ -1787,7 +2091,11 @@ export class LocalBackend {
         .slice(0, 3);
       const supplementalOwners = this.rankOwnerCandidates(
         (await this.getOwnerSymbolsForFiles(repo, filePaths))
-          .filter((row: any) => row.filePath && this.isLikelyProductionFile(row.filePath))
+          .filter((row: any) =>
+            row.filePath &&
+            this.isLikelyProductionFile(row.filePath) &&
+            (this.isOwnerLikeSymbolKind(row.type) || row.type === 'File'),
+          )
           .map((row: any) => ({
             id: row.id,
             name: row.name,
@@ -1799,15 +2107,24 @@ export class LocalBackend {
       let topOwners = [...directSubsystemOwners, ...supplementalOwners]
         .filter((row, index, array) => array.findIndex((candidate) => candidate.id === row.id) === index)
         .slice(0, 3);
-      if (topOwners.length > 0 && topOwners.every((row: any) => row.type === 'File') && hotAnchors.length > 0) {
-        topOwners = hotAnchors.slice(0, 3);
+      const structuralHotAnchors = hotAnchors.filter((row: any) => this.isOwnerLikeSymbolKind(row.type) || row.type === 'File');
+      if (topOwners.length === 0 && hotAnchors.length > 0) {
+        topOwners = (structuralHotAnchors.length > 0 ? structuralHotAnchors : hotAnchors).slice(0, 3);
+      } else if (
+        topOwners.length > 0 &&
+        topOwners.every((row: any) => row.type === 'File') &&
+        structuralHotAnchors.some((row: any) => row.type !== 'File')
+      ) {
+        topOwners = structuralHotAnchors.slice(0, 3);
       }
       const productionFiles = filePaths.filter((filePath: string) => this.isLikelyProductionFile(filePath)).length;
       const testFiles = filePaths.filter((filePath: string) => isTestFilePath(filePath)).length;
       const pressure = pressureRows[0] || {};
+      const displayLabel = this.deriveSubsystemLabel(label, filePaths, topOwners, hotAnchors);
 
       return {
-        name: label,
+        name: displayLabel,
+        source_label: label,
         symbol_count: cluster.symbolCount,
         cohesion: cluster.cohesion,
         top_owners: topOwners,
@@ -1830,22 +2147,35 @@ export class LocalBackend {
     );
   }
 
-  private async overview(repo: RepoHandle, params: { showClusters?: boolean; showProcesses?: boolean; showSubsystems?: boolean; limit?: number }): Promise<any> {
+  private async overview(
+    repo: RepoHandle,
+    params: { showClusters?: boolean; showProcesses?: boolean; showSubsystems?: boolean; showSubsystemDetails?: boolean; limit?: number },
+  ): Promise<any> {
     await this.ensureInitialized(repo.id);
+    await this.refreshRepoHandle(repo.repoPath);
+    const activeRepo = (this.repo && this.repo.id === repo.id ? this.repo : repo) || repo;
     
+    const requestedLimit = params.limit;
     const limit = params.limit || 20;
     const result: any = {
-      repo: repo.name,
-      repoPath: repo.repoPath,
-      stats: repo.stats,
-      indexedAt: repo.indexedAt,
-      lastCommit: repo.lastCommit,
+      repo: activeRepo.name,
+      repoPath: activeRepo.repoPath,
+      stats: activeRepo.stats,
+      indexedAt: activeRepo.indexedAt,
+      lastCommit: activeRepo.lastCommit,
       coverage: {
         confidence: 'grounded',
         sections: {} as Record<string, 'grounded' | 'partial'>,
         notes: [] as string[],
       },
     };
+    result.freshness = await this.getRepoFreshnessSummary(activeRepo.repoPath);
+    if (result.freshness?.indexed_at) {
+      result.indexedAt = result.freshness.indexed_at;
+    }
+    if (result.freshness?.indexed_commit) {
+      result.lastCommit = result.freshness.indexed_commit;
+    }
 
     try {
       const fileRows = await executeQuery(repo.id, `
@@ -1951,7 +2281,7 @@ export class LocalBackend {
 
     if (params.showSubsystems === true) {
       try {
-        result.subsystems = await this.getSubsystemSummary(repo, limit);
+        result.subsystems = await this.getSubsystemSummary(activeRepo, limit);
         result.coverage.sections.subsystems = 'grounded';
       } catch (error: any) {
         result.subsystems = null;
@@ -1963,8 +2293,163 @@ export class LocalBackend {
     if (result.coverage.notes.length > 0) {
       result.coverage.confidence = 'partial';
     }
-    
+
+    if (params.showSubsystems === true && params.showSubsystemDetails !== true) {
+      const conciseLimit = Number.isInteger(requestedLimit)
+        ? Math.min(limit, 8)
+        : 5;
+      return this.buildConciseSubsystemSummary(activeRepo, result, conciseLimit);
+    }
+
     return result;
+  }
+
+  private classifyRiskBand(score: number): 'low' | 'medium' | 'high' | 'critical' {
+    if (score >= 3) return 'critical';
+    if (score >= 2) return 'high';
+    if (score >= 1) return 'medium';
+    return 'low';
+  }
+
+  private classifyOverloadSignal(lineCount: number | null, functionCount: number, hotspotShare: number): 'low' | 'medium' | 'high' | 'critical' {
+    if ((lineCount ?? 0) >= 2000 || functionCount >= 50 || hotspotShare >= 0.45) {
+      return 'critical';
+    }
+    if ((lineCount ?? 0) >= 1400 || functionCount >= 35 || hotspotShare >= 0.3) {
+      return 'high';
+    }
+    if ((lineCount ?? 0) >= 700 || functionCount >= 18 || hotspotShare >= 0.18) {
+      return 'medium';
+    }
+    return 'low';
+  }
+
+  private async getShapeSignals(
+    repo: RepoHandle,
+    filePath: string | undefined,
+  ): Promise<{
+    file: {
+      line_count: number | null;
+      function_count: number;
+      largest_members: Array<{ name: string; kind: string; startLine: number; endLine: number; line_count: number }>;
+      average_lines_per_function: number | null;
+      hotspot_share: number | null;
+      concentration: 'low' | 'medium' | 'high' | 'critical';
+      grounded_extraction_seams: Array<{ name: string; symbol_count: number; startLine: number; endLine: number }>;
+    };
+  }> {
+    if (!filePath) {
+      return {
+        file: {
+          line_count: null,
+          function_count: 0,
+          largest_members: [],
+          average_lines_per_function: null,
+          hotspot_share: null,
+          concentration: 'low',
+          grounded_extraction_seams: [],
+        },
+      };
+    }
+
+    const freshness = await this.getRepoFreshnessSummary(repo.repoPath).catch(() => null);
+    const canUseLiveFile = freshness?.state === 'serving_current' || freshness?.state === 'indexed_current';
+
+    const memberRows = await executeParameterized(repo.id, `
+      MATCH (n)
+      WHERE n.filePath = $filePath
+        AND n.startLine IS NOT NULL
+        AND n.endLine IS NOT NULL
+      RETURN n.id AS id, n.name AS name, labels(n)[0] AS kind, n.startLine AS startLine, n.endLine AS endLine
+      ORDER BY n.startLine ASC
+    `, { filePath }).catch(() => []);
+
+    const members = memberRows
+      .map((row: any) => ({
+        id: row.id || row[0],
+        name: row.name || row[1],
+        kind: this.getNodeKind({ id: row.id || row[0], type: row.kind || row[2] }),
+        startLine: row.startLine || row[3] || 0,
+        endLine: row.endLine || row[4] || 0,
+      }))
+      .filter((row: any) => row.startLine > 0 && row.endLine >= row.startLine);
+    const indexedLineCount = members.reduce((max: number, row: any) => Math.max(max, row.endLine), 0) || null;
+
+    let lineCount: number | null = indexedLineCount;
+    if (canUseLiveFile) {
+      try {
+        const content = await fs.readFile(path.resolve(repo.repoPath, filePath), 'utf-8');
+        lineCount = content.split(/\r?\n/).length;
+      } catch {
+        lineCount = indexedLineCount;
+      }
+    }
+
+    const structuredMembers = members
+      .filter((row: any) => ['Function', 'Method', 'Constructor', 'Property'].includes(row.kind))
+    const functionMembers = structuredMembers.filter((row: any) => ['Function', 'Method', 'Constructor'].includes(row.kind));
+    const largestMembers = [...functionMembers]
+      .sort((a: any, b: any) => (b.endLine - b.startLine) - (a.endLine - a.startLine) || a.startLine - b.startLine)
+      .slice(0, 5)
+      .map((row: any) => ({
+        ...row,
+        line_count: row.endLine - row.startLine + 1,
+      }));
+    const hotspotLines = largestMembers.reduce((total: number, row: any) => total + row.line_count, 0);
+    const hotspotShare = lineCount && lineCount > 0 ? Number((hotspotLines / lineCount).toFixed(3)) : null;
+    const averageLinesPerFunction = lineCount && functionMembers.length > 0
+      ? Number((lineCount / functionMembers.length).toFixed(1))
+      : null;
+
+    const seamRows = await executeParameterized(repo.id, `
+      MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
+      WHERE n.filePath = $filePath
+        AND n.startLine IS NOT NULL
+        AND n.endLine IS NOT NULL
+      RETURN c.heuristicLabel AS name, n.id AS id, labels(n)[0] AS kind, n.startLine AS startLine, n.endLine AS endLine
+      ORDER BY n.startLine ASC
+    `, { filePath }).catch(() => []);
+    const seamGroups = new Map<string, { symbol_count: number; startLine: number; endLine: number }>();
+    for (const row of seamRows) {
+      const kind = this.getNodeKind({ id: row.id || row[1], type: row.kind || row[2] });
+      if (!['Function', 'Method', 'Constructor', 'Property'].includes(kind)) {
+        continue;
+      }
+      const rawName = this.humanizeSummaryLabel(row.name || row[0] || '');
+      if (!rawName) {
+        continue;
+      }
+      const startLine = row.startLine || row[3] || 0;
+      const endLine = row.endLine || row[4] || 0;
+      const existing = seamGroups.get(rawName);
+      if (!existing) {
+        seamGroups.set(rawName, { symbol_count: 1, startLine, endLine });
+        continue;
+      }
+      existing.symbol_count += 1;
+      existing.startLine = Math.min(existing.startLine, startLine);
+      existing.endLine = Math.max(existing.endLine, endLine);
+    }
+    const groundedExtractionSeams = [...seamGroups.entries()]
+      .map(([name, seam]) => ({
+        name,
+        symbol_count: seam.symbol_count,
+        startLine: seam.startLine,
+        endLine: seam.endLine,
+      }))
+      .filter((row: any) => row.symbol_count >= 2 && row.name && !this.isLowSignalSubsystemLabel(row.name));
+
+    return {
+      file: {
+        line_count: lineCount,
+        function_count: functionMembers.length,
+        largest_members: largestMembers,
+        average_lines_per_function: averageLinesPerFunction,
+        hotspot_share: hotspotShare,
+        concentration: this.classifyOverloadSignal(lineCount, functionMembers.length, hotspotShare || 0),
+        grounded_extraction_seams: groundedExtractionSeams,
+      },
+    };
   }
 
   /**
@@ -2742,6 +3227,7 @@ export class LocalBackend {
       repo,
       directFileImpacts.map((item: any) => item.filePath),
     );
+    const shapeSignals = await this.getShapeSignals(repo, sym.filePath);
     const directFileImpactNames = [...new Set(directFileImpacts.map((item: any) => path.basename(item.filePath)))].slice(0, 4);
     if (propagationSource === 'none' && directFileImpacts.length > 0) {
       const ownerSymbols = await this.getOwnerSymbolsForFiles(repo, directFileImpacts.map((item: any) => item.filePath));
@@ -2812,18 +3298,6 @@ export class LocalBackend {
 
     const processCount = affectedProcesses.length;
     const moduleCount = affectedModules.length;
-    let risk = 'LOW';
-    if (directCount >= 30 || processCount >= 5 || moduleCount >= 5 || impacted.length >= 200) {
-      risk = 'CRITICAL';
-    } else if (directCount >= 15 || processCount >= 3 || moduleCount >= 3 || impacted.length >= 100) {
-      risk = 'HIGH';
-    } else if (directCount >= 5 || impacted.length >= 30) {
-      risk = 'MEDIUM';
-    }
-    if ((inferredMembers || (impacted.length === 0 && ['Class', 'Module', 'File'].includes(symType))) && impacted.length === 0) {
-      risk = 'UNKNOWN';
-    }
-
     const incomingSignal = this.classifyCoverageSignal(
       directCount > 0 ? 1 : memberRows.length > 0 ? 0.5 : 0.15,
     );
@@ -2857,6 +3331,62 @@ export class LocalBackend {
               ? 'partial'
               : 'grounded';
 
+    const centralityScore = directCount >= 20 || impacted.length >= 35
+      ? 3
+      : directCount >= 8 || impacted.length >= 15
+        ? 2
+        : directCount >= 3 || impacted.length >= 5
+          ? 1
+          : 0;
+    const couplingBreadthScore = moduleCount >= 6 || affectedAreas.length >= 5
+      ? 3
+      : moduleCount >= 3 || affectedAreas.length >= 3
+        ? 2
+        : moduleCount >= 1 || affectedAreas.length >= 1
+          ? 1
+          : 0;
+    const lifecycleComplexityScore = processCount >= 12
+      ? 3
+      : processCount >= 5
+        ? 2
+        : processCount >= 1
+          ? 1
+          : 0;
+    const boundaryAmbiguityScore = overallConfidence === 'grounded'
+      ? 0
+      : overallConfidence === 'expanded'
+        ? 1
+        : overallConfidence === 'partial'
+          ? 2
+          : 3;
+    const internalConcentrationScore = ({
+      low: 0,
+      medium: 1,
+      high: 2,
+      critical: 3,
+    } as const)[shapeSignals.file.concentration];
+
+    let risk = 'LOW';
+    if ((inferredMembers || (impacted.length === 0 && ['Class', 'Module', 'File'].includes(symType))) && impacted.length === 0) {
+      risk = 'UNKNOWN';
+    } else if (centralityScore >= 3 && couplingBreadthScore >= 2) {
+      risk = 'CRITICAL';
+    } else if (
+      centralityScore >= 2 ||
+      (couplingBreadthScore >= 2 && lifecycleComplexityScore >= 2) ||
+      internalConcentrationScore >= 3
+    ) {
+      risk = 'HIGH';
+    } else if (
+      centralityScore >= 1 ||
+      couplingBreadthScore >= 1 ||
+      lifecycleComplexityScore >= 1 ||
+      internalConcentrationScore >= 2 ||
+      boundaryAmbiguityScore >= 2
+    ) {
+      risk = 'MEDIUM';
+    }
+
     return {
       target: {
         id: symId,
@@ -2868,6 +3398,14 @@ export class LocalBackend {
       direction,
       impactedCount: impacted.length,
       risk,
+      risk_dimensions: {
+        centrality: this.classifyRiskBand(centralityScore),
+        coupling_breadth: this.classifyRiskBand(couplingBreadthScore),
+        internal_concentration: this.classifyRiskBand(internalConcentrationScore),
+        lifecycle_complexity: this.classifyRiskBand(lifecycleComplexityScore),
+        boundary_ambiguity: this.classifyRiskBand(boundaryAmbiguityScore),
+      },
+      shape: shapeSignals,
       coverage: {
         confidence: overallConfidence,
         note:
@@ -2897,6 +3435,8 @@ export class LocalBackend {
         direct: directCount,
         processes_affected: processCount,
         modules_affected: moduleCount,
+        overloaded_file_lines: shapeSignals.file.line_count,
+        overloaded_file_functions: shapeSignals.file.function_count,
       },
       affected_processes: affectedProcesses,
       affected_modules: affectedModules,

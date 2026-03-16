@@ -48,6 +48,12 @@ describe('GITNEXUS_TOOLS', () => {
     expect(impactTool.inputSchema.properties.file_path).toBeDefined();
   });
 
+  it('summary tool exposes concise and detailed subsystem controls', () => {
+    const summaryTool = GITNEXUS_TOOLS.find(t => t.name === 'summary')!;
+    expect(summaryTool.inputSchema.properties.showSubsystems).toBeDefined();
+    expect(summaryTool.inputSchema.properties.showSubsystemDetails).toBeDefined();
+  });
+
   it('rename tool requires new_name', () => {
     const renameTool = GITNEXUS_TOOLS.find(t => t.name === 'rename')!;
     expect(renameTool.inputSchema.required).toContain('new_name');
