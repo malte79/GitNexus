@@ -12,6 +12,7 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - No code changes in `plan`.
 - Plan scope must match the approved objective exactly.
 - Plan must be reuse-first. Parallel re-implementation is blocking.
+- Use CodeNexus as the first structural discovery lens when the task touches product code, but do not treat it as a substitute for direct file inspection.
 - Plan must identify the existing seam to reuse before proposing any new abstraction.
 - Plan must not rely on temporary compatibility shims, migration toggles, or deferred cleanup production paths unless explicitly required.
 - Plan must not widen public behavior or contracts beyond the objective.
@@ -26,8 +27,15 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - branch and workspace state:
   - `git rev-parse --abbrev-ref HEAD`
   - `git status --short`
+- when planning code changes in this repo:
+  - `codenexus manage status`
+  - `codenexus summary --subsystems`
+  - `codenexus query "<task concept>" --owners`
+  - `codenexus context <primary-symbol>` for the most likely owning seam when a clear symbol emerges
 - relevant ownership files in scope
 - `planning/master-intent.md` when product direction matters
+
+If CodeNexus is stale or unavailable, say so explicitly and continue with direct file inspection.
 
 ## Required Output Sections (Strict Order)
 
@@ -52,6 +60,13 @@ Use targeted checks first:
   - `npm run test:integration --prefix gitnexus`
 - when confidence across the main package is needed, include:
   - `npm run test:all --prefix gitnexus`
+
+## CodeNexus Planning Expectations
+
+- Use `summary --subsystems` to locate the likely ownership area before proposing edits.
+- Use `query --owners` to identify likely files and symbols to inspect directly.
+- Use `context` to confirm the primary seam before writing the `Reuse Inventory`.
+- If CodeNexus output and direct file reads disagree, the plan must call that out explicitly instead of picking one silently.
 
 ## Open Questions Output Rule
 

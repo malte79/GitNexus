@@ -26,6 +26,12 @@ This includes:
 
 Required workflow surfaces include the repo-owned workflow contracts in `AGENTS.md` and the required workflow skills used for review, validation, prep, and merge.
 
+In this repo, workflow-skill contract changes also include meaningful shifts in how those skills are expected to use CodeNexus itself. For example:
+
+- planning skills that now require CodeNexus-first structural discovery before direct file inspection
+- implementation skills that now require CodeNexus seam and blast-radius checks around edits
+- review and ranking skills that now rely on CodeNexus structural outputs as part of their required procedure
+
 When a CodeNexus-owned contract surface changes, the matching durable update must include a document under `docs/`. Planning-doc-only changes are not sufficient.
 
 Epics must name exact documentation surfaces in their `Docs:` lines. Placeholder instructions such as `update docs`, `TBD`, `later`, or `if needed` are not acceptable.
