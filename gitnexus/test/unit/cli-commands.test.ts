@@ -74,7 +74,7 @@ describe('CLI commands', () => {
         expect.arrayContaining(['--owners', '--limit', '--max-symbols']),
       );
       expect(summary?.options.map((option) => option.long)).toEqual(
-        expect.arrayContaining(['--subsystems', '--limit']),
+        expect.arrayContaining(['--subsystems', '--subsystems-detailed', '--limit']),
       );
     });
 
@@ -96,6 +96,7 @@ describe('CLI commands', () => {
       expect(help).toContain('summary');
       expect(queryHelp).toContain('--owners');
       expect(summaryHelp).toContain('--subsystems');
+      expect(summaryHelp).toContain('--subsystems-detailed');
       expect(help).toContain('manage');
       expect(help).not.toContain('\ninfo');
       expect(help).not.toContain('\ninit');

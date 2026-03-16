@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/mcp/core/kuzu-adapter.js', () => ({
@@ -10,6 +13,21 @@ vi.mock('../../src/mcp/core/kuzu-adapter.js', () => ({
 
 vi.mock('../../src/storage/repo-manager.js', () => ({
   loadRepo: vi.fn().mockResolvedValue(null),
+  getRepoState: vi.fn().mockResolvedValue({
+    baseState: 'serving_current',
+    detailFlags: [],
+    meta: {
+      indexed_at: '2024-06-01T12:00:00Z',
+      indexed_head: 'abc1234567890',
+    },
+    runtime: null,
+    liveHealth: {
+      loaded_index: {
+        indexed_head: 'abc1234567890',
+      },
+    },
+    currentHead: 'abc1234567890',
+  }),
   resolveRepoBoundary: vi.fn().mockReturnValue({ repoRoot: '/tmp/test-project', worktreeRoot: '/tmp/test-project' }),
 }));
 
@@ -41,7 +59,7 @@ vi.mock('../../src/core/ingestion/roblox/rojo-project.js', () => ({
 }));
 
 import { LocalBackend, CYPHER_WRITE_RE, isWriteQuery, VALID_RELATION_TYPES } from '../../src/mcp/local/local-backend.js';
-import { loadRepo, resolveRepoBoundary } from '../../src/storage/repo-manager.js';
+import { getRepoState, loadRepo, resolveRepoBoundary } from '../../src/storage/repo-manager.js';
 import { initKuzu, executeQuery, executeParameterized, isKuzuReady, closeKuzu } from '../../src/mcp/core/kuzu-adapter.js';
 import { searchFTSFromKuzu } from '../../src/core/search/bm25-index.js';
 
@@ -97,6 +115,21 @@ describe('LocalBackend.callTool', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     (loadRepo as any).mockResolvedValue(MOCK_REPO);
+    (getRepoState as any).mockResolvedValue({
+      baseState: 'serving_current',
+      detailFlags: [],
+      meta: {
+        indexed_at: '2024-06-01T12:00:00Z',
+        indexed_head: 'abc1234567890',
+      },
+      runtime: null,
+      liveHealth: {
+        loaded_index: {
+          indexed_head: 'abc1234567890',
+        },
+      },
+      currentHead: 'abc1234567890',
+    });
     backend = new LocalBackend();
     await backend.init();
   });
@@ -230,13 +263,131 @@ describe('LocalBackend.callTool', () => {
     });
 
     const result = await backend.callTool('summary', { showSubsystems: true, limit: 3 });
-    expect(result.subsystems[0].name).toBe('Runtime');
-    expect(result.subsystems[0].top_owners).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'RuntimeManager', type: 'Module' }),
+    expect(result.subsystems[0].name).toBe('Plugin Runtime');
+    expect(result.freshness).toMatchObject({
+      state: 'serving_current',
+      indexed_commit: 'abc1234567890',
+      current_commit: 'abc1234567890',
+    });
+    expect(result.subsystems[0].top_owners).toContain('Runtime Manager');
+    expect(result.subsystems[0].top_hotspots).toContain('Runtime Manager');
+    expect(result.subsystems[0].pressure).toEqual(expect.objectContaining({
+      fan_in: 12,
+      fan_out: 18,
+    }));
+    expect(result.top_hotspots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Runtime Manager', subsystem: 'Plugin Runtime' }),
     ]));
-    expect(result.subsystems[0].hot_anchors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'onTransportClosed', type: 'Method', fan_in: 12 }),
+    expect(result.top_lifecycle_chokepoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'OnTransportClosed → NowSeconds', subsystem: 'Plugin Runtime' }),
     ]));
+    expect(result.top_symbols).toBeUndefined();
+  });
+
+  it('respects concise subsystem limits above four', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: Array.from({ length: 6 }, (_value, index) => ({
+          name: `Subsystem ${index + 1}`,
+          production_files: 1,
+          test_files: 0,
+          top_owners: [{ id: `Module:owner:${index}`, name: `Owner${index + 1}`, type: 'Module' }],
+          hot_anchors: [{ id: `Function:hot:${index}`, name: `hotAnchor${index + 1}`, type: 'Function', filePath: `src/subsystem_${index + 1}.lua` }],
+          hot_processes: [{ name: `Process ${index + 1}` }],
+          fan_in_pressure: index + 1,
+          fan_out_pressure: index + 2,
+        })),
+      },
+      6,
+    );
+
+    expect(concise.subsystems).toHaveLength(6);
+  });
+
+  it('prefers specific subsystem rows over broad catch-all communities in concise mode', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'Game',
+            production_files: 20,
+            test_files: 2,
+            top_owners: [{ id: 'File:game', name: 'Game.lua', type: 'File', filePath: 'src/server/Game/Game.lua' }],
+            hot_anchors: [],
+            hot_processes: [],
+            fan_in_pressure: 200,
+            fan_out_pressure: 120,
+          },
+          {
+            name: 'Procedural',
+            production_files: 10,
+            test_files: 0,
+            top_owners: [{ id: 'Module:procedural', name: 'ManifestCompiler', type: 'Module', filePath: 'src/server/Lighting/Procedural/ManifestCompiler.lua' }],
+            hot_anchors: [],
+            hot_processes: [],
+            fan_in_pressure: 80,
+            fan_out_pressure: 40,
+          },
+          {
+            name: 'Orchestrator',
+            production_files: 8,
+            test_files: 1,
+            top_owners: [{ id: 'Module:orchestrator', name: 'ShowOrchestrator', type: 'Module', filePath: 'src/server/Lighting/Orchestrator/ShowOrchestrator.lua' }],
+            hot_anchors: [],
+            hot_processes: [],
+            fan_in_pressure: 70,
+            fan_out_pressure: 50,
+          },
+          {
+            name: 'LobbyRuntimeModules',
+            production_files: 7,
+            test_files: 0,
+            top_owners: [{ id: 'Module:lobby', name: 'RoundCoordinator', type: 'Module', filePath: 'src/server/Game/LobbyRuntimeModules/RoundCoordinator.lua' }],
+            hot_anchors: [],
+            hot_processes: [],
+            fan_in_pressure: 65,
+            fan_out_pressure: 35,
+          },
+          {
+            name: 'World',
+            production_files: 15,
+            test_files: 5,
+            top_owners: [{ id: 'File:world', name: 'Paths.lua', type: 'File', filePath: 'src/shared/World/Paths.lua' }],
+            hot_anchors: [],
+            hot_processes: [],
+            fan_in_pressure: 150,
+            fan_out_pressure: 100,
+          },
+        ],
+      },
+      3,
+    );
+
+    expect(concise.subsystems.map((subsystem: any) => subsystem.name)).toEqual([
+      'Procedural',
+      'Orchestrator',
+      'Lobby Runtime',
+    ]);
   });
 
   it('ranks Roblox module symbols and includes Roblox-aware summaries', async () => {
@@ -1059,6 +1210,50 @@ describe('LocalBackend.callTool', () => {
       filePath: 'typed/plugin/runtime/runtime_manager.lua',
     });
     expect(result.impactedCount).toBe(1);
+  });
+
+  it('keeps overload line counts index-consistent when freshness is stale', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codenexus-shape-'));
+    try {
+      const relativeFilePath = 'src/demo.lua';
+      const absoluteFilePath = path.join(tempRoot, relativeFilePath);
+      fs.mkdirSync(path.dirname(absoluteFilePath), { recursive: true });
+      fs.writeFileSync(absoluteFilePath, Array.from({ length: 50 }, (_v, i) => `line ${i + 1}`).join('\n'));
+
+      (getRepoState as any).mockResolvedValue({
+        baseState: 'indexed_stale',
+        detailFlags: ['head_changed'],
+        meta: {
+          indexed_at: '2024-06-01T12:00:00Z',
+          indexed_head: 'abc1234567890',
+        },
+        runtime: null,
+        liveHealth: null,
+        currentHead: 'def9876543210',
+      });
+      (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+        if (cypher.includes('MATCH (n)') && cypher.includes('RETURN n.id AS id')) {
+          return [
+            { id: 'Function:src/demo.lua:alpha:1', name: 'alpha', kind: '', startLine: 1, endLine: 8 },
+            { id: 'Function:src/demo.lua:beta:10', name: 'beta', kind: '', startLine: 10, endLine: 20 },
+          ];
+        }
+        if (cypher.includes("MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+          return [];
+        }
+        return [];
+      });
+
+      const shape = await (backend as any).getShapeSignals(
+        { id: 'repo:test', repoPath: tempRoot },
+        relativeFilePath,
+      );
+
+      expect(shape.file.line_count).toBe(20);
+      expect(shape.file.function_count).toBe(2);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it('does not infer impact processes or modules from unrelated same-file symbols', async () => {

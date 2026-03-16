@@ -5,11 +5,13 @@ export async function summaryCommand(options: {
   processes?: boolean;
   limit?: number;
   subsystems?: boolean;
+  subsystemsDetailed?: boolean;
 }): Promise<void> {
   await runRepoToolCommand('summary', {
     showClusters: options.clusters,
     showProcesses: options.processes,
     ...(Number.isInteger(options.limit) ? { limit: options.limit } : {}),
-    ...(options.subsystems ? { showSubsystems: true } : {}),
+    ...((options.subsystems || options.subsystemsDetailed) ? { showSubsystems: true } : {}),
+    ...(options.subsystemsDetailed ? { showSubsystemDetails: true } : {}),
   });
 }

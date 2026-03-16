@@ -137,6 +137,8 @@ In detached background mode:
 2. any applicable detail flags
 3. whether live service information overrode advisory runtime metadata
 
+`codenexus summary --subsystems` reuses that same freshness source for `state`, `indexed_commit`, and `current_commit` so operators do not have to reconcile a second commit identity surface.
+
 When stale serving is reported, status should make the dominant cause legible without changing the underlying state model. Common causes include:
 
 - dirty working tree divergence

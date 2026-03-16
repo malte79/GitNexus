@@ -17,6 +17,7 @@ Use \`codenexus manage ...\` when you need to initialize a repo, refresh the ind
 - \`codenexus rename\`: preview or apply a coordinated rename
 - \`codenexus summary\`: get a compact structural summary
 - \`codenexus summary --subsystems\`: get a subsystem-oriented architectural view
+- \`codenexus summary --subsystems-detailed\`: inspect the full detailed subsystem breakdown
 
 ## Admin Commands
 
@@ -156,11 +157,19 @@ Examples:
 codenexus summary
 codenexus summary --limit 10 --no-processes
 codenexus summary --subsystems --limit 8
+codenexus summary --subsystems-detailed --limit 4
 \`\`\`
 
 Notes:
-- \`summary --subsystems\` stays read-only
+- \`summary --subsystems\` is the concise architectural mode
+- \`summary --subsystems-detailed\` keeps the full detailed subsystem breakdown
 - use it to identify likely owners and hotspots before drilling deeper with \`query\`, \`context\`, and \`impact\`
+
+### \`impact\` output
+
+Look for:
+- \`risk_dimensions\` to separate centrality, coupling breadth, lifecycle complexity, internal concentration, and boundary ambiguity
+- \`shape.file\` to understand overload through line count, function count, largest members, and grounded seams
 `;
 }
 

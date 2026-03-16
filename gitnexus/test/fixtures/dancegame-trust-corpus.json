@@ -1,0 +1,42 @@
+{
+  "name": "dancegame-trust-corpus",
+  "repoPath": "/Users/alex/Projects/roblox/dancegame-agent-2",
+  "reportDate": "2026-03-15",
+  "installWorkflow": [
+    "npm run build --prefix gitnexus",
+    "npm link --prefix gitnexus",
+    "which codenexus",
+    "codenexus --version"
+  ],
+  "baselineCommands": [
+    "cd /Users/alex/Projects/roblox/dancegame-agent-2",
+    "git rev-parse HEAD",
+    "codenexus manage status",
+    "codenexus summary --subsystems | sed -n '1,20p'",
+    "codenexus summary --subsystems | wc -l",
+    "codenexus summary --subsystems | rg '\"heuristicLabel\"|\"label\"' | sed -n '1,80p'",
+    "codenexus query \"lobby runtime\" --owners | sed -n '1,80p'",
+    "codenexus query \"laser service decor motion minigame\" --owners | sed -n '1,80p'",
+    "codenexus query \"client ui shell\" --owners | sed -n '1,80p'",
+    "codenexus impact LaserService --direction upstream | sed -n '1,20p'",
+    "codenexus impact BotService --direction upstream | sed -n '1,20p'",
+    "codenexus impact ShowOrchestrator --direction upstream | sed -n '1,20p'",
+    "codenexus impact ManifestCompiler --direction upstream | sed -n '1,20p'",
+    "wc -l src/server/Game/LaserService.lua src/server/Lighting/Procedural/ManifestCompiler.lua src/server/Lighting/Orchestrator/ShowOrchestrator.lua src/server/Game/LobbyRuntimeModules/MinigameCoordinator.lua src/server/Minigames/Spotlight/SweepController.lua"
+  ],
+  "benchmarkAsserts": [
+    "freshness_consistency",
+    "concise_subsystem_summary",
+    "grounded_subsystem_labels",
+    "client_ui_owner_ranking",
+    "differentiated_risk_dimensions",
+    "overload_shape_visibility"
+  ],
+  "overloadSymbols": [
+    "LaserService",
+    "ManifestCompiler",
+    "ShowOrchestrator",
+    "MinigameCoordinator",
+    "SweepController"
+  ]
+}

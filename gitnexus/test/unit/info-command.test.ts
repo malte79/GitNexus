@@ -13,6 +13,7 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('codenexus context');
     expect(output).toContain('codenexus impact');
     expect(output).toContain('codenexus summary --subsystems');
+    expect(output).toContain('codenexus summary --subsystems-detailed');
     expect(output).toContain('codenexus manage init');
     expect(output).toContain('codenexus manage index');
     expect(output).toContain('codenexus manage status');
@@ -47,6 +48,9 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('ProtocolRouter');
     expect(output).toContain('impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4');
     expect(output).toContain('summary --subsystems');
+    expect(output).toContain('summary --subsystems-detailed');
+    expect(output).toContain('risk_dimensions');
+    expect(output).toContain('shape.file');
   });
 
   it('removes stale GitNexus and transport details from default help', () => {

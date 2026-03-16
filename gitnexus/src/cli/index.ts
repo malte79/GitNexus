@@ -137,7 +137,8 @@ export function buildProgram(): Command {
     .option('--limit <number>', 'Max clusters or processes to return', (value) => Number.parseInt(value, 10))
     .option('--no-clusters', 'Skip module or subsystem summary')
     .option('--no-processes', 'Skip process summary')
-    .option('--subsystems', 'Add a subsystem-oriented architectural summary derived from existing indexed facts')
+    .option('--subsystems', 'Show the concise subsystem-oriented architectural summary')
+    .option('--subsystems-detailed', 'Show the detailed subsystem-oriented architectural summary')
     .action(createLazyAction(() => import('./summary.js'), 'summaryCommand'));
 
   program.addCommand(buildManageCommand());
