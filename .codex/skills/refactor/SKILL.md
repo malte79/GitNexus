@@ -1,32 +1,137 @@
 ---
 name: refactor
-description: Use when the user requests a targeted maximum-heavy refactor strike on one named component while preserving public behavior unless explicitly approved.
+description: Use when the user requests a targeted maximum-heavy refactor strike on one named component (for example the local backend or repo manager) to remove it from the repo's worst-offender tier while preserving public behavior unless explicitly approved.
 ---
 
 # refactor
 
 Use this when the user wants a leaderboard-exit refactor strike on one component, not a lowest-hanging-fruit cleanup pass.
 
+This skill expects the user to point at a specific component, for example:
+- `gitnexus/src/mcp/local/local-backend.ts`
+- `Local Backend`
+- `gitnexus/src/storage/repo-manager.ts`
+
+Its job is:
+
+- target one component only
+- preserve public behavior unless explicitly approved otherwise
+- perform a deep structural rewrite, not cosmetic cleanup
+- remove the component from the repo's worst-offender tier by measurable before/after criteria
+- add guardrails so the same structural problems do not come back
+
 ## Hard Rules
 
 - Refactor one named component only.
-- Preserve public behavior or contracts unless explicitly approved otherwise.
+- Preserve public behavior/contracts unless explicitly approved otherwise.
 - No temporary compatibility shims, fallback paths, or "cleanup later" production branches.
 - Reuse-first, but extraction is mandatory when current seams are insufficient.
-- Delete dead or duplicate paths rather than preserving them behind flags.
+- Delete dead/duplicate paths rather than preserving them behind flags.
+- Generated outputs do not count as cleaned up unless their source surfaces are cleaned up.
 - Do not stop at cosmetic decomposition; stop only at structural ownership improvement.
-- If the component cannot reach materially better quality without expanding scope, stop and report the blocker instead of smuggling in extra work.
+- Do not silently widen public behavior, result shapes, or caller obligations while refactoring.
+- If the component cannot reach leaderboard-exit quality without expanding scope, stop and report the blocker instead of smuggling in extra work.
 
 ## Required Pre-Read
 
 - `AGENTS.md`
-- current branch and worktree state
-- owning runtime, docs, tests, config files for the target component
+- `planning/master-intent.md`
+- current branch/worktree state:
+  - `git rev-parse --abbrev-ref HEAD`
+  - `git status --short`
+- owning runtime/docs/tests/config files for the target component
+- current guard scripts relevant to the component
 - relevant repo-local skills:
-  - `plan`
-  - `implement`
-  - `cr`
-  - `mech`
+  - `$plan`
+  - `$implement`
+  - `$cr`
+  - `$mech` when mechanical validation is needed
+
+Before proposing the refactor shape:
+- run `codenexus manage status`
+- if the target component is stale in the index and structural certainty matters, run `codenexus manage index`
+- use the top-level structural CLI:
+  - `summary --subsystems` for an initial centrality/subsystem overview
+  - `query "<component concept>" --owners` for subsystem discovery
+  - `context <symbol>` for the main anchor symbols
+  - `impact <symbol> --direction upstream` for blast-radius estimation before extraction or moves
+  - `detect-changes` after edits when the strike touches shared seams
+- use CodeNexus first for cross-file dependency tracing, ownership mapping, and blast-radius estimation
+- treat CodeNexus as mandatory for non-trivial refactor strikes; use `rg` only as a supplement
+
+## Required Inputs
+
+The refactor request must identify:
+
+- `Target Component`: exact path/surface, for example `gitnexus/src/mcp/local/local-backend.ts`
+- `Behavior Contract`: what must remain stable
+- `Refactor Objective`: leaderboard-exit, not general cleanup
+
+If the user does not provide all three, infer them conservatively from the named component and state the assumptions.
+
+## Baseline Contract
+
+Before proposing edits, capture the current component state:
+
+- largest files
+- largest functions
+- current ownership seams
+- duplicate/parallel execution paths
+- mutable global state / caches / registries
+- docs/tests/schema/config companion surfaces
+- current hygiene score for the component
+
+The baseline must identify why the component is currently a bad offender, not merely that it is large.
+
+## Refactor Objectives
+
+Produce a target architecture that:
+
+- reduces central file ownership concentration
+- removes parallel production paths
+- consolidates duplicated logic behind shared seams
+- makes engine/MCP/CLI/storage boundaries explicit where relevant
+- tightens lifecycle/state ownership
+- adds or updates guardrails so drift is mechanically caught
+
+## Planning Contract
+
+Use `$plan` discipline, but optimize for structural end-state, not easiest wins.
+
+The plan must include:
+
+- before/after component map
+- exact extraction passes
+- deletion/rehome list
+- invariants that must remain true
+- companion docs/tests/schema/config/version updates
+- post-strike reranking target
+
+The important phrase is this:
+
+"Do not optimize for easiest wins. Optimize for removing the component from the repo's worst-offender category by structural end-state."
+
+## Implementation Contract
+
+Use `$implement` discipline, but with maximum-heavy refactor expectations.
+
+- Execute in bounded passes.
+- Each pass must materially improve ownership shape, not just move code.
+- Run targeted validation after each pass.
+- Add or strengthen static gates when architecture hardening is part of the strike.
+- Prefer deleting or collapsing old paths over preserving them in parallel.
+- If a blocker prevents leaderboard-exit quality, stop and report the blocker explicitly.
+
+## Completion Gate
+
+Do not declare success unless all are true:
+
+- component reranked materially lower than baseline
+- no major duplicate production paths remain
+- main god-module pressure is reduced to acceptable thresholds
+- ownership boundaries are cleaner and easier to explain
+- tests/docs/schema/config/version surfaces are in lockstep
+- new guardrails exist where regression risk was previously structural
 
 ## Reporting Contract
 
