@@ -31,12 +31,18 @@ Run a deterministic read-only orientation pass.
 - `gitnexus/src/core/ingestion/pipeline.ts`
 - `gitnexus/src/core/kuzu/kuzu-adapter.ts`
 
-4. Refresh branch state
+4. Refresh CodeNexus self-index view
+- `codenexus manage status`
+- `codenexus summary --subsystems`
+- `codenexus query "cli mcp storage core" --owners`
+
+5. Refresh branch state
 - `git rev-parse --abbrev-ref HEAD`
 - `git status --short --branch`
 
-5. Report
+6. Report
 - environment checks
+- CodeNexus freshness and top subsystem view
 - current branch and worktree state
 - major architecture risks or shape observations
 - what to focus on next

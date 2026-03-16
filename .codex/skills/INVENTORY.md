@@ -1,26 +1,26 @@
 # Skills Inventory
 
-Generated: 2026-03-13
+Generated: 2026-03-16
 
-1. `codereview` - Intelligent AI code-review gate for branch diffs focused on structural, correctness, reliability, security, and performance risks.
+1. `codereview` - Intelligent AI code-review gate for branch diffs that now uses CodeNexus structural review when available.
    - path: `.codex/skills/codereview/SKILL.md`
 2. `cr` - Compatibility alias for `codereview` (analysis only).
    - path: `.codex/skills/cr/SKILL.md`
 3. `mech` - Mechanical validation gate for tests and build evidence.
    - path: `.codex/skills/mech/SKILL.md`
-4. `plan` - Deterministic, reuse-first implementation planning skill with exact file edits, validation steps, and open questions last. No code changes.
+4. `plan` - Deterministic, reuse-first implementation planning skill with CodeNexus-first structural discovery and exact file edits. No code changes.
    - path: `.codex/skills/plan/SKILL.md`
-5. `implement` - Execute approved implementation plans with reuse-first edits, deterministic validation, and concise pass-by-pass reporting.
+5. `implement` - Execute approved implementation plans with CodeNexus-assisted seam discovery, reuse-first edits, and deterministic validation.
    - path: `.codex/skills/implement/SKILL.md`
 6. `prep` - Commit local changes, then fetch and merge the remote default branch into the current branch.
    - path: `.codex/skills/prep/SKILL.md`
 7. `merge` - Integration and publish workflow to merge a working branch into the default branch.
    - path: `.codex/skills/merge/SKILL.md`
-8. `warmup` - Read-only orientation pass for CodeNexus repo state, core surfaces, and git state.
+8. `warmup` - Read-only orientation pass for CodeNexus repo state, self-index health, core surfaces, and git state.
    - path: `.codex/skills/warmup/SKILL.md`
 9. `refactor` - Targeted maximum-heavy refactor strike on one named component while preserving public behavior unless explicitly approved.
    - path: `.codex/skills/refactor/SKILL.md`
-10. `refactor-rank` - Repo-wide structural component ranking by refactor need, ignoring git churn.
+10. `refactor-rank` - Repo-wide structural component ranking by refactor need using CodeNexus subsystem, impact, and shape signals.
     - path: `.codex/skills/refactor-rank/SKILL.md`
 11. `epic-plan` - Plan an epic collaboratively for the optional filesystem-based epic workflow.
     - path: `.codex/skills/epic-plan/SKILL.md`
