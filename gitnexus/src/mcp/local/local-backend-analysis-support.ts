@@ -10,6 +10,24 @@ export interface LocalBackendAnalysisHost {
   getNodeKind(row: { id?: string; uid?: string; nodeId?: string; type?: string; kind?: string }, fallback?: string): string;
   humanizeSummaryLabel(label: string): string;
   isLowSignalSubsystemLabel(label: string): boolean;
+  context?(
+    repo: RepoHandle,
+    params: { name?: string; uid?: string; file_path?: string; include_content?: boolean },
+  ): Promise<any>;
+  getShapeSignals?(
+    repo: RepoHandle,
+    filePath: string | undefined,
+  ): Promise<{
+    file: {
+      line_count: number | null;
+      function_count: number;
+      largest_members: Array<{ name: string; kind: string; startLine: number; endLine: number; line_count: number }>;
+      average_lines_per_function: number | null;
+      hotspot_share: number | null;
+      concentration: 'low' | 'medium' | 'high' | 'critical';
+      grounded_extraction_seams: Array<{ name: string; symbol_count: number; startLine: number; endLine: number }>;
+    };
+  }>;
   lookupNamedSymbols(
     repo: RepoHandle,
     params: { name: string; file_path?: string; include_content?: boolean },
@@ -533,11 +551,17 @@ export class LocalBackendAnalysisSupport {
       return full;
     };
 
-    const lookupResult = await this.context(repo, {
-      name: params.symbol_name,
-      uid: params.symbol_uid,
-      file_path,
-    });
+    const lookupResult = await (this.host.context
+      ? this.host.context(repo, {
+        name: params.symbol_name,
+        uid: params.symbol_uid,
+        file_path,
+      })
+      : this.context(repo, {
+        name: params.symbol_name,
+        uid: params.symbol_uid,
+        file_path,
+      }));
 
     if (lookupResult.status === 'ambiguous' || lookupResult.error) {
       return lookupResult;
@@ -686,11 +710,17 @@ export class LocalBackendAnalysisSupport {
       return { error: 'Either "target" or "uid" parameter is required.' };
     }
 
-    const lookupResult = await this.context(repo, {
-      name: target,
-      uid,
-      file_path,
-    });
+    const lookupResult = await (this.host.context
+      ? this.host.context(repo, {
+        name: target,
+        uid,
+        file_path,
+      })
+      : this.context(repo, {
+        name: target,
+        uid,
+        file_path,
+      }));
     if (lookupResult.status === 'ambiguous' || lookupResult.error) {
       return lookupResult;
     }
@@ -810,7 +840,9 @@ export class LocalBackendAnalysisSupport {
       repo,
       directFileImpacts.map((item: any) => item.filePath),
     );
-    const shapeSignals = await this.getShapeSignals(repo, sym.filePath);
+    const shapeSignals = await (this.host.getShapeSignals
+      ? this.host.getShapeSignals(repo, sym.filePath)
+      : this.getShapeSignals(repo, sym.filePath));
     const directFileImpactNames = [...new Set(directFileImpacts.map((item: any) => path.basename(item.filePath)))].slice(0, 4);
     if (propagationSource === 'none' && directFileImpacts.length > 0) {
       const ownerSymbols = await this.host.getOwnerSymbolsForFiles(repo, directFileImpacts.map((item: any) => item.filePath));

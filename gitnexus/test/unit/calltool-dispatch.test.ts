@@ -140,6 +140,29 @@ describe('LocalBackend.callTool', () => {
     expect(result).toHaveProperty('processes');
   });
 
+  it('keeps explore alias backward-compatible for symbol lookups without an explicit type', async () => {
+    const contextSpy = vi.spyOn(backend as any, 'context').mockResolvedValue({
+      status: 'found',
+      symbol: {
+        name: 'login',
+        kind: 'Function',
+        filePath: 'src/auth.ts',
+      },
+    });
+
+    const result = await backend.callTool('explore', { name: 'login' });
+    expect(contextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ repoPath: MOCK_REPO.repoPath }),
+      { name: 'login' },
+    );
+    expect(result.status).toBe('found');
+    expect(result.symbol).toMatchObject({
+      name: 'login',
+      kind: 'Function',
+      filePath: 'src/auth.ts',
+    });
+  });
+
   it('dispatches summary without repo routing', async () => {
     (executeQuery as any).mockImplementation(async (repoId: string, cypher: string) => {
       if (cypher.includes('MATCH (f:File)')) {
