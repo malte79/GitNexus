@@ -509,6 +509,164 @@ export class LocalBackend {
     return this.normalizeSearchText(value).replace(/\s+/g, '');
   }
 
+  private getSafeShorthandAliases(value: string): string[] {
+    const normalized = this.normalizeSearchText(value);
+    if (!normalized) {
+      return [];
+    }
+    const parts = normalized.split(' ').filter(Boolean);
+    if (parts.length < 3) {
+      return [];
+    }
+    const aliases = new Set<string>();
+    for (let start = 1; start <= parts.length - 2; start += 1) {
+      const alias = parts.slice(start).join(' ');
+      if (alias.split(' ').length >= 2) {
+        aliases.add(alias);
+      }
+    }
+    return [...aliases];
+  }
+
+  private getSymbolResolutionAliases(name: string, filePath?: string): string[] {
+    const aliases = new Set<string>();
+    const addAliases = (value?: string) => {
+      if (!value) {
+        return;
+      }
+      const normalized = this.normalizeSearchText(value);
+      if (normalized) {
+        aliases.add(normalized);
+      }
+      for (const alias of this.getSafeShorthandAliases(value)) {
+        aliases.add(alias);
+      }
+    };
+
+    addAliases(name);
+    if (filePath) {
+      addAliases(path.basename(filePath, path.extname(filePath)));
+    }
+    return [...aliases];
+  }
+
+  private async fetchSymbolsByIds(repo: RepoHandle, ids: string[], include_content = false): Promise<any[]> {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+    const quotedIds = uniqueIds
+      .map((id) => `'${String(id).replace(/'/g, "''")}'`)
+      .join(', ');
+    const rows = await executeQuery(repo.id, `
+      MATCH (n)
+      WHERE n.id IN [${quotedIds}]
+      RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description${include_content ? ', n.content AS content' : ''}
+    `).catch(() => []);
+    const byId = new Map(rows.map((row: any) => [row.id || row[0], row]));
+    return uniqueIds
+      .map((id) => byId.get(id))
+      .filter(Boolean);
+  }
+
+  private async lookupNamedSymbols(
+    repo: RepoHandle,
+    params: { name: string; file_path?: string; include_content?: boolean },
+  ): Promise<any[]> {
+    const { name, file_path, include_content } = params;
+    const isQualified = name.includes('/') || name.includes(':');
+
+    let whereClause: string;
+    let queryParams: Record<string, any>;
+    if (file_path) {
+      whereClause = `WHERE n.name = $symName AND n.filePath CONTAINS $filePath`;
+      queryParams = { symName: name, filePath: file_path };
+    } else if (isQualified) {
+      whereClause = `WHERE n.id = $symName OR n.name = $symName`;
+      queryParams = { symName: name };
+    } else {
+      whereClause = `WHERE n.name = $symName`;
+      queryParams = { symName: name };
+    }
+
+    const exactMatches = await executeParameterized(repo.id, `
+      MATCH (n) ${whereClause}
+      RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description${include_content ? ', n.content AS content' : ''}
+      LIMIT 10
+    `, queryParams);
+    if (exactMatches.length > 0 || isQualified) {
+      return exactMatches;
+    }
+
+    const normalizedQuery = this.normalizeSearchText(name);
+    const compactQuery = this.getCompactSearchText(name);
+    if (!normalizedQuery || !compactQuery) {
+      return [];
+    }
+
+    const aliasRows = await executeParameterized(repo.id, `
+      MATCH (n:Module)
+      WHERE lower(n.name) CONTAINS $compactQuery OR lower(n.filePath) CONTAINS $compactQuery
+      RETURN n.id AS id, n.name AS name, 'Module' AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description
+      UNION
+      MATCH (n:Class)
+      WHERE lower(n.name) CONTAINS $compactQuery OR lower(n.filePath) CONTAINS $compactQuery
+      RETURN n.id AS id, n.name AS name, 'Class' AS type, n.filePath AS filePath,
+             n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea,
+             n.description AS description
+      UNION
+      MATCH (n:File)
+      WHERE lower(n.name) CONTAINS $compactQuery OR lower(n.filePath) CONTAINS $compactQuery
+      RETURN n.id AS id, n.name AS name, 'File' AS type, n.filePath AS filePath,
+             0 AS startLine, 0 AS endLine, n.runtimeArea AS runtimeArea,
+             '' AS description
+      LIMIT 40
+    `, { compactQuery }).catch(() => []);
+
+    const aliasMatches = aliasRows.filter((row: any) => {
+      const rowFilePath = row.filePath || row[3] || '';
+      if (file_path && typeof rowFilePath === 'string' && !rowFilePath.includes(file_path)) {
+        return false;
+      }
+      const aliases = this.getSymbolResolutionAliases(row.name || row[1], rowFilePath);
+      return aliases.includes(normalizedQuery);
+    });
+    if (aliasMatches.length === 0) {
+      return [];
+    }
+
+    const filePaths = [...new Set(aliasMatches
+      .map((row: any) => row.filePath || row[3])
+      .filter((candidate: string | undefined) => typeof candidate === 'string' && candidate.length > 0))];
+    const ownerSymbols = await this.getOwnerSymbolsForFiles(repo, filePaths);
+    const selectedIds = filePaths.map((resolvedFilePath) => {
+      const rowCandidates = aliasMatches
+        .filter((row: any) => (row.filePath || row[3]) === resolvedFilePath)
+        .map((row: any) => ({
+          id: row.id || row[0],
+          name: row.name || row[1],
+          type: this.getNodeKind({ id: row.id || row[0], type: row.type || row[2] }),
+          filePath: row.filePath || row[3],
+          fanIn: 0,
+        }));
+      const ownerCandidates = ownerSymbols.filter((row: any) => row.filePath === resolvedFilePath);
+      const rankedCandidates = this.rankOwnerCandidates(
+        [...rowCandidates, ...ownerCandidates]
+          .filter((row: any, index: number, array: any[]) => array.findIndex((candidate: any) => candidate.id === row.id) === index)
+          .filter((row: any) => this.isOwnerLikeSymbolKind(row.type) || row.type === 'File'),
+      );
+      return (rankedCandidates[0] || rowCandidates[0])?.id;
+    }).filter(Boolean);
+
+    return this.fetchSymbolsByIds(repo, selectedIds, include_content);
+  }
+
   private isBroadSearchQuery(searchQuery: string): boolean {
     const trimmed = searchQuery.trim();
     if (!trimmed) return false;
@@ -1761,6 +1919,8 @@ export class LocalBackend {
       'adapters',
       'component',
       'components',
+      'log',
+      'logging',
       'runtime',
       'system',
       'systems',
@@ -1911,6 +2071,34 @@ export class LocalBackend {
       const display = this.humanizeSummaryLabel(normalized || value);
       return toTitleWords(display);
     };
+    const signalAlignsToSubsystem = (subsystemName: string, entry: any): boolean => {
+      if (!entry) return false;
+      const rawSubsystemTokens = this.normalizeSearchText(subsystemName)
+        .split(' ')
+        .filter(Boolean);
+      const subsystemTokens = new Set(
+        rawSubsystemTokens.filter((token) => token.length >= 3),
+      );
+      if (subsystemTokens.size === 0) {
+        for (const token of rawSubsystemTokens) {
+          subsystemTokens.add(token);
+        }
+      }
+      if (subsystemTokens.size === 0) {
+        return false;
+      }
+      const candidatePhrases = [
+        typeof entry.name === 'string' ? entry.name : '',
+        typeof entry.filePath === 'string' ? this.getPathSummaryPhrase(entry.filePath) || '' : '',
+        typeof entry.filePath === 'string' ? path.basename(entry.filePath, path.extname(entry.filePath)) : '',
+      ];
+      return candidatePhrases.some((phrase) =>
+        this.normalizeSearchText(phrase)
+          .split(' ')
+          .filter((token) => token.length >= 3 || subsystemTokens.has(token))
+          .some((token) => subsystemTokens.has(token)),
+      );
+    };
     const rankableSubsystems = (result.subsystems || []).filter((subsystem: any) => typeof subsystem?.name === 'string' && subsystem.name.trim());
     const seenSubsystemNames = new Set<string>();
     const uniqueSubsystems = rankableSubsystems.filter((subsystem: any) => {
@@ -1938,6 +2126,7 @@ export class LocalBackend {
         .filter((owner: string | null, index: number, owners: Array<string | null>) => owner && owners.indexOf(owner) === index)
         .slice(0, 2),
       top_hotspots: (subsystem.hot_anchors || [])
+        .filter((anchor: any) => signalAlignsToSubsystem(subsystem.name, anchor))
         .map((anchor: any) => toDisplayLabel(anchor))
         .filter((anchor: string | null, index: number, anchors: Array<string | null>) => anchor && anchors.indexOf(anchor) === index)
         .slice(0, 2),
@@ -2481,26 +2670,11 @@ export class LocalBackend {
         LIMIT 1
       `, { uid });
     } else {
-      const isQualified = name!.includes('/') || name!.includes(':');
-
-      let whereClause: string;
-      let queryParams: Record<string, any>;
-      if (file_path) {
-        whereClause = `WHERE n.name = $symName AND n.filePath CONTAINS $filePath`;
-        queryParams = { symName: name!, filePath: file_path };
-      } else if (isQualified) {
-        whereClause = `WHERE n.id = $symName OR n.name = $symName`;
-        queryParams = { symName: name! };
-      } else {
-        whereClause = `WHERE n.name = $symName`;
-        queryParams = { symName: name! };
-      }
-
-      symbols = await executeParameterized(repo.id, `
-        MATCH (n) ${whereClause}
-        RETURN n.id AS id, n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, n.startLine AS startLine, n.endLine AS endLine, n.runtimeArea AS runtimeArea, n.description AS description${include_content ? ', n.content AS content' : ''}
-        LIMIT 10
-      `, queryParams);
+      symbols = await this.lookupNamedSymbols(repo, {
+        name: name!,
+        file_path,
+        include_content,
+      });
     }
     
     if (symbols.length === 0) {

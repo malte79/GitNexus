@@ -203,6 +203,7 @@ describe('repo-local state', () => {
     execSync('git init -q', { cwd: repo.dbPath });
     execSync('git config user.email "test@example.com"', { cwd: repo.dbPath });
     execSync('git config user.name "Test User"', { cwd: repo.dbPath });
+    const unbornBranch = execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim();
     await fs.writeFile(path.join(repo.dbPath, '.gitignore'), '.codenexus/\n', 'utf-8');
     await fs.writeFile(path.join(repo.dbPath, 'hello.ts'), 'export const hello = 42;\n', 'utf-8');
 
@@ -212,7 +213,7 @@ describe('repo-local state', () => {
     await saveMeta(storagePath, {
       version: 1,
       indexed_head: '',
-      indexed_branch: 'master',
+      indexed_branch: unbornBranch,
       indexed_at: new Date().toISOString(),
       indexed_dirty: true,
       worktree_root: repo.dbPath,

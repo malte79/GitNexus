@@ -55,5 +55,8 @@ assets/
 # Generated files (should not be indexed)
 repomix-output*
 
+# Repo-local runtime/index state
+.codenexus/
+
 # Design docs (local only)
 docs/plans/

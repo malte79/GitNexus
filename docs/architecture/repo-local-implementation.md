@@ -83,7 +83,9 @@ Implementation posture:
 - `summary` is a read-only overview derived from existing graph facts
 - `summary --subsystems` is the concise subsystem-oriented architectural view for daily use, including grounded owners, hotspots, lifecycle chokepoints, and production-versus-test split
 - `summary --subsystems-detailed` keeps the fuller subsystem breakdown behind an explicit alternate flag on the same surface
+- concise subsystem output now prefers specific, structurally grounded subsystem rows and may omit weakly grounded hotspot placement rather than forcing a signal into an unrelated bucket
 - `context` prefers direct relationships, but may supplement container symbols with member-based relationships and explicit partial-coverage reporting
+- `context` and `impact` share the same deterministic obvious-name lookup stack for unambiguous module surfaces: exact symbol, exported module symbol, file basename, then safe shorthand derived from indexed facts
 - `context` may recover file members from grounded file-level definitions when direct file container edges are missing, while keeping partial-confidence reporting explicit
 - `context` now explicitly distinguishes weak Luau returned-table wrappers from richer exported modules so thin wrapper modules do not look like hollow failures
 - when a weak Luau wrapper explicitly delegates into a named local table, `context` may surface that backing table's grounded members as structural context without pretending those members are exported directly by the wrapper

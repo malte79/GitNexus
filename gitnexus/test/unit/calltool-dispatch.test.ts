@@ -390,6 +390,147 @@ describe('LocalBackend.callTool', () => {
     ]);
   });
 
+  it('demotes utility-style subsystem rows from concise mode when stronger subsystem rows exist', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'Log',
+            production_files: 12,
+            test_files: 4,
+            top_owners: [{ id: 'Module:bootstrap', name: 'Bootstrap', type: 'Module', filePath: 'src/server/Game/LobbyRuntimeModules/Bootstrap.lua' }],
+            hot_anchors: [{ id: 'File:paths', name: 'Paths.lua', type: 'File', filePath: 'src/shared/World/Paths.lua' }],
+            hot_processes: [{ name: 'Run → New' }],
+            fan_in_pressure: 300,
+            fan_out_pressure: 290,
+          },
+          {
+            name: 'Spotlight',
+            production_files: 10,
+            test_files: 0,
+            top_owners: [{ id: 'Module:spotlight', name: 'SpotlightSweepController', type: 'Module', filePath: 'src/server/Minigames/Spotlight/SweepController.lua' }],
+            hot_anchors: [{ id: 'Module:spotlight_runtime', name: 'RuntimeSweep', type: 'Module', filePath: 'src/server/Minigames/Spotlight/Runtime/RuntimeSweep.lua' }],
+            hot_processes: [{ name: 'StartSweep → ResolveDanceTarget' }],
+            fan_in_pressure: 250,
+            fan_out_pressure: 240,
+          },
+          {
+            name: 'Lighting',
+            production_files: 9,
+            test_files: 1,
+            top_owners: [{ id: 'Module:lighting', name: 'ShowOrchestrator', type: 'Module', filePath: 'src/server/Lighting/Orchestrator/ShowOrchestrator.lua' }],
+            hot_anchors: [{ id: 'Module:lighting_runtime', name: 'LightingShowServiceRuntime', type: 'Module', filePath: 'src/server/Lighting/LightingShowServiceRuntime.lua' }],
+            hot_processes: [{ name: 'StrobePreset → ReadNumber' }],
+            fan_in_pressure: 240,
+            fan_out_pressure: 180,
+          },
+          {
+            name: 'Bot',
+            production_files: 8,
+            test_files: 0,
+            top_owners: [{ id: 'Module:bot', name: 'BotServiceRuntime', type: 'Module', filePath: 'src/server/Game/BotServiceRuntime.lua' }],
+            hot_anchors: [{ id: 'Module:bot_runtime', name: 'BotDanceController', type: 'Module', filePath: 'src/server/Game/Bot/BotDanceController.lua' }],
+            hot_processes: [{ name: 'Update → Tick' }],
+            fan_in_pressure: 200,
+            fan_out_pressure: 170,
+          },
+        ],
+      },
+      3,
+    );
+
+    expect(concise.subsystems.map((subsystem: any) => subsystem.name)).toEqual([
+      'Spotlight',
+      'Lighting',
+      'Bot',
+    ]);
+  });
+
+  it('omits obviously unrelated hotspot anchors from concise subsystem rows', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'Bot',
+            production_files: 8,
+            test_files: 0,
+            top_owners: [{ id: 'Module:bot', name: 'BotServiceRuntime', type: 'Module', filePath: 'src/server/Game/BotServiceRuntime.lua' }],
+            hot_anchors: [
+              { id: 'File:paths', name: 'Paths.lua', type: 'File', filePath: 'src/shared/World/Paths.lua' },
+              { id: 'Module:bot_runtime', name: 'BotDanceController', type: 'Module', filePath: 'src/server/Game/Bot/BotDanceController.lua' },
+            ],
+            hot_processes: [{ name: 'Update → Tick' }],
+            fan_in_pressure: 200,
+            fan_out_pressure: 170,
+          },
+        ],
+      },
+      1,
+    );
+
+    expect(concise.subsystems[0].top_hotspots).toEqual(['Bot Dance Controller']);
+    expect(concise.top_hotspots).toEqual([
+      { name: 'Bot Dance Controller', subsystem: 'Bot' },
+    ]);
+  });
+
+  it('keeps acronym subsystem hotspots when the path clearly matches the subsystem', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'UI',
+            production_files: 6,
+            test_files: 0,
+            top_owners: [{ id: 'Module:ui', name: 'UIService', type: 'Module', filePath: 'src/client/UI/UIService.lua' }],
+            hot_anchors: [
+              { id: 'Module:winner_pip', name: 'WinnerPip', type: 'Module', filePath: 'src/client/UI/components/WinnerPip.lua' },
+            ],
+            hot_processes: [{ name: 'OpenMenu → Render' }],
+            fan_in_pressure: 120,
+            fan_out_pressure: 80,
+          },
+        ],
+      },
+      1,
+    );
+
+    expect(concise.subsystems[0].top_hotspots).toEqual(['Winner Pip']);
+    expect(concise.top_hotspots).toEqual([
+      { name: 'Winner Pip', subsystem: 'UI' },
+    ]);
+  });
+
   it('ranks Roblox module symbols and includes Roblox-aware summaries', async () => {
     (searchFTSFromKuzu as any).mockImplementation(async (query: string) => {
       if (query === 'SpotlightRegistry') {
@@ -1210,6 +1351,288 @@ describe('LocalBackend.callTool', () => {
       filePath: 'typed/plugin/runtime/runtime_manager.lua',
     });
     expect(result.impactedCount).toBe(1);
+  });
+
+  it('resolves obvious file-basename aliases to the exported module in context', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n)') && cypher.includes('WHERE n.name = $symName')) {
+        return [];
+      }
+      if (cypher.includes('MATCH (n:Module)') && cypher.includes('UNION') && params.compactQuery === 'sweepcontroller') {
+        return [
+          {
+            id: 'Module:src/server/Minigames/Spotlight/SweepController.lua:SpotlightSweepController:9',
+            name: 'SpotlightSweepController',
+            type: 'Module',
+            filePath: 'src/server/Minigames/Spotlight/SweepController.lua',
+            startLine: 9,
+            endLine: 9,
+            runtimeArea: 'server',
+            description: 'luau-module:strong:named-return-table',
+          },
+          {
+            id: 'File:src/server/Minigames/Spotlight/SweepController.lua',
+            name: 'SweepController.lua',
+            type: 'File',
+            filePath: 'src/server/Minigames/Spotlight/SweepController.lua',
+            startLine: 0,
+            endLine: 0,
+            runtimeArea: 'server',
+            description: '',
+          },
+        ];
+      }
+      if (cypher.includes("MATCH (m:Module)")) {
+        return [{ name: 'SpotlightSweepController', description: 'luau-module:strong:named-return-table', startLine: 9 }];
+      }
+      if (cypher.includes("MATCH (src {filePath: $filePath})-[r:CodeRelation {type: 'IMPORTS'}]->(dst)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        return [{ uid: 'Method:src/server/Minigames/Spotlight/SweepController.lua:StartSweep:663', name: 'StartSweep', kind: 'Method', filePath: 'src/server/Minigames/Spotlight/SweepController.lua', startLine: 663, endLine: 872 }];
+      }
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(n {id: $symId})")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (f:File)-[:CodeRelation {type: \'DEFINES\'}]->(n)')) {
+        return [{
+          filePath: 'src/server/Minigames/Spotlight/SweepController.lua',
+          id: 'Module:src/server/Minigames/Spotlight/SweepController.lua:SpotlightSweepController:9',
+          name: 'SpotlightSweepController',
+          type: 'Module',
+          fanIn: 8,
+          startLine: 9,
+        }];
+      }
+      if (cypher.includes("WHERE n.id IN ['Module:src/server/Minigames/Spotlight/SweepController.lua:SpotlightSweepController:9']")) {
+        return [{
+          id: 'Module:src/server/Minigames/Spotlight/SweepController.lua:SpotlightSweepController:9',
+          name: 'SpotlightSweepController',
+          type: 'Module',
+          filePath: 'src/server/Minigames/Spotlight/SweepController.lua',
+          startLine: 9,
+          endLine: 9,
+          runtimeArea: 'server',
+          description: 'luau-module:strong:named-return-table',
+        }];
+      }
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(child)') || cypher.includes('MATCH (child)-[r:CodeRelation]->(target)')) {
+        return [];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', { name: 'SweepController' });
+    expect(result.status).toBe('found');
+    expect(result.symbol).toMatchObject({
+      name: 'SpotlightSweepController',
+      filePath: 'src/server/Minigames/Spotlight/SweepController.lua',
+    });
+  });
+
+  it('reuses basename alias resolution for impact on file-shaped runtime owners', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n)') && cypher.includes('WHERE n.name = $symName')) {
+        return [];
+      }
+      if (cypher.includes('MATCH (n:Module)') && cypher.includes('UNION') && params.compactQuery === 'orchestratorplaybackruntime') {
+        return [
+          {
+            id: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+            startLine: 24,
+            endLine: 24,
+            runtimeArea: 'server',
+            description: 'luau-module:strong:named-return-table',
+          },
+          {
+            id: 'File:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+            name: 'OrchestratorPlaybackRuntime.lua',
+            type: 'File',
+            filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+            startLine: 0,
+            endLine: 0,
+            runtimeArea: 'server',
+            description: '',
+          },
+        ];
+      }
+      if (cypher.includes("MATCH (m:Module)")) {
+        return [{ name: 'PlaybackRuntime', description: 'luau-module:strong:named-return-table', startLine: 24 }];
+      }
+      if (cypher.includes("MATCH (src {filePath: $filePath})-[r:CodeRelation {type: 'IMPORTS'}]->(dst)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'DEFINES'}]->(child)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (caller)-[r:CodeRelation]->(n {id: $symId})")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation]->(target)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (f:File)-[:CodeRelation {type: \'DEFINES\'}]->(n)')) {
+        return [{
+          filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+          id: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+          name: 'PlaybackRuntime',
+          type: 'Module',
+          fanIn: 6,
+          startLine: 24,
+        }];
+      }
+      if (cypher.includes("WHERE n.id IN ['Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24']")) {
+        return [{
+          id: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+          name: 'PlaybackRuntime',
+          type: 'Module',
+          filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+          startLine: 24,
+          endLine: 24,
+          runtimeArea: 'server',
+          description: 'luau-module:strong:named-return-table',
+        }];
+      }
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)')) {
+        return [{
+          sourceId: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+          id: 'Function:src/server/Lighting/Orchestrator/ShowOrchestrator.lua:runPlayback:77',
+          name: 'runPlayback',
+          type: 'Function',
+          filePath: 'src/server/Lighting/Orchestrator/ShowOrchestrator.lua',
+          relType: 'CALLS',
+          confidence: 1,
+        }];
+      }
+      if (cypher.includes("MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+        return [];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('impact', {
+      target: 'OrchestratorPlaybackRuntime',
+      direction: 'upstream',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.target).toMatchObject({
+      name: 'PlaybackRuntime',
+      filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+    });
+  });
+
+  it('keeps alias resolution explicit when shorthand matches multiple files', async () => {
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string, params: Record<string, any>) => {
+      if (cypher.includes('MATCH (n)') && cypher.includes('WHERE n.name = $symName')) {
+        return [];
+      }
+      if (cypher.includes('MATCH (n:Module)') && cypher.includes('UNION') && params.compactQuery === 'playbackruntime') {
+        return [
+          {
+            id: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+            startLine: 24,
+            endLine: 24,
+            runtimeArea: 'server',
+            description: 'luau-module:strong:named-return-table',
+          },
+          {
+            id: 'Module:src/server/Game/LaserRuntime/VisualRuntime.lua:PlaybackRuntime:9',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            filePath: 'src/server/Game/LaserRuntime/VisualRuntime.lua',
+            startLine: 9,
+            endLine: 9,
+            runtimeArea: 'server',
+            description: 'luau-module:strong:named-return-table',
+          },
+        ];
+      }
+      if (cypher.includes("MATCH (m:Module)")) {
+        return [];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (f:File)-[:CodeRelation {type: \'DEFINES\'}]->(n)')) {
+        return [
+          {
+            filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+            id: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            fanIn: 6,
+            startLine: 24,
+          },
+          {
+            filePath: 'src/server/Game/LaserRuntime/VisualRuntime.lua',
+            id: 'Module:src/server/Game/LaserRuntime/VisualRuntime.lua:PlaybackRuntime:9',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            fanIn: 5,
+            startLine: 9,
+          },
+        ];
+      }
+      if (cypher.includes('WHERE n.id IN')) {
+        return [
+          {
+            id: 'Module:src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua:PlaybackRuntime:24',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            filePath: 'src/server/Lighting/Orchestrator/OrchestratorPlaybackRuntime.lua',
+            startLine: 24,
+            endLine: 24,
+            runtimeArea: 'server',
+            description: 'luau-module:strong:named-return-table',
+          },
+          {
+            id: 'Module:src/server/Game/LaserRuntime/VisualRuntime.lua:PlaybackRuntime:9',
+            name: 'PlaybackRuntime',
+            type: 'Module',
+            filePath: 'src/server/Game/LaserRuntime/VisualRuntime.lua',
+            startLine: 9,
+            endLine: 9,
+            runtimeArea: 'server',
+            description: 'luau-module:strong:named-return-table',
+          },
+        ];
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('context', { name: 'PlaybackRuntime' });
+    expect(result.status).toBe('ambiguous');
+    expect(result.candidates).toHaveLength(2);
   });
 
   it('keeps overload line counts index-consistent when freshness is stale', async () => {

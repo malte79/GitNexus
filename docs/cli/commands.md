@@ -81,12 +81,18 @@ Shared contract:
   - symbol name or `--uid`
   - optional `--file-path` when the symbol name is ambiguous
 - `codenexus context` also accepts `--file` as a shorthand alias for `--file-path`
+- `codenexus context` and `codenexus impact` may also resolve an obvious engineer-facing module name through the same general lookup stack when it is unambiguous:
+  - exact symbol name
+  - exported module symbol
+  - file basename
+  - safe shorthand derived from indexed facts
 - `codenexus context` may explain when a Luau module is a weak returned-table wrapper and therefore only exposes grounded delegate members from the returned table
 - `codenexus context` may also surface grounded backing-container members for weak returned-table wrappers when the wrapper explicitly delegates into a named local table; those backing members are structural context, not exported module members
 - `codenexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
 - `codenexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
 - `codenexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
 - `codenexus summary --subsystems` is the concise subsystem view for daily use
+- concise subsystem rows may omit weakly grounded hotspots rather than forcing them into an unrelated subsystem
 - `codenexus summary --subsystems-detailed` is the explicit detailed subsystem breakdown
 - `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
 - the primary Cypher recovery resources are:
