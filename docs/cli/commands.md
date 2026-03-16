@@ -90,9 +90,10 @@ Shared contract:
 - `codenexus context` may also surface grounded backing-container members for weak returned-table wrappers when the wrapper explicitly delegates into a named local table; those backing members are structural context, not exported module members
 - `codenexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
 - `codenexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
+- `codenexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
 - `codenexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
 - `codenexus summary --subsystems` is the concise subsystem view for daily use
-- concise subsystem rows may omit weakly grounded hotspots rather than forcing them into an unrelated subsystem
+- concise subsystem rows prefer architecturally representative owners and hotspots, and may omit weakly grounded or helper-level labels rather than forcing them into an unrelated subsystem
 - `codenexus summary --subsystems-detailed` is the explicit detailed subsystem breakdown
 - `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
 - the primary Cypher recovery resources are:

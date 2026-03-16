@@ -1990,6 +1990,269 @@ export class LocalBackend {
     return normalizedTail.join(' ');
   }
 
+  private getSummaryDisplayLabel(entry: any): string | null {
+    if (!entry) return null;
+    const kind = this.getNodeKind({ id: entry.id, type: entry.type });
+    const rawName = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const filePath = typeof entry.filePath === 'string' ? entry.filePath : '';
+    const fileStem = filePath
+      ? this.humanizeSummaryLabel(path.basename(filePath, path.extname(filePath)))
+      : '';
+    if (kind === 'File' && fileStem) {
+      return fileStem;
+    }
+    if (this.isOwnerLikeSymbolKind(kind) && rawName) {
+      return this.humanizeSummaryLabel(rawName);
+    }
+    if (fileStem) {
+      return fileStem;
+    }
+    if (!rawName) {
+      return null;
+    }
+    if (kind === 'Method' || kind === 'Function' || this.isLowSignalSummarySymbol(rawName)) {
+      return fileStem || this.humanizeSummaryLabel(rawName);
+    }
+    return this.humanizeSummaryLabel(rawName);
+  }
+
+  private getSummarySubsystemTokens(subsystemName: string): Set<string> {
+    const rawSubsystemTokens = this.normalizeSearchText(subsystemName)
+      .split(' ')
+      .filter(Boolean);
+    const subsystemTokens = new Set(
+      rawSubsystemTokens.filter((token) => token.length >= 3),
+    );
+    if (subsystemTokens.size === 0) {
+      for (const token of rawSubsystemTokens) {
+        subsystemTokens.add(token);
+      }
+    }
+    return subsystemTokens;
+  }
+
+  private signalAlignsToSubsystem(subsystemName: string, entry: any): boolean {
+    if (!entry) return false;
+    const subsystemTokens = this.getSummarySubsystemTokens(subsystemName);
+    if (subsystemTokens.size === 0) {
+      return false;
+    }
+    const candidatePhrases = [
+      typeof entry.name === 'string' ? entry.name : '',
+      typeof entry.filePath === 'string' ? this.getPathSummaryPhrase(entry.filePath) || '' : '',
+      typeof entry.filePath === 'string' ? path.basename(entry.filePath, path.extname(entry.filePath)) : '',
+    ];
+    return candidatePhrases.some((phrase) =>
+      this.normalizeSearchText(phrase)
+        .split(' ')
+        .filter((token) => token.length >= 3 || subsystemTokens.has(token))
+        .some((token) => subsystemTokens.has(token)),
+    );
+  }
+
+  private getArchitecturalRepresentativeBoost(label: string, entry: any, role: 'owner' | 'hotspot'): number {
+    const normalizedLabel = this.normalizeSearchText(label);
+    const filePath = typeof entry?.filePath === 'string' ? entry.filePath : '';
+    const architecturalRole = /\b(service|controller|orchestrator|runtime|manager|facade|registry|coordinator|compiler|validator|router|bootstrap)\b/i;
+    let boost = 0;
+    if (architecturalRole.test(label) || architecturalRole.test(filePath)) {
+      boost += role === 'owner' ? 4 : 3;
+    }
+    if (/\b(runtime|service)\b/i.test(normalizedLabel) && role === 'owner') {
+      boost += 1;
+    }
+    if (/\badapter\b/i.test(label)) {
+      boost -= role === 'owner' ? 2.5 : 1.5;
+    }
+    return boost;
+  }
+
+  private getGenericRepresentativePenalty(label: string, role: 'owner' | 'hotspot'): number {
+    const normalized = this.normalizeSearchText(label).trim();
+    if (!normalized) {
+      return 10;
+    }
+    const genericNames = new Set([
+      'base',
+      'common',
+      'config',
+      'constant',
+      'constants',
+      'data',
+      'helper',
+      'helpers',
+      'math',
+      'model',
+      'state',
+      'types',
+      'util',
+      'utils',
+    ]);
+    let penalty = 0;
+    if (genericNames.has(normalized)) {
+      penalty += role === 'owner' ? 5 : 6;
+    }
+    if (normalized.includes('→')) {
+      penalty += 8;
+    }
+    const words = normalized.split(' ').filter(Boolean);
+    if (words.length === 1 && !/(service|controller|orchestrator|runtime|manager|facade|registry|coordinator|compiler|validator|router|bootstrap)$/i.test(normalized)) {
+      penalty += role === 'owner' ? 2 : 2.5;
+    }
+    if (/(adapter|helper|helpers|util|utils)$/i.test(normalized)) {
+      penalty += 1.5;
+    }
+    return penalty;
+  }
+
+  private toRepresentativeOwnerCandidate(entry: any): any | null {
+    if (!entry) {
+      return null;
+    }
+    const kind = this.getNodeKind({ id: entry.id, type: entry.type });
+    if (this.isOwnerLikeSymbolKind(kind)) {
+      return entry;
+    }
+    const filePath = typeof entry.filePath === 'string' ? entry.filePath : '';
+    if (!filePath) {
+      return null;
+    }
+    return {
+      id: generateId('File', filePath),
+      name: path.basename(filePath),
+      type: 'File',
+      filePath,
+      fan_in: entry.fan_in ?? entry.fanIn ?? 0,
+      fanIn: entry.fanIn ?? entry.fan_in ?? 0,
+    };
+  }
+
+  private scoreSummaryRepresentativeEntry(
+    subsystemName: string,
+    entry: any,
+    role: 'owner' | 'hotspot',
+  ): number {
+    const label = this.getSummaryDisplayLabel(entry);
+    if (!label) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    const normalizedLabel = this.normalizeSearchText(label);
+    const kind = this.getNodeKind({ id: entry.id, type: entry.type });
+    const fanIn = entry.fan_in ?? entry.fanIn ?? 0;
+    const aligned = this.signalAlignsToSubsystem(subsystemName, entry);
+    const labelTokens = this.normalizeSearchText(label).split(' ').filter(Boolean);
+    const subsystemTokens = this.getSummarySubsystemTokens(subsystemName);
+    const sharedTokens = labelTokens.filter((token) => subsystemTokens.has(token)).length;
+    const architecturalBoost = this.getArchitecturalRepresentativeBoost(label, entry, role);
+    const genericRepresentativeTokens = new Set([
+      'base',
+      'binding',
+      'bindings',
+      'common',
+      'config',
+      'configs',
+      'constant',
+      'constants',
+      'contract',
+      'contracts',
+      'data',
+      'helper',
+      'helpers',
+      'main',
+      'model',
+      'runtime',
+      'state',
+      'types',
+      'util',
+      'utils',
+    ]);
+    const allGenericTokens = labelTokens.length > 0 &&
+      labelTokens.every((token) => genericRepresentativeTokens.has(token));
+
+    let score = 0;
+    score += this.getOwnerSymbolPriority(kind);
+    score += Math.min(fanIn / 20, role === 'owner' ? 3 : 2);
+    if (aligned) {
+      score += role === 'owner' ? 4 : 3.5;
+    }
+    if (sharedTokens > 0) {
+      score += Math.min(sharedTokens, 2);
+    }
+    if (kind === 'File') {
+      score -= role === 'owner' ? 2.5 : 1.5;
+    }
+    if (role === 'owner' && sharedTokens === 0 && architecturalBoost <= 0) {
+      score -= 3.5;
+    }
+    if (role === 'owner' && sharedTokens === 0 && /\b(main|runtime|contract|contracts|binding|bindings)\b/.test(normalizedLabel)) {
+      score -= 5;
+    }
+    if (sharedTokens === 0 && allGenericTokens) {
+      score -= role === 'owner' ? 5 : 7;
+    }
+    if (role === 'hotspot' && sharedTokens === 0 && /\b(main|runtime|contract|contracts|common|state)\b/.test(normalizedLabel)) {
+      score -= 4;
+    }
+    score += architecturalBoost;
+    score -= this.getGenericRepresentativePenalty(label, role);
+    return score;
+  }
+
+  private selectSummaryRepresentativeLabels(
+    subsystemName: string,
+    entries: any[],
+    role: 'owner' | 'hotspot',
+    limit: number,
+    allowOwnerFallback = true,
+  ): string[] {
+    const scored = [...entries]
+      .map((entry) => ({
+        label: this.getSummaryDisplayLabel(entry),
+        score: this.scoreSummaryRepresentativeEntry(subsystemName, entry, role),
+        fanIn: entry?.fan_in ?? entry?.fanIn ?? 0,
+        aligned: this.signalAlignsToSubsystem(subsystemName, entry),
+        sharedTokens: this.getSummaryDisplayLabel(entry)
+          ? this.normalizeSearchText(this.getSummaryDisplayLabel(entry) as string)
+              .split(' ')
+              .filter(Boolean)
+              .filter((token) => this.getSummarySubsystemTokens(subsystemName).has(token)).length
+          : 0,
+        architecturalBoost: this.getSummaryDisplayLabel(entry)
+          ? this.getArchitecturalRepresentativeBoost(this.getSummaryDisplayLabel(entry) as string, entry, role)
+          : 0,
+      }))
+      .filter((entry) => entry.label)
+      .sort((a, b) => b.score - a.score || b.fanIn - a.fanIn || a.label!.localeCompare(b.label!));
+
+    const preferredThreshold = role === 'owner' ? 6.5 : 0;
+    const preferred = scored.filter((entry) => entry.score >= preferredThreshold);
+    if (role === 'owner' && preferred.length === 0) {
+      if (!allowOwnerFallback) {
+        return [];
+      }
+      const alignedFallback = scored.filter((entry) => entry.aligned || entry.sharedTokens > 0);
+      if (alignedFallback.length > 0) {
+        return alignedFallback
+          .map((entry) => entry.label as string)
+          .filter((label, index, labels) => labels.indexOf(label) === index)
+          .slice(0, limit);
+      }
+      const architecturalFallback = scored.filter((entry) => entry.architecturalBoost > 0 && entry.score > 0);
+      if (architecturalFallback.length > 0) {
+        return architecturalFallback
+          .map((entry) => entry.label as string)
+          .filter((label, index, labels) => labels.indexOf(label) === index)
+          .slice(0, limit);
+      }
+      return [];
+    }
+    const source = preferred.length > 0 ? preferred : scored;
+    return source
+      .map((entry) => entry.label as string)
+      .filter((label, index, labels) => labels.indexOf(label) === index)
+      .slice(0, limit);
+  }
+
   private deriveSubsystemLabel(
     rawLabel: string,
     filePaths: string[],
@@ -2039,65 +2302,10 @@ export class LocalBackend {
       .filter(Boolean)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-    const toDisplayLabel = (entry: any): string | null => {
-      if (!entry) return null;
-      const kind = this.getNodeKind({ id: entry.id, type: entry.type });
-      const rawName = typeof entry.name === 'string' ? entry.name.trim() : '';
-      const filePath = typeof entry.filePath === 'string' ? entry.filePath : '';
-      const fileStem = filePath
-        ? this.humanizeSummaryLabel(path.basename(filePath, path.extname(filePath)))
-        : '';
-      const ownerLike = this.isOwnerLikeSymbolKind(kind);
-      if (kind === 'File' && fileStem) {
-        return toTitleWords(fileStem);
-      }
-      if (ownerLike && rawName) {
-        return toTitleWords(this.humanizeSummaryLabel(rawName));
-      }
-      if (fileStem) {
-        return toTitleWords(fileStem);
-      }
-      if (!rawName) {
-        return null;
-      }
-      if (kind === 'Method' || kind === 'Function' || this.isLowSignalSummarySymbol(rawName)) {
-        return fileStem ? toTitleWords(fileStem) : toTitleWords(this.humanizeSummaryLabel(rawName));
-      }
-      return toTitleWords(this.humanizeSummaryLabel(rawName));
-    };
-
     const toSubsystemDisplayName = (value: string): string => {
       const normalized = this.normalizeSubsystemPhraseSegment(value);
       const display = this.humanizeSummaryLabel(normalized || value);
       return toTitleWords(display);
-    };
-    const signalAlignsToSubsystem = (subsystemName: string, entry: any): boolean => {
-      if (!entry) return false;
-      const rawSubsystemTokens = this.normalizeSearchText(subsystemName)
-        .split(' ')
-        .filter(Boolean);
-      const subsystemTokens = new Set(
-        rawSubsystemTokens.filter((token) => token.length >= 3),
-      );
-      if (subsystemTokens.size === 0) {
-        for (const token of rawSubsystemTokens) {
-          subsystemTokens.add(token);
-        }
-      }
-      if (subsystemTokens.size === 0) {
-        return false;
-      }
-      const candidatePhrases = [
-        typeof entry.name === 'string' ? entry.name : '',
-        typeof entry.filePath === 'string' ? this.getPathSummaryPhrase(entry.filePath) || '' : '',
-        typeof entry.filePath === 'string' ? path.basename(entry.filePath, path.extname(entry.filePath)) : '',
-      ];
-      return candidatePhrases.some((phrase) =>
-        this.normalizeSearchText(phrase)
-          .split(' ')
-          .filter((token) => token.length >= 3 || subsystemTokens.has(token))
-          .some((token) => subsystemTokens.has(token)),
-      );
     };
     const rankableSubsystems = (result.subsystems || []).filter((subsystem: any) => typeof subsystem?.name === 'string' && subsystem.name.trim());
     const seenSubsystemNames = new Set<string>();
@@ -2117,25 +2325,48 @@ export class LocalBackend {
     );
     const selectedSubsystems = [...preferredSubsystems, ...fallbackSubsystems].slice(0, Math.max(1, limit));
 
-    const subsystems = selectedSubsystems.map((subsystem: any) => ({
-      name: toSubsystemDisplayName(subsystem.name),
-      production_files: subsystem.production_files,
-      test_files: subsystem.test_files,
-      top_owners: (subsystem.top_owners || [])
-        .map((owner: any) => toDisplayLabel(owner))
-        .filter((owner: string | null, index: number, owners: Array<string | null>) => owner && owners.indexOf(owner) === index)
-        .slice(0, 2),
-      top_hotspots: (subsystem.hot_anchors || [])
-        .filter((anchor: any) => signalAlignsToSubsystem(subsystem.name, anchor))
-        .map((anchor: any) => toDisplayLabel(anchor))
-        .filter((anchor: string | null, index: number, anchors: Array<string | null>) => anchor && anchors.indexOf(anchor) === index)
-        .slice(0, 2),
-      top_lifecycle_chokepoints: (subsystem.hot_processes || []).slice(0, 1).map((process: any) => process.name),
-      pressure: {
-        fan_in: subsystem.fan_in_pressure,
-        fan_out: subsystem.fan_out_pressure,
-      },
-    }));
+    const subsystems = selectedSubsystems.map((subsystem: any) => {
+      let topOwners = this.selectSummaryRepresentativeLabels(
+        subsystem.name,
+        subsystem.top_owners || [],
+        'owner',
+        2,
+        false,
+      ).map((label) => toTitleWords(label));
+      if (topOwners.length === 0) {
+        topOwners = this.selectSummaryRepresentativeLabels(
+          subsystem.name,
+          (subsystem.hot_anchors || [])
+            .map((entry: any) => this.toRepresentativeOwnerCandidate(entry))
+            .filter(Boolean),
+          'owner',
+          2,
+          true,
+        ).map((label) => toTitleWords(label));
+      }
+      const hotspotCandidates = this.selectSummaryRepresentativeLabels(
+        subsystem.name,
+        (subsystem.hot_anchors || []).filter((anchor: any) => this.signalAlignsToSubsystem(subsystem.name, anchor)),
+        'hotspot',
+        6,
+      ).map((label) => toTitleWords(label));
+      const topHotspots = hotspotCandidates
+        .filter((label) => !topOwners.includes(label))
+        .slice(0, 2);
+
+      return {
+        name: toSubsystemDisplayName(subsystem.name),
+        production_files: subsystem.production_files,
+        test_files: subsystem.test_files,
+        top_owners: topOwners,
+        top_hotspots: topHotspots,
+        top_lifecycle_chokepoints: (subsystem.hot_processes || []).slice(0, 1).map((process: any) => process.name),
+        pressure: {
+          fan_in: subsystem.fan_in_pressure,
+          fan_out: subsystem.fan_out_pressure,
+        },
+      };
+    });
 
     const topHotspots = subsystems
       .flatMap((subsystem: any) => subsystem.top_hotspots.map((anchor: any) => ({ name: anchor, subsystem: subsystem.name })))
@@ -2277,7 +2508,7 @@ export class LocalBackend {
           a.name.localeCompare(b.name),
         )
         .filter((row: any, index: number, array: any[]) => array.findIndex((candidate) => candidate.id === row.id) === index)
-        .slice(0, 3);
+        .slice(0, 8);
       const supplementalOwners = this.rankOwnerCandidates(
         (await this.getOwnerSymbolsForFiles(repo, filePaths))
           .filter((row: any) =>
@@ -2295,16 +2526,16 @@ export class LocalBackend {
       );
       let topOwners = [...directSubsystemOwners, ...supplementalOwners]
         .filter((row, index, array) => array.findIndex((candidate) => candidate.id === row.id) === index)
-        .slice(0, 3);
+        .slice(0, 8);
       const structuralHotAnchors = hotAnchors.filter((row: any) => this.isOwnerLikeSymbolKind(row.type) || row.type === 'File');
       if (topOwners.length === 0 && hotAnchors.length > 0) {
-        topOwners = (structuralHotAnchors.length > 0 ? structuralHotAnchors : hotAnchors).slice(0, 3);
+        topOwners = (structuralHotAnchors.length > 0 ? structuralHotAnchors : hotAnchors).slice(0, 8);
       } else if (
         topOwners.length > 0 &&
         topOwners.every((row: any) => row.type === 'File') &&
         structuralHotAnchors.some((row: any) => row.type !== 'File')
       ) {
-        topOwners = structuralHotAnchors.slice(0, 3);
+        topOwners = structuralHotAnchors.slice(0, 8);
       }
       const productionFiles = filePaths.filter((filePath: string) => this.isLikelyProductionFile(filePath)).length;
       const testFiles = filePaths.filter((filePath: string) => isTestFilePath(filePath)).length;
@@ -2511,6 +2742,10 @@ export class LocalBackend {
       return 'medium';
     }
     return 'low';
+  }
+
+  private classifyStructuralPressureBand(score: number): 'low' | 'medium' | 'high' | 'critical' {
+    return this.classifyRiskBand(score);
   }
 
   private async getShapeSignals(
@@ -3539,6 +3774,56 @@ export class LocalBackend {
       high: 2,
       critical: 3,
     } as const)[shapeSignals.file.concentration];
+    const lineCount = shapeSignals.file.line_count ?? 0;
+    const functionCount = shapeSignals.file.function_count;
+    const extractionSeamCount = shapeSignals.file.grounded_extraction_seams.length;
+    const fileSizeScore = lineCount >= 1500
+      ? 3
+      : lineCount >= 700
+        ? 2
+        : lineCount >= 180
+          ? 1
+          : 0;
+    const functionSurfaceScore = functionCount >= 40
+      ? 3
+      : functionCount >= 18
+        ? 2
+        : functionCount >= 8
+          ? 1
+          : 0;
+    const extractionSeamScore = extractionSeamCount >= 4
+      ? 2
+      : extractionSeamCount >= 1
+        ? 1
+        : 0;
+    const localizedConcentrationScore = lineCount >= 180 || functionCount >= 8
+      ? internalConcentrationScore
+      : Math.max(0, internalConcentrationScore - 2);
+    const refactorPressureTotal = fileSizeScore + functionSurfaceScore + localizedConcentrationScore + extractionSeamScore;
+    const refactorPressureScore = refactorPressureTotal >= 8
+      ? 3
+      : refactorPressureTotal >= 5
+        ? 2
+        : refactorPressureTotal >= 2
+          ? 1
+          : 0;
+    const changeRiskScore = centralityScore >= 3 && couplingBreadthScore >= 2
+      ? 3
+      : (
+        centralityScore >= 2 ||
+        (couplingBreadthScore >= 2 && lifecycleComplexityScore >= 2)
+      )
+        ? 2
+        : (
+          centralityScore >= 1 ||
+          couplingBreadthScore >= 1 ||
+          lifecycleComplexityScore >= 1 ||
+          boundaryAmbiguityScore >= 2
+        )
+          ? 1
+          : 0;
+    const changeRiskLevel = this.classifyRiskBand(changeRiskScore);
+    const refactorPressureLevel = this.classifyStructuralPressureBand(refactorPressureScore);
 
     let risk = 'LOW';
     if ((inferredMembers || (impacted.length === 0 && ['Class', 'Module', 'File'].includes(symType))) && impacted.length === 0) {
@@ -3578,6 +3863,27 @@ export class LocalBackend {
         internal_concentration: this.classifyRiskBand(internalConcentrationScore),
         lifecycle_complexity: this.classifyRiskBand(lifecycleComplexityScore),
         boundary_ambiguity: this.classifyRiskBand(boundaryAmbiguityScore),
+      },
+      risk_split: {
+        summary_line: `change risk: ${changeRiskLevel}; local refactor pressure: ${refactorPressureLevel}`,
+        change_risk: {
+          level: changeRiskLevel,
+          drivers: {
+            centrality: this.classifyRiskBand(centralityScore),
+            coupling_breadth: this.classifyRiskBand(couplingBreadthScore),
+            lifecycle_complexity: this.classifyRiskBand(lifecycleComplexityScore),
+            boundary_ambiguity: this.classifyRiskBand(boundaryAmbiguityScore),
+          },
+        },
+        refactor_pressure: {
+          level: refactorPressureLevel,
+          drivers: {
+            file_size: this.classifyStructuralPressureBand(fileSizeScore),
+            function_surface: this.classifyStructuralPressureBand(functionSurfaceScore),
+            local_concentration: this.classifyStructuralPressureBand(localizedConcentrationScore),
+            extraction_seams: this.classifyStructuralPressureBand(extractionSeamScore),
+          },
+        },
       },
       shape: shapeSignals,
       coverage: {

@@ -224,7 +224,10 @@ describe('LocalBackend.callTool', () => {
   it('includes subsystem hot anchors and grounded owner candidates in subsystem summary mode', async () => {
     (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
       if (cypher.includes('MATCH (f:File)')) {
-        return [{ filePath: 'typed/plugin/runtime/runtime_manager.lua' }];
+        return [
+          { filePath: 'typed/plugin/runtime/runtime_manager.lua' },
+          { filePath: 'typed/plugin/runtime/runtime_transport.lua' },
+        ];
       }
       if (cypher.includes('RETURN n.id AS id') && cypher.includes('COUNT(*) AS fanIn')) {
         return [{ id: 'class:RuntimeManager', name: 'RuntimeManager', type: 'Module', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 8 }];
@@ -241,6 +244,7 @@ describe('LocalBackend.callTool', () => {
       if (cypher.includes('MATCH (src)-[r:CodeRelation]->(n)') && cypher.includes('n.filePath IN')) {
         return [
           { id: 'method:onTransportClosed', name: 'onTransportClosed', type: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 12 },
+          { id: 'method:bridgeTick', name: 'bridgeTick', type: 'Method', filePath: 'typed/plugin/runtime/runtime_transport.lua', fanIn: 10 },
           { id: 'method:step', name: 'step', type: 'Method', filePath: 'typed/plugin/runtime/runtime_manager.lua', fanIn: 9 },
         ];
       }
@@ -248,7 +252,10 @@ describe('LocalBackend.callTool', () => {
     });
     (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
       if (cypher.includes('RETURN DISTINCT n.filePath AS filePath')) {
-        return [{ filePath: 'typed/plugin/runtime/runtime_manager.lua' }];
+        return [
+          { filePath: 'typed/plugin/runtime/runtime_manager.lua' },
+          { filePath: 'typed/plugin/runtime/runtime_transport.lua' },
+        ];
       }
       if (cypher.includes('RETURN p.heuristicLabel AS label')) {
         return [{ label: 'OnTransportClosed → NowSeconds', hits: 4 }];
@@ -270,13 +277,13 @@ describe('LocalBackend.callTool', () => {
       current_commit: 'abc1234567890',
     });
     expect(result.subsystems[0].top_owners).toContain('Runtime Manager');
-    expect(result.subsystems[0].top_hotspots).toContain('Runtime Manager');
+    expect(result.subsystems[0].top_hotspots).toContain('Runtime Transport');
     expect(result.subsystems[0].pressure).toEqual(expect.objectContaining({
       fan_in: 12,
       fan_out: 18,
     }));
     expect(result.top_hotspots).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'Runtime Manager', subsystem: 'Plugin Runtime' }),
+      expect.objectContaining({ name: 'Runtime Transport', subsystem: 'Plugin Runtime' }),
     ]));
     expect(result.top_lifecycle_chokepoints).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'OnTransportClosed → NowSeconds', subsystem: 'Plugin Runtime' }),
@@ -529,6 +536,143 @@ describe('LocalBackend.callTool', () => {
     expect(concise.top_hotspots).toEqual([
       { name: 'Winner Pip', subsystem: 'UI' },
     ]);
+  });
+
+  it('prefers architecturally representative owners and hotspots over helper-like labels', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'Spotlight',
+            production_files: 10,
+            test_files: 0,
+            top_owners: [
+              { id: 'Module:centering', name: 'Centering', type: 'Module', filePath: 'src/server/Minigames/Spotlight/Centering.lua', fan_in: 28 },
+              { id: 'Module:cage', name: 'Cage', type: 'Module', filePath: 'src/server/Minigames/Spotlight/Cage.lua', fan_in: 31 },
+              { id: 'Module:runtime', name: 'SpotlightServiceRuntime', type: 'Module', filePath: 'src/server/Minigames/Spotlight/Runtime/SpotlightServiceRuntime.lua', fan_in: 18 },
+            ],
+            hot_anchors: [
+              { id: 'Module:state', name: 'State', type: 'Module', filePath: 'src/server/Minigames/Spotlight/Runtime/State.lua', fan_in: 52 },
+              { id: 'Module:sweep', name: 'SpotlightSweepController', type: 'Module', filePath: 'src/server/Minigames/Spotlight/SweepController.lua', fan_in: 26 },
+              { id: 'Module:safe_tiles', name: 'SafeTileController', type: 'Module', filePath: 'src/server/Minigames/Spotlight/SafeTileController.lua', fan_in: 22 },
+            ],
+            hot_processes: [{ name: 'Run → GetPivot' }],
+            fan_in_pressure: 220,
+            fan_out_pressure: 190,
+          },
+        ],
+      },
+      1,
+    );
+
+    expect(concise.subsystems[0].top_owners).toEqual([
+      'Spotlight Service Runtime',
+    ]);
+    expect(concise.subsystems[0].top_hotspots).toEqual([
+      'Spotlight Sweep Controller',
+      'Safe Tile Controller',
+    ]);
+    expect(concise.subsystems[0].top_owners).not.toContain('Centering');
+    expect(concise.subsystems[0].top_hotspots).not.toContain('State');
+  });
+
+  it('recovers representative owners from hotspot containers without reusing owner labels as hotspots', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'Spotlight',
+            production_files: 10,
+            test_files: 0,
+            top_owners: [
+              { id: 'File:cage', name: 'Cage.lua', type: 'File', filePath: 'src/server/Minigames/Spotlight/SafeTile/Cage.lua', fan_in: 0 },
+              { id: 'File:centering', name: 'Centering.lua', type: 'File', filePath: 'src/server/Minigames/Spotlight/SafeTile/Centering.lua', fan_in: 0 },
+              { id: 'File:main-runtime', name: 'MainRuntime.lua', type: 'File', filePath: 'src/server/Minigames/Spotlight/MainRuntime.lua', fan_in: 0 },
+              { id: 'File:runtime-contracts', name: 'RuntimeContracts.lua', type: 'File', filePath: 'src/server/Minigames/Spotlight/Runtime/RuntimeContracts.lua', fan_in: 0 },
+            ],
+            hot_anchors: [
+              { id: 'Method:safe-tiles', name: '_update', type: 'Method', filePath: 'src/server/Minigames/Spotlight/SafeTileController.lua', fan_in: 9 },
+              { id: 'Method:runtime-contracts', name: '_transitionPhase', type: 'Method', filePath: 'src/server/Minigames/Spotlight/Runtime/RuntimeContracts.lua', fan_in: 8 },
+              { id: 'Method:sweep', name: 'tick', type: 'Method', filePath: 'src/server/Minigames/Spotlight/SweepController.lua', fan_in: 7 },
+            ],
+            hot_processes: [{ name: 'Run → GetPivot' }],
+            fan_in_pressure: 220,
+            fan_out_pressure: 190,
+          },
+        ],
+      },
+      1,
+    );
+
+    expect(concise.subsystems[0].top_owners).toEqual([
+      'Safe Tile Controller',
+      'Sweep Controller',
+    ]);
+    expect(concise.subsystems[0].top_hotspots).toEqual([]);
+    expect(concise.subsystems[0].top_owners).not.toContain('Main Runtime');
+    expect(concise.subsystems[0].top_owners).not.toContain('Runtime Contracts');
+    expect(concise.subsystems[0].top_hotspots).not.toContain('Runtime Contracts');
+  });
+
+  it('falls back to aligned file-shaped owners when no strong owner clears the preferred threshold', () => {
+    const concise = (backend as any).buildConciseSubsystemSummary(
+      { stats: { files: 1, nodes: 1, edges: 1, communities: 1, processes: 1 } },
+      {
+        repo: 'test-repo',
+        indexedAt: '2024-06-01T12:00:00Z',
+        lastCommit: 'abc1234567890',
+        freshness: {
+          state: 'serving_current',
+          indexed_commit: 'abc1234567890',
+          current_commit: 'abc1234567890',
+        },
+        production_vs_test: { production_files: 10, test_files: 0 },
+        subsystems: [
+          {
+            name: 'UI',
+            production_files: 10,
+            test_files: 0,
+            top_owners: [
+              { id: 'File:audio-cues', name: 'AudioCues.lua', type: 'File', filePath: 'src/client/UI/components/AudioCues.lua', fan_in: 0 },
+              { id: 'File:countdown', name: 'Countdown.lua', type: 'File', filePath: 'src/client/UI/components/Countdown.lua', fan_in: 0 },
+            ],
+            hot_anchors: [
+              { id: 'Method:disconnect', name: 'Disconnect', type: 'Method', filePath: 'src/client/UI/deviceProfile.lua', fan_in: 41 },
+              { id: 'Method:lookAt', name: 'lookAt', type: 'Method', filePath: 'src/server/Game/LaserDomeSolver.lua', fan_in: 15 },
+            ],
+            hot_processes: [{ name: 'BuildUI → BindHistoryActions' }],
+            fan_in_pressure: 198,
+            fan_out_pressure: 139,
+          },
+        ],
+      },
+      1,
+    );
+
+    expect(concise.subsystems[0].top_owners).toEqual([
+      'Device Profile',
+    ]);
+    expect(concise.subsystems[0].top_hotspots).toEqual([]);
   });
 
   it('ranks Roblox module symbols and includes Roblox-aware summaries', async () => {
@@ -1718,6 +1862,83 @@ describe('LocalBackend.callTool', () => {
       processes_affected: 0,
       modules_affected: 0,
     });
+  });
+
+  it('separates change risk from local refactor pressure for central facade seams', async () => {
+    vi.spyOn(backend as any, 'context').mockResolvedValue({
+      symbol: {
+        id: 'Module:src/shared/World/Paths.lua:Paths:4',
+        name: 'Paths',
+        type: 'Module',
+        filePath: 'src/shared/World/Paths.lua',
+        startLine: 4,
+        endLine: 28,
+      },
+    });
+    vi.spyOn(backend as any, 'getContainedMembers').mockResolvedValue({
+      rows: [],
+      inferred: false,
+      source: 'contains',
+    });
+    vi.spyOn(backend as any, 'getShapeSignals').mockResolvedValue({
+      file: {
+        line_count: 28,
+        function_count: 4,
+        largest_members: [],
+        average_lines_per_function: 7,
+        hotspot_share: 0.429,
+        concentration: 'high',
+        grounded_extraction_seams: [],
+      },
+    });
+    vi.spyOn(backend as any, 'getDetailedAffectedAreas').mockResolvedValue([]);
+
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)')) {
+        return Array.from({ length: 35 }, (_value, index) => ({
+          sourceId: 'Module:src/shared/World/Paths.lua:Paths:4',
+          id: `Method:caller:${index}`,
+          name: `caller${index}`,
+          type: 'Method',
+          filePath: `src/server/Game/Caller${index}.lua`,
+          relType: 'CALLS',
+          confidence: 0.9,
+        }));
+      }
+      if (cypher.includes("MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return Array.from({ length: 20 }, (_value, index) => ({
+          name: `Process ${index + 1}`,
+          hits: 1,
+          minStep: 1,
+          stepCount: 5,
+        }));
+      }
+      if (cypher.includes("MATCH (s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+        return Array.from({ length: 5 }, (_value, index) => ({
+          name: `Subsystem ${index + 1}`,
+          hits: 1,
+        }));
+      }
+      return [];
+    });
+
+    const result = await backend.callTool('impact', {
+      target: 'Paths',
+      direction: 'upstream',
+    });
+
+    expect(result.risk).toBe('CRITICAL');
+    expect(result.risk_split).toEqual(expect.objectContaining({
+      summary_line: 'change risk: critical; local refactor pressure: low',
+      change_risk: expect.objectContaining({ level: 'critical' }),
+      refactor_pressure: expect.objectContaining({ level: 'low' }),
+    }));
+    expect(result.risk_split.refactor_pressure.drivers).toEqual(expect.objectContaining({
+      file_size: 'low',
+      function_surface: 'low',
+      local_concentration: 'low',
+      extraction_seams: 'low',
+    }));
   });
 
   it('disconnect clears the bound repo and closes Kuzu', async () => {
