@@ -26,6 +26,8 @@ Its job is:
 - Preserve public behavior/contracts unless explicitly approved otherwise.
 - No temporary compatibility shims, fallback paths, or "cleanup later" production branches.
 - Reuse-first, but extraction is mandatory when current seams are insufficient.
+- A leaderboard-exit refactor must target authority removal, not helper extraction alone.
+- The old center of gravity must stop acting as the practical routing or orchestration sink by closeout; moving helpers without changing authority does not count as success.
 - Delete dead/duplicate paths rather than preserving them behind flags.
 - Generated outputs do not count as cleaned up unless their source surfaces are cleaned up.
 - Do not stop at cosmetic decomposition; stop only at structural ownership improvement.
@@ -76,6 +78,7 @@ Before proposing edits, capture the current component state:
 - largest files
 - largest functions
 - current ownership seams
+- current dominant owner and why it acts as the center of gravity
 - duplicate/parallel execution paths
 - mutable global state / caches / registries
 - docs/tests/schema/config companion surfaces
@@ -101,6 +104,8 @@ Use `$plan` discipline, but optimize for structural end-state, not easiest wins.
 The plan must include:
 
 - before/after component map
+- `Primary Dominant Owner` for the post-strike shape
+- `Concern Transfer Map` that names which concern families move from the old owner to which new owner
 - exact extraction passes
 - deletion/rehome list
 - invariants that must remain true
@@ -116,7 +121,7 @@ The important phrase is this:
 Use `$implement` discipline, but with maximum-heavy refactor expectations.
 
 - Execute in bounded passes.
-- Each pass must materially improve ownership shape, not just move code.
+- Each pass must materially improve ownership shape and rehome real concern families, not just move code.
 - Run targeted validation after each pass.
 - Add or strengthen static gates when architecture hardening is part of the strike.
 - Prefer deleting or collapsing old paths over preserving them in parallel.
@@ -130,6 +135,9 @@ Do not declare success unless all are true:
 - no major duplicate production paths remain
 - main god-module pressure is reduced to acceptable thresholds
 - ownership boundaries are cleaner and easier to explain
+- the post-strike `Primary Dominant Owner` is explicit and defensible
+- the `Concern Transfer Map` is reflected in the code rather than only in moved helper files
+- the old dominant owner no longer acts as the practical routing/orchestration sink
 - tests/docs/schema/config/version surfaces are in lockstep
 - new guardrails exist where regression risk was previously structural
 
@@ -137,10 +145,13 @@ Do not declare success unless all are true:
 
 - `Baseline Score`
 - `Target Score`
+- `Primary Dominant Owner`
+- `Concern Transfer Map`
 - `Before/After Architecture`
 - `Deleted Paths`
 - `Reuse Decisions`
 - `New Abstractions`
+- `Authority Removed`
 - `Guardrails Added`
 - `Validation Evidence`
 - `Residual Risks`

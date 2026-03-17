@@ -31,6 +31,8 @@ In this repo, workflow-skill contract changes also include meaningful shifts in 
 - planning skills that now require CodeNexus-first structural discovery before direct file inspection
 - implementation skills that now require CodeNexus seam and blast-radius checks around edits
 - review and ranking skills that now rely on CodeNexus structural outputs as part of their required procedure
+- new subsystem workflow rules that require an ownership skeleton up front: one thin public seam, focused internal owners, explicit state/lifecycle ownership, docs lockstep, and at least one structural guard
+- leaderboard-exit refactor rules that judge success by authority removal rather than helper extraction alone
 
 When a CodeNexus-owned contract surface changes, the matching durable update must include a document under `docs/`. Planning-doc-only changes are not sufficient.
 

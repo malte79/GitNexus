@@ -12,6 +12,13 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - Implement only approved plan scope.
 - If implementation pressure reveals missing scope, stop and report the gap; do not silently expand the plan during coding.
 - Reuse-first is mandatory.
+- If the approved work introduces a new subsystem or major product surface, do not start edits until the ownership skeleton is explicit.
+- New subsystems or major surfaces must land with:
+  - one thin public seam,
+  - focused internal owners,
+  - explicit state and lifecycle ownership,
+  - docs lockstep,
+  - at least one structural guard that enforces the intended boundary.
 - Use CodeNexus as the first structural lens for subsystem, seam, and blast-radius discovery, but do not replace direct code reading with tool output.
 - Do not introduce temporary compatibility shims, migration toggles, or "cleanup later" production paths unless the approved plan explicitly requires them.
 - Do not widen public behavior or contracts beyond the approved plan.
@@ -39,11 +46,12 @@ If CodeNexus is stale or unavailable, report that before falling back to direct 
 
 1. Lock scope before edits.
 2. Assimilate owning surfaces before edits with CodeNexus plus direct file reads.
-3. Bind to existing seams first.
-4. Implement in bounded passes.
-5. Run targeted validation after meaningful passes.
-6. Use `codenexus detect-changes` after meaningful edits when it will clarify blast radius or validate the touched seam.
-7. Stop if scope creep or unresolved blockers appear.
+3. If the work creates a new subsystem or major surface, confirm the ownership skeleton and the structural guard before writing production code.
+4. Bind to existing seams first.
+5. Implement in bounded passes.
+6. Run targeted validation after meaningful passes.
+7. Use `codenexus detect-changes` after meaningful edits when it will clarify blast radius or validate the touched seam.
+8. Stop if scope creep or unresolved blockers appear.
 
 ## Verification Requirements
 
@@ -73,5 +81,6 @@ Run relevant checks and report outcomes:
   - `query --owners` for subsystem discovery
   - `context` for the primary seam
   - `impact` for shared-code blast radius when relevant
+- When a new subsystem or major surface is created, use `detect-changes` before closeout if it will confirm the intended public seam and owner split.
 - After edits, prefer `detect-changes` as the structural diff summary when it adds signal.
 - If CodeNexus results contradict the implementation reality seen in files or tests, report that mismatch explicitly.

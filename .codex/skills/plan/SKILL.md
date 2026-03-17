@@ -12,6 +12,13 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - No code changes in `plan`.
 - Plan scope must match the approved objective exactly.
 - Plan must be reuse-first. Parallel re-implementation is blocking.
+- If the plan introduces a new subsystem or major product surface, it must define the ownership skeleton before proposing file edits.
+- A new subsystem ownership skeleton must include:
+  - one thin public seam,
+  - focused internal owners by concern family,
+  - explicit state and lifecycle ownership,
+  - docs lockstep,
+  - at least one structural guard that would fail if the subsystem regresses into a monolith, dual path, or ownerless state sink.
 - Use CodeNexus as the first structural discovery lens when the task touches product code, but do not treat it as a substitute for direct file inspection.
 - Plan must identify the existing seam to reuse before proposing any new abstraction.
 - Plan must not rely on temporary compatibility shims, migration toggles, or deferred cleanup production paths unless explicitly required.
@@ -34,6 +41,8 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
   - `codenexus context <primary-symbol>` for the most likely owning seam when a clear symbol emerges
 - relevant ownership files in scope
 - `planning/master-intent.md` when product direction matters
+- when a new subsystem or major surface is proposed:
+  - `.codex/skills/subsystem-hygiene/SKILL.md`
 
 If CodeNexus is stale or unavailable, say so explicitly and continue with direct file inspection.
 
@@ -66,6 +75,7 @@ Use targeted checks first:
 - Use `summary --subsystems` to locate the likely ownership area before proposing edits.
 - Use `query --owners` to identify likely files and symbols to inspect directly.
 - Use `context` to confirm the primary seam before writing the `Reuse Inventory`.
+- If the plan creates a new subsystem or major surface, name the ownership skeleton explicitly in `Boundary Checks` and `Exact Coding Instructions`.
 - If CodeNexus output and direct file reads disagree, the plan must call that out explicitly instead of picking one silently.
 
 ## Open Questions Output Rule
