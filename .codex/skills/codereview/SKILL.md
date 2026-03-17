@@ -18,6 +18,8 @@ Structural and ownership risks:
 - concern mixing,
 - duplicated logic,
 - abstraction bypass where an existing seam should be reused,
+- a newly introduced subsystem or major surface that lacks a thin public seam, focused internal owners, explicit state/lifecycle ownership, docs lockstep, or at least one structural guard,
+- newly introduced god-modules or monoliths that concentrate new authority without a defensible boundary reason,
 - compatibility shims, temporary adapters, or TODO-cleanup follow-ups added to avoid integrating with the canonical path now,
 - public boundary expansion that adds ambiguous dual semantics, flag-driven behavior forks, or optional-path behavior instead of one clear contract,
 - hidden fallback or fail-open behavior,
@@ -91,6 +93,7 @@ Optional extended scope:
 - look for changes that add mutable global or module state, caches, or registries without a clearly changed owner, reset path, and test coverage,
 - look for tests changed in the same diff that were updated only to match output churn rather than to assert the intended invariant,
 - look for docs, schema, config, or version surfaces that should change with the behavior change but were left stale.
+- when the diff claims or implies a refactor, check whether authority was actually removed from the old center of gravity or merely decorated with extra helpers; if the old module still acts as the practical routing/orchestration sink, emit a blocking structural finding.
 
 5. Evaluate unified rubric:
 - structural and ownership checks
