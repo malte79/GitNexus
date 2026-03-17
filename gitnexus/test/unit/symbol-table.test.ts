@@ -30,12 +30,12 @@ describe('SymbolTable', () => {
       expect(table.getStats().globalSymbolCount).toBe(1);
     });
 
-    it('allows duplicate adds for same file and name', () => {
+    it('keeps same-file duplicate resolution deterministic', () => {
       table.add('src/a.ts', 'foo', 'func:foo:1', 'Function');
       table.add('src/a.ts', 'foo', 'func:foo:2', 'Function');
-      // File index overwrites: last wins
+      // Exact lookup preserves the existing same-file contract: last registration wins.
       expect(table.lookupExact('src/a.ts', 'foo')).toBe('func:foo:2');
-      // Global index appends
+      // Fuzzy lookup still returns both definitions.
       expect(table.lookupFuzzy('foo')).toHaveLength(2);
     });
   });
@@ -63,12 +63,12 @@ describe('SymbolTable', () => {
 
   describe('lookupFuzzy', () => {
     it('finds all definitions of a symbol across files', () => {
-      table.add('src/a.ts', 'render', 'func:a:render', 'Function');
-      table.add('src/b.ts', 'render', 'func:b:render', 'Method');
+      table.add('src/b.ts', 'render', 'func:b:render:20', 'Method');
+      table.add('src/a.ts', 'render', 'func:a:render:10', 'Function');
       const results = table.lookupFuzzy('render');
       expect(results).toHaveLength(2);
-      expect(results[0]).toEqual({ nodeId: 'func:a:render', filePath: 'src/a.ts', type: 'Function' });
-      expect(results[1]).toEqual({ nodeId: 'func:b:render', filePath: 'src/b.ts', type: 'Method' });
+      expect(results[0]).toEqual({ nodeId: 'func:a:render:10', filePath: 'src/a.ts', type: 'Function' });
+      expect(results[1]).toEqual({ nodeId: 'func:b:render:20', filePath: 'src/b.ts', type: 'Method' });
     });
 
     it('returns empty array for unknown symbol', () => {

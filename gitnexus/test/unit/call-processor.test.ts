@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processCallsFromExtracted } from '../../src/core/ingestion/call-processor.js';
 import { createSymbolTable } from '../../src/core/ingestion/symbol-table.js';
 import { createImportMap, type ImportMap } from '../../src/core/ingestion/import-processor.js';
+import { BUILT_IN_NAMES } from '../../src/core/ingestion/call-noise.js';
 import { createKnowledgeGraph } from '../../src/core/graph/graph.js';
 import type { ExtractedCall } from '../../src/core/ingestion/workers/parse-worker.js';
 
@@ -87,6 +88,24 @@ describe('processCallsFromExtracted', () => {
     expect(rels[0].confidence).toBe(0.3);
   });
 
+  it('resolves ambiguous symbols deterministically regardless of registration order', async () => {
+    symbolTable.add('src/z.ts', 'render', 'Function:src/z.ts:render:20', 'Function');
+    symbolTable.add('src/a.ts', 'render', 'Function:src/a.ts:render:10', 'Function');
+
+    const calls: ExtractedCall[] = [{
+      filePath: 'src/index.ts',
+      calledName: 'render',
+      sourceId: 'Function:src/index.ts:main',
+    }];
+
+    await processCallsFromExtracted(graph, calls, symbolTable, importMap);
+
+    const rels = graph.relationships.filter(r => r.type === 'CALLS');
+    expect(rels).toHaveLength(1);
+    expect(rels[0].targetId).toBe('Function:src/a.ts:render:10');
+    expect(rels[0].reason).toBe('fuzzy-global');
+  });
+
   it('skips unresolvable calls', async () => {
     const calls: ExtractedCall[] = [{
       filePath: 'src/index.ts',
@@ -116,6 +135,24 @@ describe('processCallsFromExtracted', () => {
     expect(rels).toHaveLength(1);
     // Same-file resolution takes priority
     expect(rels[0].targetId).toBe('Function:src/index.ts:render');
+    expect(rels[0].reason).toBe('same-file');
+  });
+
+  it('keeps same-file duplicate resolution on the most recently registered symbol', async () => {
+    symbolTable.add('src/index.ts', 'render', 'Function:src/index.ts:render:10', 'Function');
+    symbolTable.add('src/index.ts', 'render', 'Function:src/index.ts:render:20', 'Function');
+
+    const calls: ExtractedCall[] = [{
+      filePath: 'src/index.ts',
+      calledName: 'render',
+      sourceId: 'Function:src/index.ts:main',
+    }];
+
+    await processCallsFromExtracted(graph, calls, symbolTable, importMap);
+
+    const rels = graph.relationships.filter(r => r.type === 'CALLS');
+    expect(rels).toHaveLength(1);
+    expect(rels[0].targetId).toBe('Function:src/index.ts:render:20');
     expect(rels[0].reason).toBe('same-file');
   });
 
@@ -149,5 +186,15 @@ describe('processCallsFromExtracted', () => {
   it('handles empty calls array', async () => {
     await processCallsFromExtracted(graph, [], symbolTable, importMap);
     expect(graph.relationshipCount).toBe(0);
+  });
+
+  it('uses one canonical built-in filter for worker and fallback paths', () => {
+    expect(BUILT_IN_NAMES.has('apply')).toBe(true);
+    expect(BUILT_IN_NAMES.has('run')).toBe(true);
+    expect(BUILT_IN_NAMES.has('with')).toBe(true);
+    expect(BUILT_IN_NAMES.has('listOf')).toBe(true);
+    expect(BUILT_IN_NAMES.has('TODO')).toBe(true);
+    expect(BUILT_IN_NAMES.has('array_map')).toBe(true);
+    expect(BUILT_IN_NAMES.has('flatMap')).toBe(true);
   });
 });

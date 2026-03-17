@@ -15,6 +15,8 @@ import { CommunityMembership } from './community-processor.js';
 import { calculateEntryPointScore, isTestFile } from './entry-point-scoring.js';
 
 const isDev = process.env.NODE_ENV === 'development';
+const compareStrings = (a: string, b: string): number => a.localeCompare(b);
+const traceKey = (trace: string[]): string => trace.join('->');
 
 // ============================================================================
 // CONFIGURATION
@@ -129,7 +131,10 @@ export const processProcesses = async (
   
   // Step 4: Limit to max processes (prioritize longer traces)
   const limitedTraces = endpointDeduped
-    .sort((a, b) => b.length - a.length)
+    .sort((a, b) =>
+      b.length - a.length ||
+      compareStrings(traceKey(a), traceKey(b))
+    )
     .slice(0, cfg.maxProcesses);
   
   onProgress?.(`Creating ${limitedTraces.length} process nodes...`, 80);
@@ -148,7 +153,7 @@ export const processProcesses = async (
       const comm = membershipMap.get(nodeId);
       if (comm) communitiesSet.add(comm);
     });
-    const communities = Array.from(communitiesSet);
+    const communities = Array.from(communitiesSet).sort(compareStrings);
     
     // Determine process type
     const processType: 'intra_community' | 'cross_community' = 
@@ -244,7 +249,7 @@ const buildReverseCallsGraph = (graph: KnowledgeGraph): AdjacencyList => {
       adj.get(rel.targetId)!.push(rel.sourceId);
     }
   }
-  
+
   return adj;
 };
 
@@ -307,7 +312,10 @@ const findEntryPoints = (
   }
   
   // Sort by score descending and return top candidates
-  const sorted = entryPointCandidates.sort((a, b) => b.score - a.score);
+  const sorted = entryPointCandidates.sort((a, b) =>
+    b.score - a.score ||
+    compareStrings(a.id, b.id)
+  );
   
   // DEBUG: Log top candidates with new scoring details
   if (sorted.length > 0 && isDev) {
@@ -396,15 +404,18 @@ const deduplicateTraces = (traces: string[][]): string[][] => {
   if (traces.length === 0) return [];
   
   // Sort by length descending
-  const sorted = [...traces].sort((a, b) => b.length - a.length);
+  const sorted = [...traces].sort((a, b) =>
+    b.length - a.length ||
+    compareStrings(traceKey(a), traceKey(b))
+  );
   const unique: string[][] = [];
   
   for (const trace of sorted) {
     // Check if this trace is a subset of any already-added trace
-    const traceKey = trace.join('->');
+    const currentTraceKey = traceKey(trace);
     const isSubset = unique.some(existing => {
-      const existingKey = existing.join('->');
-      return existingKey.includes(traceKey);
+      const existingTraceKey = traceKey(existing);
+      return existingTraceKey.includes(currentTraceKey);
     });
     
     if (!isSubset) {
@@ -428,7 +439,10 @@ const deduplicateByEndpoints = (traces: string[][]): string[][] => {
   
   const byEndpoints = new Map<string, string[]>();
   // Sort longest first so the first seen per key is the longest
-  const sorted = [...traces].sort((a, b) => b.length - a.length);
+  const sorted = [...traces].sort((a, b) =>
+    b.length - a.length ||
+    compareStrings(traceKey(a), traceKey(b))
+  );
   
   for (const trace of sorted) {
     const key = `${trace[0]}::${trace[trace.length - 1]}`;
@@ -437,7 +451,9 @@ const deduplicateByEndpoints = (traces: string[][]): string[][] => {
     }
   }
   
-  return Array.from(byEndpoints.values());
+  return Array.from(byEndpoints.entries())
+    .sort(([keyA], [keyB]) => compareStrings(keyA, keyB))
+    .map(([, trace]) => trace);
 };
 
 // ============================================================================

@@ -490,9 +490,10 @@ export class LocalBackendSummarySupport {
     const fallbackSubsystems = uniqueSubsystems.filter((subsystem: any) =>
       this.isLowSignalSubsystemLabel(subsystem.name) || this.isBroadSubsystemLabel(subsystem.name),
     );
-    const selectedSubsystems = [...preferredSubsystems, ...fallbackSubsystems].slice(0, Math.max(1, limit));
+    const candidateSubsystems = [...preferredSubsystems, ...fallbackSubsystems]
+      .slice(0, Math.max(limit * 4, 20));
 
-    const subsystems = selectedSubsystems.map((subsystem: any) => {
+    const subsystems = candidateSubsystems.map((subsystem: any) => {
       let topOwners = this.selectSummaryRepresentativeLabels(
         subsystem.name,
         subsystem.top_owners || [],
@@ -521,6 +522,19 @@ export class LocalBackendSummarySupport {
         .filter((label) => !topOwners.includes(label))
         .slice(0, 2);
 
+      const representativePenalty = (labels: string[], role: 'owner' | 'hotspot'): number =>
+        labels.reduce((sum, label) => sum + this.getGenericRepresentativePenalty(label, role), 0);
+      const subsystemQualityScore =
+        Math.min((subsystem.production_files || 0) / 10, 4) +
+        Math.min(((subsystem.fan_in_pressure || 0) + (subsystem.fan_out_pressure || 0)) / 200, 6) +
+        (topOwners.length * 4) +
+        (topHotspots.length * 3.5) +
+        ((subsystem.hot_processes || []).length > 0 ? 2.5 : 0) -
+        representativePenalty(topOwners, 'owner') -
+        representativePenalty(topHotspots, 'hotspot') -
+        (this.isLowSignalSubsystemLabel(subsystem.source_label || subsystem.name) ? 2 : 0) -
+        (this.isBroadSubsystemLabel(subsystem.source_label || subsystem.name) ? 5 : 0);
+
       return {
         name: toSubsystemDisplayName(subsystem.name),
         production_files: subsystem.production_files,
@@ -532,8 +546,18 @@ export class LocalBackendSummarySupport {
           fan_in: subsystem.fan_in_pressure,
           fan_out: subsystem.fan_out_pressure,
         },
+        _quality_score: subsystemQualityScore,
+        _symbol_count: subsystem.symbol_count || 0,
       };
-    });
+    })
+      .sort((a: any, b: any) =>
+        b._quality_score - a._quality_score ||
+        b._symbol_count - a._symbol_count ||
+        (b.pressure?.fan_in || 0) - (a.pressure?.fan_in || 0) ||
+        a.name.localeCompare(b.name),
+      )
+      .slice(0, Math.max(1, limit))
+      .map(({ _quality_score: _qs, _symbol_count: _sc, ...subsystem }: any) => subsystem);
 
     const topHotspots = subsystems
       .flatMap((subsystem: any) => subsystem.top_hotspots.map((anchor: any) => ({ name: anchor, subsystem: subsystem.name })))

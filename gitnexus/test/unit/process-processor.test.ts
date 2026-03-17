@@ -358,4 +358,83 @@ describe('processProcesses', () => {
     expect(result.processes.length).toBeLessThanOrEqual(3);
     expect(result.stats.totalProcesses).toBeLessThanOrEqual(3);
   });
+
+  it('produces stable process output regardless of insertion order', async () => {
+    const buildGraph = (reverse: boolean) => {
+      const graph = createKnowledgeGraph();
+
+      const nodes = [
+        { id: 'func:entryA', name: 'entryA', filePath: 'src/entry-a.ts' },
+        { id: 'func:entryB', name: 'entryB', filePath: 'src/entry-b.ts' },
+        { id: 'func:branchA', name: 'branchA', filePath: 'src/branch-a.ts' },
+        { id: 'func:branchB', name: 'branchB', filePath: 'src/branch-b.ts' },
+        { id: 'func:terminal', name: 'terminal', filePath: 'src/terminal.ts' },
+      ];
+
+      const relationships = [
+        { id: 'call:1', sourceId: 'func:entryA', targetId: 'func:branchB' },
+        { id: 'call:2', sourceId: 'func:branchB', targetId: 'func:terminal' },
+        { id: 'call:3', sourceId: 'func:entryB', targetId: 'func:branchA' },
+        { id: 'call:4', sourceId: 'func:branchA', targetId: 'func:terminal' },
+      ];
+
+      const orderedNodes = reverse ? [...nodes].reverse() : nodes;
+      const orderedRelationships = reverse ? [...relationships].reverse() : relationships;
+
+      for (const node of orderedNodes) {
+        graph.addNode({
+          id: node.id,
+          label: 'Function',
+          properties: {
+            name: node.name,
+            filePath: node.filePath,
+            startLine: 1,
+            endLine: 5,
+            isExported: true,
+          },
+        });
+      }
+
+      for (const rel of orderedRelationships) {
+        graph.addRelationship({
+          ...rel,
+          type: 'CALLS',
+          confidence: 0.9,
+          reason: 'import-resolved',
+        });
+      }
+
+      const memberships: CommunityMembership[] = [
+        { nodeId: 'func:branchA', communityId: 'community:beta' },
+        { nodeId: 'func:terminal', communityId: 'community:omega' },
+        { nodeId: 'func:entryB', communityId: 'community:alpha' },
+        { nodeId: 'func:branchB', communityId: 'community:beta' },
+        { nodeId: 'func:entryA', communityId: 'community:alpha' },
+      ];
+
+      return { graph, memberships: reverse ? [...memberships].reverse() : memberships };
+    };
+
+    const normalize = async (reverse: boolean) => {
+      const { graph, memberships } = buildGraph(reverse);
+      const result = await processProcesses(graph, memberships);
+
+      return {
+        processes: result.processes.map((process) => ({
+          heuristicLabel: process.heuristicLabel,
+          processType: process.processType,
+          communities: process.communities,
+          trace: process.trace,
+        })),
+        steps: result.steps.map((step) => ({
+          nodeId: step.nodeId,
+          step: step.step,
+          processLabel: result.processes.find((process) => process.id === step.processId)?.heuristicLabel,
+        })),
+        stats: result.stats,
+      };
+    };
+
+    expect(await normalize(false)).toEqual(await normalize(true));
+  });
 });
