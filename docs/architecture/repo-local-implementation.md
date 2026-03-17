@@ -14,7 +14,10 @@ This document maps the locked CodeNexus runtime contract onto the current repo-l
 | repo-local runtime/repo support | [local-backend-runtime-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-runtime-support.ts) | nearest-repo resolution, bound repo handle refresh, cached repo context, and repo-freshness summary for the local backend stack |
 | repo-local graph utility support | [local-backend-graph-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-graph-support.ts) | owner recovery, contained-member recovery, affected-area shaping, and shared graph utility classification for local backend tools |
 | repo-local search/query support | [local-backend-search-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-search-support.ts) | BM25-backed query retrieval, alias resolution, broad-query weighting, Rojo enrichment, and owner-oriented ranking |
-| repo-local summary support | [local-backend-summary-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-support.ts) | concise subsystem summary shaping, overview assembly, cluster aggregation, and direct cluster/process detail queries |
+| repo-local Cypher support | [local-backend-cypher-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-cypher-support.ts) | read-only Cypher execution, write-block enforcement, and operator-facing Cypher recovery guidance |
+| repo-local summary presentation support | [local-backend-summary-presentation-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-presentation-support.ts) | concise subsystem row shaping, representative scoring, label normalization, and low-signal/broad-bucket penalties |
+| repo-local summary query support | [local-backend-summary-query-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-query-support.ts) | subsystem graph queries, cluster/process aggregation, and direct cluster/process detail queries |
+| repo-local overview support | [local-backend-overview-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-overview-support.ts) | summary/overview assembly, top-symbol shaping, and concise subsystem-mode closeout |
 | repo-local analysis support | [local-backend-analysis-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-analysis-support.ts) | shared `context`, `impact`, `detect_changes`, `rename`, and overload-shape analysis |
 | repo-local shared backend primitives | [local-backend-common.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-common.ts), [local-backend-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-types.ts) | shared repo-local constants, logging helpers, and internal MCP/backend types |
 | agent-facing tool schema | [tools.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/tools.ts) | single-repo tool contracts with no repo routing |
@@ -85,14 +88,17 @@ The bound MCP tool surface is now:
 
 Implementation posture:
 
-- `LocalBackend` is now a thin repo-local coordinator rather than the prior god-module. It owns tool dispatch, direct read-only Cypher handling, and a small number of compatibility-facing helper methods that tests and resources call intentionally.
-- The repo-local backend stack is split into five internal seams:
+- `LocalBackend` is now a thin repo-local coordinator rather than the prior god-module. It owns tool dispatch, repo binding, and a small number of compatibility-facing helper methods that tests and resources call intentionally.
+- The repo-local backend stack is split into seven internal owners:
   - repo-bound runtime and freshness handling live in [local-backend-runtime-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-runtime-support.ts)
   - shared graph utility and owner/member recovery live in [local-backend-graph-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-graph-support.ts)
   - search/query retrieval and ranking live in [local-backend-search-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-search-support.ts)
-  - subsystem/overview assembly lives in [local-backend-summary-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-support.ts)
+  - read-only Cypher execution and recovery guidance live in [local-backend-cypher-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-cypher-support.ts)
+  - concise subsystem presentation and representative scoring live in [local-backend-summary-presentation-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-presentation-support.ts)
+  - subsystem graph queries, cluster aggregation, and direct cluster/process detail queries live in [local-backend-summary-query-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-summary-query-support.ts)
+  - overview assembly and top-symbol shaping live in [local-backend-overview-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-overview-support.ts)
   - context/impact/change-analysis and overload-shape logic live in [local-backend-analysis-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-analysis-support.ts)
-- Support modules bind to each other directly through explicit host interfaces where needed; the coordinator is no longer a broad internal facade for every search and summary helper.
+- Support modules bind to each other directly through explicit host interfaces where needed; the coordinator is no longer a broad internal facade or the practical routing sink for summary, detail-query, and Cypher authority.
 - shared repo-local backend constants and internal types live in [local-backend-common.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-common.ts) and [local-backend-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-types.ts); they do not introduce a second public MCP or CLI contract
 - `query` remains BM25-plus-graph retrieval with deterministic ranking adjustments
 - `summary` is a read-only overview derived from existing graph facts

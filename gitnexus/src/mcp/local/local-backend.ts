@@ -6,12 +6,8 @@
  * KuzuDB connections are opened lazily on first query.
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { executeQuery, executeParameterized, closeKuzu, isKuzuReady } from '../core/kuzu-adapter.js';
-import { getNodeProperties, getPropertyResourceUri } from '../schema-properties.js';
+import { closeKuzu } from '../core/kuzu-adapter.js';
 import {
-  CYPHER_WRITE_RE,
   VALID_NODE_LABELS,
   VALID_RELATION_TYPES,
   isTestFilePath,
@@ -21,31 +17,38 @@ import type {
   CodebaseContext,
   RepoHandle,
 } from './local-backend-types.js';
+import { LocalBackendCypherSupport } from './local-backend-cypher-support.js';
 import { LocalBackendSearchSupport } from './local-backend-search-support.js';
-import { LocalBackendSummarySupport } from './local-backend-summary-support.js';
 import { LocalBackendAnalysisSupport } from './local-backend-analysis-support.js';
 import { LocalBackendRuntimeSupport } from './local-backend-runtime-support.js';
 import { LocalBackendGraphSupport } from './local-backend-graph-support.js';
+import { LocalBackendOverviewSupport } from './local-backend-overview-support.js';
+import { LocalBackendSummaryPresentationSupport } from './local-backend-summary-presentation-support.js';
+import { LocalBackendSummaryQuerySupport } from './local-backend-summary-query-support.js';
 export {
   CYPHER_WRITE_RE,
   VALID_NODE_LABELS,
   VALID_RELATION_TYPES,
   isTestFilePath,
   isWriteQuery,
-};
+} from './local-backend-common.js';
 export type { CodebaseContext } from './local-backend-types.js';
 
 export class LocalBackend {
   private rojoProjectCache = new Map<string, Promise<any | null>>();
   private readonly runtimeSupport: LocalBackendRuntimeSupport;
   private readonly graphSupport: LocalBackendGraphSupport;
+  private readonly cypherSupport: LocalBackendCypherSupport;
   private readonly searchSupport: LocalBackendSearchSupport;
-  private readonly summarySupport: LocalBackendSummarySupport;
+  private readonly summaryPresentationSupport: LocalBackendSummaryPresentationSupport;
+  private readonly summaryQuerySupport: LocalBackendSummaryQuerySupport;
+  private readonly overviewSupport: LocalBackendOverviewSupport;
   private readonly analysisSupport: LocalBackendAnalysisSupport;
 
   constructor(private readonly startPath = process.cwd()) {
     this.runtimeSupport = new LocalBackendRuntimeSupport(startPath);
     this.graphSupport = new LocalBackendGraphSupport();
+    this.cypherSupport = new LocalBackendCypherSupport();
     this.searchSupport = new LocalBackendSearchSupport({
       ensureInitialized: this.runtimeSupport.ensureInitialized.bind(this.runtimeSupport),
       getOwnerSymbolsForFiles: this.graphSupport.getOwnerSymbolsForFiles.bind(this.graphSupport),
@@ -61,10 +64,14 @@ export class LocalBackend {
       rankRepresentativeSymbols: this.graphSupport.rankRepresentativeSymbols.bind(this.graphSupport),
       rojoProjectCache: this.rojoProjectCache,
     });
-    this.summarySupport = new LocalBackendSummarySupport({
+    this.summaryPresentationSupport = new LocalBackendSummaryPresentationSupport({
+      getNodeKind: this.graphSupport.getNodeKind.bind(this.graphSupport),
+      isOwnerLikeSymbolKind: this.graphSupport.isOwnerLikeSymbolKind.bind(this.graphSupport),
+      isLowSignalSummarySymbol: this.graphSupport.isLowSignalSummarySymbol.bind(this.graphSupport),
+      getOwnerSymbolPriority: this.graphSupport.getOwnerSymbolPriority.bind(this.graphSupport),
+    });
+    this.summaryQuerySupport = new LocalBackendSummaryQuerySupport({
       ensureInitialized: this.runtimeSupport.ensureInitialized.bind(this.runtimeSupport),
-      refreshRepoHandle: this.runtimeSupport.refreshRepoHandle.bind(this.runtimeSupport),
-      getRepoFreshnessSummary: this.runtimeSupport.getRepoFreshnessSummary.bind(this.runtimeSupport),
       getOwnerSymbolsForFiles: this.graphSupport.getOwnerSymbolsForFiles.bind(this.graphSupport),
       getNodeKind: this.graphSupport.getNodeKind.bind(this.graphSupport),
       isOwnerLikeSymbolKind: this.graphSupport.isOwnerLikeSymbolKind.bind(this.graphSupport),
@@ -73,13 +80,21 @@ export class LocalBackend {
       isLowSignalSummarySymbol: this.graphSupport.isLowSignalSummarySymbol.bind(this.graphSupport),
       getOwnerSymbolPriority: this.graphSupport.getOwnerSymbolPriority.bind(this.graphSupport),
       rankOwnerCandidates: this.graphSupport.rankOwnerCandidates.bind(this.graphSupport),
-    });
+    }, this.summaryPresentationSupport);
+    this.overviewSupport = new LocalBackendOverviewSupport({
+      ensureInitialized: this.runtimeSupport.ensureInitialized.bind(this.runtimeSupport),
+      refreshRepoHandle: this.runtimeSupport.refreshRepoHandle.bind(this.runtimeSupport),
+      getRepoFreshnessSummary: this.runtimeSupport.getRepoFreshnessSummary.bind(this.runtimeSupport),
+      getNodeKind: this.graphSupport.getNodeKind.bind(this.graphSupport),
+      isLikelyProductionFile: this.graphSupport.isLikelyProductionFile.bind(this.graphSupport),
+      isLowSignalSummarySymbol: this.graphSupport.isLowSignalSummarySymbol.bind(this.graphSupport),
+    }, this.summaryQuerySupport, this.summaryPresentationSupport);
     this.analysisSupport = new LocalBackendAnalysisSupport({
       ensureInitialized: this.runtimeSupport.ensureInitialized.bind(this.runtimeSupport),
       getRepoFreshnessSummary: this.runtimeSupport.getRepoFreshnessSummary.bind(this.runtimeSupport),
       getNodeKind: this.graphSupport.getNodeKind.bind(this.graphSupport),
-      humanizeSummaryLabel: this.summarySupport.humanizeSummaryLabel.bind(this.summarySupport),
-      isLowSignalSubsystemLabel: this.summarySupport.isLowSignalSubsystemLabel.bind(this.summarySupport),
+      humanizeSummaryLabel: this.summaryPresentationSupport.humanizeSummaryLabel.bind(this.summaryPresentationSupport),
+      isLowSignalSubsystemLabel: this.summaryPresentationSupport.isLowSignalSubsystemLabel.bind(this.summaryPresentationSupport),
       context: this.context.bind(this),
       getShapeSignals: this.getShapeSignals.bind(this),
       lookupNamedSymbols: this.searchSupport.lookupNamedSymbols.bind(this.searchSupport),
@@ -129,7 +144,7 @@ export class LocalBackend {
 
     switch (method) {
       case 'summary':
-        return this.summarySupport.overview(repo, params);
+        return this.overviewSupport.overview(repo, params);
       case 'query':
         return this.searchSupport.query(repo, params);
       case 'cypher': {
@@ -150,7 +165,7 @@ export class LocalBackend {
       case 'explore':
         return this.explore(repo, { type: 'symbol', name: params?.name, ...params });
       case 'overview':
-        return this.summarySupport.overview(repo, params);
+        return this.overviewSupport.overview(repo, params);
       default:
         throw new Error(`Unknown tool: ${method}`);
     }
@@ -179,79 +194,9 @@ export class LocalBackend {
     return this.cypher(repo, { query });
   }
 
-  private extractCypherVariableLabel(query: string, variableName: string): string | null {
-    const variablePattern = new RegExp(`\\(${variableName}:([\\w\`]+)`, 'i');
-    const match = query.match(variablePattern);
-    return match?.[1]?.replace(/`/g, '') ?? null;
-  }
-
-  private buildCypherError(query: string, errorMessage: string): any {
-    const starterQueries = [
-      "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20",
-      "MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community) RETURN c.heuristicLabel, COUNT(*) AS symbols ORDER BY symbols DESC LIMIT 20",
-      "MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process) RETURN p.heuristicLabel, s.name, r.step ORDER BY p.heuristicLabel, r.step LIMIT 30",
-    ];
-
-    if (/\btype\s*\(/i.test(query) || /function TYPE does not exist/i.test(errorMessage)) {
-      return {
-        error: errorMessage,
-        hint: "Use the CodeRelation `type` property instead of `type(r)`. Example: MATCH (a)-[r:CodeRelation {type: 'CALLS'}]->(b) RETURN a.name, b.name LIMIT 20",
-        schema_resource: 'gitnexus://schema',
-        starter_queries: starterQueries,
-      };
-    }
-
-    const propertyErrorMatch = errorMessage.match(/Cannot find property ([A-Za-z_][A-Za-z0-9_]*) for ([A-Za-z_][A-Za-z0-9_]*)/i);
-    if (propertyErrorMatch) {
-      const propertyName = propertyErrorMatch[1];
-      const variableName = propertyErrorMatch[2];
-      const nodeType = this.extractCypherVariableLabel(query, variableName);
-      const availableProperties = nodeType ? getNodeProperties(nodeType) : null;
-      const propertyResource = nodeType ? getPropertyResourceUri(nodeType) : 'gitnexus://properties';
-      const hint = availableProperties
-        ? `Property \`${propertyName}\` is not available on ${nodeType}. Available properties include: ${availableProperties.join(', ')}.`
-        : `Property \`${propertyName}\` is not available on \`${variableName}\`. Read gitnexus://properties and gitnexus://schema to inspect available node properties.`;
-
-      return {
-        error: errorMessage,
-        hint,
-        schema_resource: 'gitnexus://schema',
-        property_resource: propertyResource,
-        ...(availableProperties ? { available_properties: availableProperties } : {}),
-        starter_queries: starterQueries,
-      };
-    }
-
-    return {
-      error: errorMessage,
-      hint: 'Use read-only Cypher over the single CodeRelation table and filter edge kinds with the `type` property.',
-      schema_resource: 'gitnexus://schema',
-      property_resource: 'gitnexus://properties',
-      starter_queries: starterQueries,
-    };
-  }
-
   private async cypher(repo: RepoHandle, params: { query: string }): Promise<any> {
     await this.runtimeSupport.ensureInitialized(repo.id);
-
-    if (!isKuzuReady(repo.id)) {
-      return { error: 'KuzuDB not ready. Index may be corrupted.' };
-    }
-
-    // Block write operations (defense-in-depth — DB is already read-only)
-    if (CYPHER_WRITE_RE.test(params.query)) {
-      return this.buildCypherError(
-        params.query,
-        'Write operations (CREATE, DELETE, SET, MERGE, REMOVE, DROP, ALTER, COPY, DETACH) are not allowed. The knowledge graph is read-only.',
-      );
-    }
-
-    try {
-      const result = await executeQuery(repo.id, params.query);
-      return result;
-    } catch (err: any) {
-      return this.buildCypherError(params.query, err.message || 'Query failed');
-    }
+    return this.cypherSupport.execute(repo, params);
   }
 
   /**
@@ -259,29 +204,7 @@ export class LocalBackend {
    * Falls back to raw result if rows aren't tabular objects.
    */
   private formatCypherAsMarkdown(result: any): any {
-    if (!Array.isArray(result) || result.length === 0) return result;
-
-    const firstRow = result[0];
-    if (typeof firstRow !== 'object' || firstRow === null) return result;
-
-    const keys = Object.keys(firstRow);
-    if (keys.length === 0) return result;
-
-    const header = '| ' + keys.join(' | ') + ' |';
-    const separator = '| ' + keys.map(() => '---').join(' | ') + ' |';
-    const dataRows = result.map((row: any) =>
-      '| ' + keys.map(k => {
-        const v = row[k];
-        if (v === null || v === undefined) return '';
-        if (typeof v === 'object') return JSON.stringify(v);
-        return String(v);
-      }).join(' | ') + ' |'
-    );
-
-    return {
-      markdown: [header, separator, ...dataRows].join('\n'),
-      row_count: result.length,
-    };
+    return this.cypherSupport.formatAsMarkdown(result);
   }
 
   private buildConciseSubsystemSummary(
@@ -289,7 +212,7 @@ export class LocalBackend {
     result: any,
     limit: number,
   ): any {
-    return this.summarySupport.buildConciseSubsystemSummary(repo, result, limit);
+    return this.summaryPresentationSupport.buildConciseSubsystemSummary(repo, result, limit);
   }
 
   private async getShapeSignals(
@@ -331,74 +254,11 @@ export class LocalBackend {
     }
     
     if (type === 'cluster') {
-      const clusters = await executeParameterized(repo.id, `
-        MATCH (c:Community)
-        WHERE c.label = $clusterName OR c.heuristicLabel = $clusterName
-        RETURN c.id AS id, c.label AS label, c.heuristicLabel AS heuristicLabel, c.cohesion AS cohesion, c.symbolCount AS symbolCount
-      `, { clusterName: name });
-      if (clusters.length === 0) return { error: `Cluster '${name}' not found` };
-
-      const rawClusters = clusters.map((c: any) => ({
-        id: c.id || c[0], label: c.label || c[1], heuristicLabel: c.heuristicLabel || c[2],
-        cohesion: c.cohesion || c[3], symbolCount: c.symbolCount || c[4],
-      }));
-      const aggregatedClusters = this.summarySupport.aggregateClusters(rawClusters);
-
-      let totalSymbols = 0, weightedCohesion = 0;
-      for (const c of aggregatedClusters) {
-        const s = c.symbolCount || 0;
-        totalSymbols += s;
-        weightedCohesion += (c.cohesion || 0) * s;
-      }
-
-      const members = await executeParameterized(repo.id, `
-        MATCH (n)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)
-        WHERE c.label = $clusterName OR c.heuristicLabel = $clusterName
-        RETURN DISTINCT n.name AS name, labels(n)[0] AS type, n.filePath AS filePath
-        LIMIT 30
-      `, { clusterName: name });
-      
-      return {
-        cluster: {
-          id: aggregatedClusters[0]?.id || rawClusters[0].id,
-          label: aggregatedClusters[0]?.heuristicLabel || aggregatedClusters[0]?.label || rawClusters[0].heuristicLabel || rawClusters[0].label,
-          heuristicLabel: aggregatedClusters[0]?.heuristicLabel || aggregatedClusters[0]?.label || rawClusters[0].heuristicLabel || rawClusters[0].label,
-          cohesion: totalSymbols > 0 ? weightedCohesion / totalSymbols : 0,
-          symbolCount: totalSymbols,
-          subCommunities: rawClusters.length,
-        },
-        members: members.map((m: any) => ({
-          name: m.name || m[0], type: m.type || m[1], filePath: m.filePath || m[2],
-        })),
-      };
+      return this.summaryQuerySupport.queryClusterDetail(repo, name);
     }
     
     if (type === 'process') {
-      const processes = await executeParameterized(repo.id, `
-        MATCH (p:Process)
-        WHERE p.label = $processName OR p.heuristicLabel = $processName
-        RETURN p.id AS id, p.label AS label, p.heuristicLabel AS heuristicLabel, p.processType AS processType, p.stepCount AS stepCount
-        LIMIT 1
-      `, { processName: name });
-      if (processes.length === 0) return { error: `Process '${name}' not found` };
-
-      const proc = processes[0];
-      const procId = proc.id || proc[0];
-      const steps = await executeParameterized(repo.id, `
-        MATCH (n)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p {id: $procId})
-        RETURN n.name AS name, labels(n)[0] AS type, n.filePath AS filePath, r.step AS step
-        ORDER BY r.step
-      `, { procId });
-      
-      return {
-        process: {
-          id: procId, label: proc.label || proc[1], heuristicLabel: proc.heuristicLabel || proc[2],
-          processType: proc.processType || proc[3], stepCount: proc.stepCount || proc[4],
-        },
-        steps: steps.map((s: any) => ({
-          step: s.step || s[3], name: s.name || s[0], type: s.type || s[1], filePath: s.filePath || s[2],
-        })),
-      };
+      return this.summaryQuerySupport.queryProcessDetail(repo, name);
     }
     
     return { error: 'Invalid type. Use: symbol, cluster, or process' };
@@ -412,7 +272,7 @@ export class LocalBackend {
    */
   async queryClusters(limit = 100): Promise<{ clusters: any[] }> {
     const repo = await this.resolveRepo();
-    return this.summarySupport.queryClusters(repo, limit);
+    return this.summaryQuerySupport.queryClusters(repo, limit);
   }
 
   /**
@@ -421,7 +281,7 @@ export class LocalBackend {
    */
   async queryProcesses(limit = 50): Promise<{ processes: any[] }> {
     const repo = await this.resolveRepo();
-    return this.summarySupport.queryProcesses(repo, limit);
+    return this.summaryQuerySupport.queryProcesses(repo, limit);
   }
 
   /**
@@ -430,7 +290,7 @@ export class LocalBackend {
    */
   async queryClusterDetail(name: string): Promise<any> {
     const repo = await this.resolveRepo();
-    return this.summarySupport.queryClusterDetail(repo, name);
+    return this.summaryQuerySupport.queryClusterDetail(repo, name);
   }
 
   /**
@@ -439,7 +299,7 @@ export class LocalBackend {
    */
   async queryProcessDetail(name: string): Promise<any> {
     const repo = await this.resolveRepo();
-    return this.summarySupport.queryProcessDetail(repo, name);
+    return this.summaryQuerySupport.queryProcessDetail(repo, name);
   }
 
   async disconnect(): Promise<void> {
