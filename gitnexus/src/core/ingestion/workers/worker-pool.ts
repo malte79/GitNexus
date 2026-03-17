@@ -70,6 +70,7 @@ export const createWorkerPool = (workerUrl: URL, poolSize?: number): WorkerPool 
               reject(new Error(`Worker ${i} sub-batch timed out after ${SUB_BATCH_TIMEOUT_MS / 1000}s (chunk: ${chunk.length} items).`));
             }
           }, SUB_BATCH_TIMEOUT_MS);
+          subBatchTimer.unref?.();
         };
 
         let subBatchIdx = 0;

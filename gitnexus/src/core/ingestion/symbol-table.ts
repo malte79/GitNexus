@@ -42,7 +42,26 @@ export const createSymbolTable = (): SymbolTable => {
   // Structure: SymbolName -> [List of Definitions]
   const globalIndex = new Map<string, SymbolDefinition[]>();
 
+  const extractStartLine = (nodeId: string): number => {
+    const match = nodeId.match(/:(\d+)$/);
+    return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+  };
+
+  const compareDefinitions = (a: SymbolDefinition, b: SymbolDefinition): number =>
+    a.filePath.localeCompare(b.filePath) ||
+    extractStartLine(a.nodeId) - extractStartLine(b.nodeId) ||
+    a.nodeId.localeCompare(b.nodeId) ||
+    a.type.localeCompare(b.type);
+
+  const insertDefinition = (definitions: SymbolDefinition[], definition: SymbolDefinition) => {
+    if (definitions.some((existing) => existing.nodeId === definition.nodeId)) return;
+    definitions.push(definition);
+    definitions.sort(compareDefinitions);
+  };
+
   const add = (filePath: string, name: string, nodeId: string, type: string) => {
+    const definition = { nodeId, filePath, type };
+
     // A. Add to File Index
     if (!fileIndex.has(filePath)) {
       fileIndex.set(filePath, new Map());
@@ -53,7 +72,7 @@ export const createSymbolTable = (): SymbolTable => {
     if (!globalIndex.has(name)) {
       globalIndex.set(name, []);
     }
-    globalIndex.get(name)!.push({ nodeId, filePath, type });
+    insertDefinition(globalIndex.get(name)!, definition);
   };
 
   const lookupExact = (filePath: string, name: string): string | undefined => {
@@ -63,7 +82,7 @@ export const createSymbolTable = (): SymbolTable => {
   };
 
   const lookupFuzzy = (name: string): SymbolDefinition[] => {
-    return globalIndex.get(name) || [];
+    return [...(globalIndex.get(name) || [])];
   };
 
   const getStats = () => ({

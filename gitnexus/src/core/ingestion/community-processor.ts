@@ -15,7 +15,7 @@ import Graph from 'graphology';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { KnowledgeGraph, NodeLabel } from '../graph/types.js';
+import { GraphNode, GraphRelationship, KnowledgeGraph, NodeLabel } from '../graph/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -74,6 +74,28 @@ export const getCommunityColor = (communityIndex: number): string => {
   return COMMUNITY_COLORS[communityIndex % COMMUNITY_COLORS.length];
 };
 
+const compareStrings = (a: string, b: string): number => a.localeCompare(b);
+
+const hashString = (input: string): number => {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const createSeededRng = (seedSource: string): (() => number) => {
+  let state = hashString(seedSource) || 0x811c9dc5;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
 // ============================================================================
 // MAIN PROCESSOR
 // ============================================================================
@@ -118,16 +140,19 @@ export const processCommunities = async (
   // The first 2 iterations capture ~95%+ of modularity; additional iterations have diminishing returns.
   // Timeout: abort after 60s for pathological graph structures.
   const LEIDEN_TIMEOUT_MS = 60_000;
+  let leidenTimeout: ReturnType<typeof setTimeout> | null = null;
   let details: any;
   try {
     details = await Promise.race([
       Promise.resolve((leiden as any).detailed(graph, {
         resolution: isLarge ? 2.0 : 1.0,
         maxIterations: isLarge ? 3 : 0,
+        rng: createSeededRng(`leiden:${graph.order}:${graph.size}`),
       })),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Leiden timeout')), LEIDEN_TIMEOUT_MS)
-      ),
+      new Promise((_, reject) => {
+        leidenTimeout = setTimeout(() => reject(new Error('Leiden timeout')), LEIDEN_TIMEOUT_MS);
+        leidenTimeout.unref?.();
+      }),
     ]);
   } catch (e: any) {
     if (e.message === 'Leiden timeout') {
@@ -139,6 +164,8 @@ export const processCommunities = async (
     } else {
       throw e;
     }
+  } finally {
+    if (leidenTimeout) clearTimeout(leidenTimeout);
   }
 
   onProgress?.(`Found ${details.count} communities...`, 60);
@@ -193,39 +220,42 @@ const buildGraphologyGraph = (knowledgeGraph: KnowledgeGraph, isLarge: boolean):
   const clusteringRelTypes = new Set(['CALLS', 'EXTENDS', 'IMPLEMENTS']);
   const connectedNodes = new Set<string>();
   const nodeDegree = new Map<string, number>();
+  const relevantRelationships: GraphRelationship[] = [];
 
   knowledgeGraph.forEachRelationship(rel => {
     if (!clusteringRelTypes.has(rel.type) || rel.sourceId === rel.targetId) return;
     if (isLarge && rel.confidence < MIN_CONFIDENCE_LARGE) return;
 
+    relevantRelationships.push(rel);
     connectedNodes.add(rel.sourceId);
     connectedNodes.add(rel.targetId);
     nodeDegree.set(rel.sourceId, (nodeDegree.get(rel.sourceId) || 0) + 1);
     nodeDegree.set(rel.targetId, (nodeDegree.get(rel.targetId) || 0) + 1);
   });
 
+  const relevantNodes: GraphNode[] = [];
+
   knowledgeGraph.forEachNode(node => {
     if (!symbolTypes.has(node.label) || !connectedNodes.has(node.id)) return;
-    // For large graphs, skip degree-1 nodes — they just become singletons or
-    // get absorbed into their single neighbor's community, but cost iteration time.
     if (isLarge && (nodeDegree.get(node.id) || 0) < 2) return;
+    relevantNodes.push(node);
+  });
 
+  for (const node of relevantNodes) {
     graph.addNode(node.id, {
       name: node.properties.name,
       filePath: node.properties.filePath,
       type: node.label,
     });
-  });
+  }
 
-  knowledgeGraph.forEachRelationship(rel => {
-    if (!clusteringRelTypes.has(rel.type)) return;
-    if (isLarge && rel.confidence < MIN_CONFIDENCE_LARGE) return;
+  for (const rel of relevantRelationships) {
     if (graph.hasNode(rel.sourceId) && graph.hasNode(rel.targetId) && rel.sourceId !== rel.targetId) {
       if (!graph.hasEdge(rel.sourceId, rel.targetId)) {
         graph.addEdge(rel.sourceId, rel.targetId);
       }
     }
-  });
+  }
 
   return graph;
 };
@@ -245,8 +275,10 @@ const createCommunityNodes = (
 ): CommunityNode[] => {
   // Group node IDs by community
   const communityMembers = new Map<number, string[]>();
-  
-  Object.entries(communities).forEach(([nodeId, commNum]) => {
+
+  Object.entries(communities)
+    .sort(([nodeIdA, commNumA], [nodeIdB, commNumB]) => commNumA - commNumB || compareStrings(nodeIdA, nodeIdB))
+    .forEach(([nodeId, commNum]) => {
     if (!communityMembers.has(commNum)) {
       communityMembers.set(commNum, []);
     }
@@ -263,8 +295,9 @@ const createCommunityNodes = (
 
   // Create community nodes - SKIP SINGLETONS (isolated nodes)
   const communityNodes: CommunityNode[] = [];
-  
-  communityMembers.forEach((memberIds, commNum) => {
+
+  [...communityMembers.keys()].sort((a, b) => a - b).forEach((commNum) => {
+    const memberIds = communityMembers.get(commNum)!.slice().sort(compareStrings);
     // Skip singleton communities - they're just isolated nodes
     if (memberIds.length < 2) return;
     
@@ -279,8 +312,12 @@ const createCommunityNodes = (
     });
   });
 
-  // Sort by size descending
-  communityNodes.sort((a, b) => b.symbolCount - a.symbolCount);
+  // Sort by size descending with stable secondary ordering.
+  communityNodes.sort((a, b) =>
+    b.symbolCount - a.symbolCount ||
+    compareStrings(a.label, b.label) ||
+    compareStrings(a.id, b.id)
+  );
 
   return communityNodes;
 };
@@ -300,8 +337,8 @@ const generateHeuristicLabel = (
 ): string => {
   // Collect folder names from file paths
   const folderCounts = new Map<string, number>();
-  
-  memberIds.forEach(nodeId => {
+
+  memberIds.slice().sort(compareStrings).forEach(nodeId => {
     const filePath = nodePathMap.get(nodeId) || '';
     const parts = filePath.split('/').filter(Boolean);
     
@@ -315,16 +352,8 @@ const generateHeuristicLabel = (
     }
   });
 
-  // Find most common folder
-  let maxCount = 0;
-  let bestFolder = '';
-  
-  folderCounts.forEach((count, folder) => {
-    if (count > maxCount) {
-      maxCount = count;
-      bestFolder = folder;
-    }
-  });
+  const bestFolder = [...folderCounts.entries()]
+    .sort(([folderA, countA], [folderB, countB]) => countB - countA || compareStrings(folderA, folderB))[0]?.[0] || '';
 
   if (bestFolder) {
     // Capitalize first letter
@@ -379,13 +408,14 @@ const findCommonPrefix = (strings: string[]): string => {
 const calculateCohesion = (memberIds: string[], graph: any): number => {
   if (memberIds.length <= 1) return 1.0;
 
-  const memberSet = new Set(memberIds);
+  const sortedMemberIds = memberIds.slice().sort(compareStrings);
+  const memberSet = new Set(sortedMemberIds);
 
   // Sample up to 50 members for large communities
   const SAMPLE_SIZE = 50;
-  const sample = memberIds.length <= SAMPLE_SIZE
-    ? memberIds
-    : memberIds.slice(0, SAMPLE_SIZE);
+  const sample = sortedMemberIds.length <= SAMPLE_SIZE
+    ? sortedMemberIds
+    : sortedMemberIds.slice(0, SAMPLE_SIZE);
 
   let internalEdges = 0;
   let totalEdges = 0;

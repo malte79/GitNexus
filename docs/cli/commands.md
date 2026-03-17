@@ -94,6 +94,7 @@ Shared contract:
 - `codenexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
 - `codenexus summary --subsystems` is the concise subsystem view for daily use
 - concise subsystem rows prefer architecturally representative owners and hotspots, and may omit weakly grounded or helper-level labels rather than forcing them into an unrelated subsystem
+- concise subsystem rows evaluate a wider candidate set before truncation and rank by representative quality, so broad or weakly grounded buckets do not crowd out stronger subsystem rows just because they were discovered earlier
 - `codenexus summary --subsystems-detailed` is the explicit detailed subsystem breakdown
 - `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
 - the primary Cypher recovery resources are:

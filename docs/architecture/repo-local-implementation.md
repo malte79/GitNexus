@@ -99,6 +99,7 @@ Implementation posture:
 - `summary --subsystems` is the concise subsystem-oriented architectural view for daily use, including grounded owners, hotspots, lifecycle chokepoints, and production-versus-test split
 - `summary --subsystems-detailed` keeps the fuller subsystem breakdown behind an explicit alternate flag on the same surface
 - concise subsystem output now prefers specific, structurally grounded subsystem rows and architecturally representative owners and hotspots; weakly grounded or helper-level labels may be omitted rather than forced into an unrelated bucket
+- concise subsystem output now evaluates a broader candidate pool before truncating the first screen and ranks candidates by representative quality rather than raw discovery order; broad or low-signal buckets are penalized so stronger grounded subsystem rows win ties
 - `context` prefers direct relationships, but may supplement container symbols with member-based relationships and explicit partial-coverage reporting
 - `context` and `impact` share the same deterministic obvious-name lookup stack for unambiguous module surfaces: exact symbol, exported module symbol, file basename, then safe shorthand derived from indexed facts
 - `context` may recover file members from grounded file-level definitions when direct file container edges are missing, while keeping partial-confidence reporting explicit
