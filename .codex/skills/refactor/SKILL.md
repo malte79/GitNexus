@@ -23,6 +23,7 @@ Its job is:
 ## Hard Rules
 
 - Refactor one named component only.
+- Start every refactor strike on a dedicated `codex/` branch for that refactor. If the current branch is not already the active refactor lane for the requested component, create and switch to a new branch immediately before planning or editing. Prefer `codex/refactor-<component-slug>`.
 - Preserve public behavior/contracts unless explicitly approved otherwise.
 - No temporary compatibility shims, fallback paths, or "cleanup later" production branches.
 - Reuse-first, but extraction is mandatory when current seams are insufficient.
@@ -50,6 +51,10 @@ Its job is:
   - `$mech` when mechanical validation is needed
 
 Before proposing the refactor shape:
+- if the current branch is not already a dedicated `codex/` branch for this refactor, create one first and report its name
+- do not continue a refactor strike directly on `main`, `master`, or an unrelated task branch when a fresh dedicated lane can be created
+- if existing uncommitted changes are carried onto the new branch, call that out explicitly before continuing
+
 - run `codenexus manage status`
 - if the target component is stale in the index and structural certainty matters, run `codenexus manage index`
 - use the top-level structural CLI:
