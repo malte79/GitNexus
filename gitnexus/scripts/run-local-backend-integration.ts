@@ -4,9 +4,9 @@ import path from 'node:path';
 import {
   LOCAL_BACKEND_OWNER_FILE,
   LOCAL_BACKEND_INTEGRATION_CASES,
+  cleanupLocalBackendIntegration,
   setupLocalBackendIntegration,
 } from '../test/integration/local-backend-suite.js';
-
 const reallyExit = (process as NodeJS.Process & { reallyExit?: (code?: number) => never }).reallyExit;
 const STALE_BACKEND_TEST_DIR_MS = 10 * 60 * 1000;
 
@@ -61,30 +61,41 @@ async function purgeStaleBackendTestDirs(): Promise<void> {
 
 async function main(): Promise<void> {
   await purgeStaleBackendTestDirs();
-  const ctx = await setupLocalBackendIntegration();
+  let ctx: Awaited<ReturnType<typeof setupLocalBackendIntegration>> | null = null;
   let passed = 0;
 
-  for (const testCase of LOCAL_BACKEND_INTEGRATION_CASES) {
-    await testCase.run(ctx);
-    passed += 1;
-    console.log(`ok ${passed} - ${testCase.name}`);
-  }
+  try {
+    ctx = await setupLocalBackendIntegration();
 
-  console.log(`1..${LOCAL_BACKEND_INTEGRATION_CASES.length}`);
-  console.log(`# local-backend integration: ${passed}/${LOCAL_BACKEND_INTEGRATION_CASES.length} passed`);
-  if (reallyExit) {
-    reallyExit(0);
+    for (const testCase of LOCAL_BACKEND_INTEGRATION_CASES) {
+      await testCase.run(ctx);
+      passed += 1;
+      console.log(`ok ${passed} - ${testCase.name}`);
+    }
+
+    console.log(`1..${LOCAL_BACKEND_INTEGRATION_CASES.length}`);
+    console.log(`# local-backend integration: ${passed}/${LOCAL_BACKEND_INTEGRATION_CASES.length} passed`);
+  } finally {
+    if (ctx) {
+      await cleanupLocalBackendIntegration(ctx, { closePool: true });
+    }
   }
-  process.exit(0);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
-  setImmediate(() => {
+main()
+  .then(() => {
+    // Kuzu native teardown is still unstable under normal Node shutdown, even after explicit pool cleanup.
+    if (reallyExit) {
+      reallyExit(0);
+      return;
+    }
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error(error instanceof Error ? error.stack ?? error.message : error);
     if (reallyExit) {
       reallyExit(1);
       return;
     }
     process.exit(1);
   });
-});

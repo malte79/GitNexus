@@ -5,11 +5,12 @@ import { LANGUAGE_QUERIES } from './tree-sitter-queries.js';
 import { generateId } from '../../lib/utils.js';
 import { SymbolTable } from './symbol-table.js';
 import { ASTCache } from './ast-cache.js';
-import { findSiblingChild, getLanguageFromFilename, yieldToEventLoop } from './utils.js';
-import { detectFrameworkFromAST } from './framework-detection.js';
-import { extractLuauLocalTableContainerCandidates, extractLuauModuleSymbolCandidates } from './luau-module-symbols.js';
+import { getLanguageFromFilename, yieldToEventLoop } from './utils.js';
+import { appendLuauModuleSymbols, createDefinitionArtifacts } from './parsing-symbol-support.js';
 import { WorkerPool } from './workers/worker-pool.js';
 import type { ParseWorkerResult, ParseWorkerInput, ExtractedImport, ExtractedCall, ExtractedHeritage, ExtractedRoute } from './workers/parse-worker.js';
+
+export { isNodeExported } from './parsing-symbol-support.js';
 
 export type FileProgressCallback = (current: number, total: number, filePath: string) => void;
 
@@ -19,38 +20,6 @@ export interface WorkerExtractedData {
   heritage: ExtractedHeritage[];
   routes: ExtractedRoute[];
 }
-
-const DEFINITION_CAPTURE_KEYS = [
-  'definition.function',
-  'definition.class',
-  'definition.interface',
-  'definition.method',
-  'definition.struct',
-  'definition.enum',
-  'definition.namespace',
-  'definition.module',
-  'definition.trait',
-  'definition.impl',
-  'definition.type',
-  'definition.const',
-  'definition.static',
-  'definition.typedef',
-  'definition.macro',
-  'definition.union',
-  'definition.property',
-  'definition.record',
-  'definition.delegate',
-  'definition.annotation',
-  'definition.constructor',
-  'definition.template',
-] as const;
-
-const getDefinitionNodeFromCaptures = (captureMap: Record<string, any>): any | null => {
-  for (const key of DEFINITION_CAPTURE_KEYS) {
-    if (captureMap[key]) return captureMap[key];
-  }
-  return null;
-};
 
 const resolveLuauModuleMethodId = (
   filePath: string,
@@ -82,254 +51,6 @@ const resolveLuauModuleMethodId = (
   }
 
   return exact.startsWith(`${methodRef.targetLabel}:`) ? exact : null;
-};
-
-const createSyntheticLuauModuleMemberNode = (
-  moduleId: string,
-  filePath: string,
-  memberRef: { name: string; startLine: number; label: string },
-): GraphNode => ({
-  id: generateId('Property', `${moduleId}:${memberRef.name}:${memberRef.startLine}`),
-  label: 'Property',
-  properties: {
-    name: memberRef.name,
-    filePath,
-    startLine: memberRef.startLine,
-    endLine: memberRef.startLine,
-    language: 'luau',
-    isExported: true,
-    description: 'luau-module-export:returned-table-field',
-  },
-});
-
-const appendLuauContainerNode = (
-  graph: KnowledgeGraph,
-  symbolTable: SymbolTable,
-  filePath: string,
-  container: {
-    name: string;
-    startLine: number;
-    endLine: number;
-    description: string;
-    memberRefs: Array<{ name: string; startLine: number; label: string; targetName?: string; targetLabel?: string; synthetic?: boolean }>;
-  },
-  isExported: boolean,
-  confidence: number,
-) => {
-  const moduleId = generateId('Module', `${filePath}:${container.name}:${container.startLine}`);
-  if (graph.getNode(moduleId)) return;
-
-  graph.addNode({
-    id: moduleId,
-    label: 'Module',
-    properties: {
-      name: container.name,
-      filePath,
-      startLine: container.startLine,
-      endLine: container.endLine,
-      language: 'luau',
-      isExported,
-      description: container.description,
-    },
-  });
-  symbolTable.add(filePath, container.name, moduleId, 'Module');
-
-  const fileId = generateId('File', filePath);
-  graph.addRelationship({
-    id: generateId('DEFINES', `${fileId}->${moduleId}`),
-    sourceId: fileId,
-    targetId: moduleId,
-    type: 'DEFINES',
-    confidence,
-    reason: container.description,
-  });
-
-  for (const memberRef of container.memberRefs) {
-    let memberId = resolveLuauModuleMethodId(filePath, memberRef, symbolTable);
-    if (!memberId && memberRef.synthetic) {
-      const syntheticNode = createSyntheticLuauModuleMemberNode(moduleId, filePath, memberRef);
-      if (!graph.getNode(syntheticNode.id)) {
-        graph.addNode(syntheticNode);
-        symbolTable.add(filePath, memberRef.name, syntheticNode.id, 'Property');
-      }
-      memberId = syntheticNode.id;
-    }
-    if (!memberId || !graph.getNode(memberId)) continue;
-    graph.addRelationship({
-      id: generateId('DEFINES', `${moduleId}->${memberId}`),
-      sourceId: moduleId,
-      targetId: memberId,
-      type: 'DEFINES',
-      confidence,
-      reason: container.description,
-    });
-  }
-};
-
-// ============================================================================
-// EXPORT DETECTION - Language-specific visibility detection
-// ============================================================================
-
-/**
- * Check if a symbol (function, class, etc.) is exported/public
- * Handles all 9 supported languages with explicit logic
- *
- * @param node - The AST node for the symbol name
- * @param name - The symbol name
- * @param language - The programming language
- * @returns true if the symbol is exported/public
- */
-export const isNodeExported = (node: any, name: string, language: string): boolean => {
-  let current = node;
-
-  switch (language) {
-    // JavaScript/TypeScript: Check for export keyword in ancestors
-    case 'javascript':
-    case 'typescript':
-      while (current) {
-        const type = current.type;
-        if (type === 'export_statement' ||
-            type === 'export_specifier' ||
-            type === 'lexical_declaration' && current.parent?.type === 'export_statement') {
-          return true;
-        }
-        // Also check if text starts with 'export '
-        if (current.text?.startsWith('export ')) {
-          return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // Python: Public if no leading underscore (convention)
-    case 'python':
-      return !name.startsWith('_');
-
-    // Luau: top-level named functions and table-member assignments are public.
-    // Local declarations stay internal. Returned-table export patterns remain conservative in Epic 07.
-    case 'luau':
-      while (current) {
-        if (current.type === 'local_declaration') return false;
-        if (current.type === 'assignment_statement') {
-          const variableList = current.children?.find((c: any) => c.type === 'variable_list');
-          const assignedName = variableList?.childForFieldName?.('name') || variableList?.namedChild?.(0);
-          if (assignedName?.type === 'dot_index_expression' || assignedName?.type === 'method_index_expression') {
-            return true;
-          }
-        }
-        if (current.type === 'function_declaration') {
-          const nameNode = current.childForFieldName?.('name');
-          return nameNode?.type === 'identifier';
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // Java: Check for 'public' modifier
-    // In tree-sitter Java, modifiers are siblings of the name node, not parents
-    case 'java':
-      while (current) {
-        // Check if this node or any sibling is a 'modifiers' node containing 'public'
-        if (current.parent) {
-          const parent = current.parent;
-          // Check all children of the parent for modifiers
-          for (let i = 0; i < parent.childCount; i++) {
-            const child = parent.child(i);
-            if (child?.type === 'modifiers' && child.text?.includes('public')) {
-              return true;
-            }
-          }
-          // Also check if the parent's text starts with 'public' (fallback)
-          if (parent.type === 'method_declaration' || parent.type === 'constructor_declaration') {
-            if (parent.text?.trimStart().startsWith('public')) {
-              return true;
-            }
-          }
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // C#: Check for 'public' modifier in ancestors
-    case 'csharp':
-      while (current) {
-        if (current.type === 'modifier' || current.type === 'modifiers') {
-          if (current.text?.includes('public')) return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // Go: Uppercase first letter = exported
-    case 'go':
-      if (name.length === 0) return false;
-      const first = name[0];
-      // Must be uppercase letter (not a number or symbol)
-      return first === first.toUpperCase() && first !== first.toLowerCase();
-
-    // Rust: Check for 'pub' visibility modifier
-    case 'rust':
-      while (current) {
-        if (current.type === 'visibility_modifier') {
-          if (current.text?.includes('pub')) return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // Kotlin: Default visibility is public (unlike Java)
-    // visibility_modifier is inside modifiers, a sibling of the name node within the declaration
-    case 'kotlin':
-      while (current) {
-        if (current.parent) {
-          const visMod = findSiblingChild(current.parent, 'modifiers', 'visibility_modifier');
-          if (visMod) {
-            const text = visMod.text;
-            if (text === 'private' || text === 'internal' || text === 'protected') return false;
-            if (text === 'public') return true;
-          }
-        }
-        current = current.parent;
-      }
-      // No visibility modifier = public (Kotlin default)
-      return true;
-
-    // C/C++: No native export concept at language level
-    // Entry points will be detected via name patterns (main, etc.)
-    case 'c':
-    case 'cpp':
-      return false;
-
-    // Swift: Check for 'public' or 'open' access modifiers
-    case 'swift':
-      while (current) {
-        if (current.type === 'modifiers' || current.type === 'visibility_modifier') {
-          const text = current.text || '';
-          if (text.includes('public') || text.includes('open')) return true;
-        }
-        current = current.parent;
-      }
-      return false;
-
-    // PHP: Check for visibility modifier or top-level scope
-    case 'php':
-      while (current) {
-        if (current.type === 'class_declaration' ||
-            current.type === 'interface_declaration' ||
-            current.type === 'trait_declaration' ||
-            current.type === 'enum_declaration') {
-          return true;
-        }
-        if (current.type === 'visibility_modifier') {
-          return current.text === 'public';
-        }
-        current = current.parent;
-      }
-      return true; // Top-level functions are globally accessible
-
-    default:
-      return false;
-  }
 };
 
 // ============================================================================
@@ -471,106 +192,22 @@ const processParsingSequential = async (
         return;
       }
 
-      const nameNode = captureMap['name'];
-      // Synthesize name for constructors without explicit @name capture (e.g. Swift init)
-      if (!nameNode && !captureMap['definition.constructor']) return;
-      const nodeName = nameNode ? nameNode.text : 'init';
+      const artifacts = createDefinitionArtifacts(captureMap, file.path, language);
+      if (!artifacts) return;
 
-      let nodeLabel = 'CodeElement';
-
-      if (captureMap['definition.function']) nodeLabel = 'Function';
-      else if (captureMap['definition.class']) nodeLabel = 'Class';
-      else if (captureMap['definition.interface']) nodeLabel = 'Interface';
-      else if (captureMap['definition.method']) nodeLabel = 'Method';
-      else if (captureMap['definition.struct']) nodeLabel = 'Struct';
-      else if (captureMap['definition.enum']) nodeLabel = 'Enum';
-      else if (captureMap['definition.namespace']) nodeLabel = 'Namespace';
-      else if (captureMap['definition.module']) nodeLabel = 'Module';
-      else if (captureMap['definition.trait']) nodeLabel = 'Trait';
-      else if (captureMap['definition.impl']) nodeLabel = 'Impl';
-      else if (captureMap['definition.type']) nodeLabel = 'TypeAlias';
-      else if (captureMap['definition.const']) nodeLabel = 'Const';
-      else if (captureMap['definition.static']) nodeLabel = 'Static';
-      else if (captureMap['definition.typedef']) nodeLabel = 'Typedef';
-      else if (captureMap['definition.macro']) nodeLabel = 'Macro';
-      else if (captureMap['definition.union']) nodeLabel = 'Union';
-      else if (captureMap['definition.property']) nodeLabel = 'Property';
-      else if (captureMap['definition.record']) nodeLabel = 'Record';
-      else if (captureMap['definition.delegate']) nodeLabel = 'Delegate';
-      else if (captureMap['definition.annotation']) nodeLabel = 'Annotation';
-      else if (captureMap['definition.constructor']) nodeLabel = 'Constructor';
-      else if (captureMap['definition.template']) nodeLabel = 'Template';
-
-      const definitionNodeForRange = getDefinitionNodeFromCaptures(captureMap);
-      const startLine = definitionNodeForRange ? definitionNodeForRange.startPosition.row : (nameNode ? nameNode.startPosition.row : 0);
-      const nodeId = generateId(nodeLabel, `${file.path}:${nodeName}:${startLine}`);
-
-      const definitionNode = getDefinitionNodeFromCaptures(captureMap);
-      const frameworkHint = definitionNode
-        ? detectFrameworkFromAST(language, (definitionNode.text || '').slice(0, 300))
-        : null;
-
-      const node: GraphNode = {
-        id: nodeId,
-        label: nodeLabel as any,
-        properties: {
-          name: nodeName,
-          filePath: file.path,
-          startLine: definitionNodeForRange ? definitionNodeForRange.startPosition.row : startLine,
-          endLine: definitionNodeForRange ? definitionNodeForRange.endPosition.row : startLine,
-          language: language,
-          isExported: isNodeExported(nameNode || definitionNodeForRange, nodeName, language),
-          ...(frameworkHint ? {
-            astFrameworkMultiplier: frameworkHint.entryPointMultiplier,
-            astFrameworkReason: frameworkHint.reason,
-          } : {}),
-        },
-      };
-
-      graph.addNode(node);
-
-      symbolTable.add(file.path, nodeName, nodeId, nodeLabel);
-
-      const fileId = generateId('File', file.path);
-
-      const relId = generateId('DEFINES', `${fileId}->${nodeId}`);
-
-      const relationship: GraphRelationship = {
-        id: relId,
-        sourceId: fileId,
-        targetId: nodeId,
-        type: 'DEFINES',
-        confidence: 1.0,
-        reason: '',
-      };
-
-      graph.addRelationship(relationship);
+      graph.addNode(artifacts.node as GraphNode);
+      symbolTable.add(artifacts.symbol.filePath, artifacts.symbol.name, artifacts.symbol.nodeId, artifacts.symbol.type);
+      graph.addRelationship(artifacts.relationship as GraphRelationship);
     });
 
     if (language === 'luau') {
-      const candidates = extractLuauModuleSymbolCandidates(tree.rootNode, file.path);
-      for (const candidate of candidates) {
-        appendLuauContainerNode(
-          graph,
-          symbolTable,
-          file.path,
-          candidate,
-          candidate.isExported,
-          candidate.confidence === 'strong' ? 1.0 : 0.7,
-        );
-      }
-
-      const localContainers = extractLuauLocalTableContainerCandidates(tree.rootNode);
-      for (const container of localContainers) {
-        appendLuauContainerNode(
-          graph,
-          symbolTable,
-          file.path,
-          container,
-          false,
-          0.85,
-        );
-      }
+      appendLuauModuleSymbols(tree.rootNode, file.path, {
+        hasNode: (id) => Boolean(graph.getNode(id)),
+        addNode: (node) => graph.addNode(node as GraphNode),
+        addSymbol: (symbol) => symbolTable.add(symbol.filePath, symbol.name, symbol.nodeId, symbol.type),
+        addRelationship: (relationship) => graph.addRelationship(relationship as GraphRelationship),
+        resolveMemberId: (targetFilePath, memberRef) => resolveLuauModuleMethodId(targetFilePath, memberRef, symbolTable),
+      });
     }
   }
 };
