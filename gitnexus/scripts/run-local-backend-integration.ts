@@ -7,7 +7,6 @@ import {
   cleanupLocalBackendIntegration,
   setupLocalBackendIntegration,
 } from '../test/integration/local-backend-suite.js';
-const reallyExit = (process as NodeJS.Process & { reallyExit?: (code?: number) => never }).reallyExit;
 const STALE_BACKEND_TEST_DIR_MS = 10 * 60 * 1000;
 
 function isProcessAlive(pid: number): boolean {
@@ -82,20 +81,10 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .then(() => {
-    // Kuzu native teardown is still unstable under normal Node shutdown, even after explicit pool cleanup.
-    if (reallyExit) {
-      reallyExit(0);
-      return;
-    }
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error(error instanceof Error ? error.stack ?? error.message : error);
-    if (reallyExit) {
-      reallyExit(1);
-      return;
-    }
-    process.exit(1);
-  });
+void (async () => {
+  await main();
+  process.exit(0);
+})().catch((error) => {
+  console.error(error instanceof Error ? error.stack ?? error.message : error);
+  process.exit(1);
+});

@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 const localBackendPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend.ts');
 const overviewSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-overview-support.ts');
+const searchSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-search-support.ts');
+const analysisSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-analysis-support.ts');
 
 describe('LocalBackend structure', () => {
   it('keeps the public seam thin and delegated', () => {
@@ -28,5 +30,34 @@ describe('LocalBackend structure', () => {
     expect(source).toContain('this.summaryQueries.getProcessesForOverview(repo, limit)');
     expect(source).not.toContain("MATCH (c:Community)");
     expect(source).not.toContain("MATCH (p:Process)");
+  });
+
+  it('keeps search support thin and delegated to focused owners', () => {
+    const source = fs.readFileSync(searchSupportPath, 'utf-8');
+    const lineCount = source.split(/\r?\n/).length;
+
+    expect(lineCount).toBeLessThanOrEqual(80);
+    expect(source).toContain("import { LocalBackendSearchLookupSupport } from './local-backend-search-lookup-support.js';");
+    expect(source).toContain("import { LocalBackendSearchEnrichmentSupport } from './local-backend-search-enrichment-support.js';");
+    expect(source).toContain("import { LocalBackendSearchRankingSupport } from './local-backend-search-ranking-support.js';");
+    expect(source).toContain("import { LocalBackendSearchQuerySupport } from './local-backend-search-query-support.js';");
+    expect(source).not.toContain('executeQuery(');
+    expect(source).not.toContain('executeParameterized(');
+    expect(source).not.toContain('MATCH (');
+  });
+
+  it('keeps analysis support thin and delegated to focused owners', () => {
+    const source = fs.readFileSync(analysisSupportPath, 'utf-8');
+    const lineCount = source.split(/\r?\n/).length;
+
+    expect(lineCount).toBeLessThanOrEqual(90);
+    expect(source).toContain("import { LocalBackendShapeSupport } from './local-backend-shape-support.js';");
+    expect(source).toContain("import { LocalBackendContextSupport } from './local-backend-context-support.js';");
+    expect(source).toContain("import { LocalBackendDetectChangesSupport } from './local-backend-detect-changes-support.js';");
+    expect(source).toContain("import { LocalBackendRenameSupport } from './local-backend-rename-support.js';");
+    expect(source).toContain("import { LocalBackendImpactSupport } from './local-backend-impact-support.js';");
+    expect(source).not.toContain('executeQuery(');
+    expect(source).not.toContain('executeParameterized(');
+    expect(source).not.toContain('MATCH (');
   });
 });
