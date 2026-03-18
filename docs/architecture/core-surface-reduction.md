@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records the Epic 02 reduction of the inherited GitNexus repo toward the minimum surfaces needed for the headless CodeNexus core.
+This document records the Epic 02 reduction of the inherited upstream repo toward the minimum surfaces needed for the headless GNexus core.
 
 The reduction rule used here is strict:
 
@@ -23,9 +23,9 @@ The reduction rule used here is strict:
 | `gitnexus/src/core/augmentation/` | hook/search augmentation | remove now | Side-system not required for the headless core |
 | `gitnexus/src/core/embeddings/` | semantic embeddings | remove now | Explicitly deferred future upgrade |
 | `gitnexus/src/core/search/hybrid-search.ts` | semantic+BM25 blend | remove now | Embeddings removed; lexical search remains |
-| `gitnexus/src/cli/index-command.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to `codenexus index` |
-| `gitnexus/src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `codenexus status` |
-| `gitnexus/src/cli/serve.ts` | serve entrypoint | keep | Active `codenexus serve` command for the repo-local HTTP runtime |
+| `gitnexus/src/cli/index-command.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to `gnexus index` |
+| `gitnexus/src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `gnexus status` |
+| `gitnexus/src/cli/serve.ts` | serve entrypoint | keep | Active `gnexus serve` command for the repo-local HTTP runtime |
 | `gitnexus/src/cli/index.ts` | CLI dispatcher | keep for epic 04 | Required CLI seam, but reduced to the minimal current surface |
 | `gitnexus/src/cli/setup.ts` | editor/plugin setup | remove now | Outside the headless product |
 | `gitnexus/src/cli/serve.ts` | web UI server command | remove now | Web UI is no longer a product surface |
@@ -51,16 +51,16 @@ The reduction rule used here is strict:
 | `.github/workflows/ci.yml` | CI | keep for repo workflow | Supports the retained package |
 | `.github/workflows/publish.yml` | package publish | keep for repo workflow | Supports the retained package |
 | `gitnexus/hooks/` | Claude hook scripts | remove now | Hook/onboarding surface removed |
-| `gitnexus/skills/` | GitNexus-specific skill pack | remove now | Product-specific helper pack removed |
+| `gitnexus/skills/` | legacy repo skill pack | remove now | Product-specific helper pack removed |
 | `gitnexus/vendor/` | retained package support code | keep for epic 03 | Still shipped by the retained package; revisit when architecture changes |
 
 ## Resulting Product Surface
 
 After this reduction, the intended active product surface is:
 
-- local indexing via `codenexus index`
-- local status via `codenexus status`
-- local service command via `codenexus serve`
+- local indexing via `gnexus index`
+- local status via `gnexus status`
+- local service command via `gnexus serve`
 - the ingestion, graph, Kuzu, search, MCP, and storage seams needed for Epics 03-05
 
 Removed from first-class product scope:
@@ -89,6 +89,6 @@ The retained surfaces above are no longer registry-backed multi-repo seams.
 
 After Epic 03:
 
-- `.codenexus/` is the active repo-local state boundary
+- `.gnexus/` is the active repo-local state boundary
 - the retained backend is bound to one repo boundary
-- repo-discovery affordances such as `list_repos` and `gitnexus://repos` are gone from the active runtime surface
+- repo-discovery affordances such as `list_repos` and `gnexus://repos` are gone from the active runtime surface

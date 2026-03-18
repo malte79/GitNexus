@@ -32,17 +32,17 @@ describe('initCommand', () => {
     process.exitCode = 0;
   });
 
-  it('creates only .codenexus/config.toml on first init', async () => {
+  it('creates only .gnexus/config.toml on first init', async () => {
     const repo = await createGitRepo('init-command-first-');
     process.chdir(repo.dbPath);
 
     await initCommand();
 
-    const configPath = path.join(repo.dbPath, '.codenexus', 'config.toml');
+    const configPath = path.join(repo.dbPath, '.gnexus', 'config.toml');
     await expect(fs.readFile(configPath, 'utf-8')).resolves.toContain('port = 4747');
-    await expect(fs.access(path.join(repo.dbPath, '.codenexus', 'meta.json'))).rejects.toThrow();
-    await expect(fs.access(path.join(repo.dbPath, '.codenexus', 'runtime.json'))).rejects.toThrow();
-    await expect(fs.access(path.join(repo.dbPath, '.codenexus', 'kuzu'))).rejects.toThrow();
+    await expect(fs.access(path.join(repo.dbPath, '.gnexus', 'meta.json'))).rejects.toThrow();
+    await expect(fs.access(path.join(repo.dbPath, '.gnexus', 'runtime.json'))).rejects.toThrow();
+    await expect(fs.access(path.join(repo.dbPath, '.gnexus', 'kuzu'))).rejects.toThrow();
 
     await repo.cleanup();
   });
@@ -52,7 +52,7 @@ describe('initCommand', () => {
     process.chdir(repo.dbPath);
 
     await initCommand();
-    const configPath = path.join(repo.dbPath, '.codenexus', 'config.toml');
+    const configPath = path.join(repo.dbPath, '.gnexus', 'config.toml');
     const first = await fs.readFile(configPath, 'utf-8');
 
     await initCommand();
@@ -67,8 +67,8 @@ describe('initCommand', () => {
   it('fails clearly when existing config is invalid', async () => {
     const repo = await createGitRepo('init-command-invalid-');
     process.chdir(repo.dbPath);
-    await fs.mkdir(path.join(repo.dbPath, '.codenexus'), { recursive: true });
-    await fs.writeFile(path.join(repo.dbPath, '.codenexus', 'config.toml'), 'version = 1\nport = 99999\n', 'utf-8');
+    await fs.mkdir(path.join(repo.dbPath, '.gnexus'), { recursive: true });
+    await fs.writeFile(path.join(repo.dbPath, '.gnexus', 'config.toml'), 'version = 1\nport = 99999\n', 'utf-8');
 
     await initCommand();
 
@@ -104,8 +104,8 @@ describe('initCommand', () => {
     process.chdir(nestedPath);
     await initCommand();
 
-    await expect(fs.access(path.join(nestedPath, '.codenexus', 'config.toml'))).resolves.toBeUndefined();
-    await expect(fs.access(path.join(outer.dbPath, '.codenexus', 'config.toml'))).rejects.toThrow();
+    await expect(fs.access(path.join(nestedPath, '.gnexus', 'config.toml'))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(outer.dbPath, '.gnexus', 'config.toml'))).rejects.toThrow();
 
     await outer.cleanup();
   });
@@ -118,8 +118,8 @@ describe('initCommand', () => {
     process.chdir(worktreePath);
     await initCommand();
 
-    await expect(fs.access(path.join(worktreePath, '.codenexus', 'config.toml'))).resolves.toBeUndefined();
-    await expect(fs.access(path.join(repo.dbPath, '.codenexus', 'config.toml'))).rejects.toThrow();
+    await expect(fs.access(path.join(worktreePath, '.gnexus', 'config.toml'))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(repo.dbPath, '.gnexus', 'config.toml'))).rejects.toThrow();
 
     await fs.rm(worktreePath, { recursive: true, force: true });
     await repo.cleanup();

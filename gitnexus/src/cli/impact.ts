@@ -13,7 +13,7 @@ export async function impactCommand(
   },
 ): Promise<void> {
   if (!target && !options.uid) {
-    console.error('Provide a symbol name or `--uid`. Usage: `codenexus impact <target> --direction upstream`.');
+    console.error('Provide a symbol name or `--uid`. Usage: `gnexus impact <target> --direction upstream`.');
     process.exitCode = 1;
     return;
   }

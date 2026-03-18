@@ -31,10 +31,10 @@ It is not a substitute for `$plan`, `$implement`, or `$codereview`.
 - the companion docs/tests/config/schema surfaces that would move with the subsystem
 
 When product code is in scope:
-- `codenexus manage status`
-- `codenexus summary --subsystems`
-- `codenexus query "<subsystem concept>" --owners`
-- `codenexus context <primary-symbol>` when a likely anchor exists
+- `gnexus manage status`
+- `gnexus summary --subsystems`
+- `gnexus query "<subsystem concept>" --owners`
+- `gnexus context <primary-symbol>` when a likely anchor exists
 
 ## Required Output
 

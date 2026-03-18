@@ -34,10 +34,10 @@ async function prepareIndexedRepo(
   port: number,
   configOverrides: Partial<{ auto_index: boolean; auto_index_interval_seconds: number }> = {},
 ) {
-  const storagePath = path.join(repoPath, '.codenexus');
-  await fs.writeFile(path.join(repoPath, '.gitignore'), '.codenexus/\n', 'utf-8');
+  const storagePath = path.join(repoPath, '.gnexus');
+  await fs.writeFile(path.join(repoPath, '.gitignore'), '.gnexus/\n', 'utf-8');
   execSync('git add .gitignore', { cwd: repoPath });
-  execSync('git commit -q -m "ignore .codenexus"', { cwd: repoPath });
+  execSync('git commit -q -m "ignore .gnexus"', { cwd: repoPath });
 
   await saveConfig(storagePath, {
     version: 1,
@@ -131,7 +131,7 @@ describe('repo-local HTTP service runtime', () => {
     const runtime = await startRepoLocalService(firstRepo.dbPath);
 
     await expect(startRepoLocalService(secondRepo.dbPath)).rejects.toThrow(
-      `Configured port ${port} is already in use by CodeNexus for repo ${normalizeRepoPath(firstRepo.dbPath)}.`,
+      `Configured port ${port} is already in use by GNexus for repo ${normalizeRepoPath(firstRepo.dbPath)}.`,
     );
 
     await runtime.close();
@@ -157,7 +157,7 @@ describe('repo-local HTTP service runtime', () => {
 
   it('refuses to start when no usable index exists', async () => {
     const repo = await createGitRepo('service-runtime-unindexed-');
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     await saveConfig(storagePath, { version: 1, port: await reservePort() });
 
     await expect(startRepoLocalService(repo.dbPath)).rejects.toBeInstanceOf(ServiceStartupError);
@@ -227,8 +227,8 @@ describe('repo-local HTTP service runtime', () => {
       auto_index_interval_seconds: 1,
     });
 
-    const previousMode = process.env.CODENEXUS_SERVICE_MODE;
-    process.env.CODENEXUS_SERVICE_MODE = 'background';
+    const previousMode = process.env.GNEXUS_SERVICE_MODE;
+    process.env.GNEXUS_SERVICE_MODE = 'background';
     const runtime = await startRepoLocalService(repo.dbPath);
 
     try {
@@ -254,7 +254,7 @@ describe('repo-local HTTP service runtime', () => {
       expect(state?.liveHealth?.auto_index?.last_succeeded_at).toBeTruthy();
       expect(state?.detailFlags).not.toContain('service_restart_required');
     } finally {
-      process.env.CODENEXUS_SERVICE_MODE = previousMode;
+      process.env.GNEXUS_SERVICE_MODE = previousMode;
       await runtime.close();
       await repo.cleanup();
     }
@@ -268,8 +268,8 @@ describe('repo-local HTTP service runtime', () => {
       auto_index_interval_seconds: 1,
     });
 
-    const previousMode = process.env.CODENEXUS_SERVICE_MODE;
-    delete process.env.CODENEXUS_SERVICE_MODE;
+    const previousMode = process.env.GNEXUS_SERVICE_MODE;
+    delete process.env.GNEXUS_SERVICE_MODE;
     const runtime = await startRepoLocalService(repo.dbPath);
 
     try {
@@ -282,7 +282,7 @@ describe('repo-local HTTP service runtime', () => {
       expect(state?.liveHealth?.auto_index?.last_attempt_at).toBeUndefined();
       expect(state?.detailFlags).toContain('working_tree_dirty');
     } finally {
-      process.env.CODENEXUS_SERVICE_MODE = previousMode;
+      process.env.GNEXUS_SERVICE_MODE = previousMode;
       await runtime.close();
       await repo.cleanup();
     }

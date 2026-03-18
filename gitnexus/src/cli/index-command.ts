@@ -1,7 +1,7 @@
 /**
  * Index Command
  *
- * Indexes a repository and stores the knowledge graph in .codenexus/
+ * Indexes a repository and stores the knowledge graph in .gnexus/
  */
 
 import path from 'path';
@@ -75,7 +75,7 @@ export const indexCommand = async (
 ) => {
   if (ensureHeap()) return;
 
-  console.log('\n  CodeNexus Indexer\n');
+  console.log('\n  GNexus Indexer\n');
 
   let repoPath: string;
   if (inputPath) {
@@ -106,16 +106,16 @@ export const indexCommand = async (
   const { storagePath, kuzuPath } = getStoragePaths(repoPath);
   const config = await loadConfig(storagePath);
   if (!config) {
-    console.log('  Repo is not initialized for CodeNexus\n');
-    console.log('  Missing or invalid .codenexus/config.toml\n');
-    console.log('  Run `codenexus manage init` first.\n');
+    console.log('  Repo is not initialized for GNexus\n');
+    console.log('  Missing or invalid .gnexus/config.toml\n');
+    console.log('  Run `gnexus manage init` first.\n');
     process.exitCode = 1;
     return;
   }
 
   const releaseIndexLock = await acquireIndexLock(
     storagePath,
-    process.env.CODENEXUS_INDEX_REASON === 'auto' ? 'auto' : 'manual',
+    process.env.GNEXUS_INDEX_REASON === 'auto' ? 'auto' : 'manual',
   );
 
   try {
@@ -287,25 +287,25 @@ export const indexCommand = async (
 
   const stateAfterIndex = await getRepoState(repoPath);
   if (stateAfterIndex?.liveHealth?.reload_error) {
-    console.log('  Note: A live CodeNexus service failed to adopt the refreshed on-disk index automatically.');
+    console.log('  Note: A live GNexus service failed to adopt the refreshed on-disk index automatically.');
     if (stateAfterIndex.liveHealth.mode === 'background') {
-      console.log('  Run `codenexus manage restart` to recover the background service.');
+      console.log('  Run `gnexus manage restart` to recover the background service.');
     } else {
-      console.log('  Stop and rerun `codenexus manage serve` to recover the foreground service.');
+      console.log('  Stop and rerun `gnexus manage serve` to recover the foreground service.');
     }
   } else if (stateAfterIndex?.detailFlags.includes('service_restart_required')) {
-    console.log('  Note: A live CodeNexus service is still adopting the refreshed on-disk index.');
-    console.log('  Run `codenexus manage status` again shortly to confirm the new index generation is loaded.');
+    console.log('  Note: A live GNexus service is still adopting the refreshed on-disk index.');
+    console.log('  Run `gnexus manage status` again shortly to confirm the new index generation is loaded.');
   } else if (stateAfterIndex?.liveHealth) {
-    console.log('  Note: A live CodeNexus service is running and will adopt the refreshed on-disk index automatically.');
-    console.log('  Run `codenexus manage status` to confirm the service has loaded the new index generation.');
+    console.log('  Note: A live GNexus service is running and will adopt the refreshed on-disk index automatically.');
+    console.log('  Run `gnexus manage status` to confirm the service has loaded the new index generation.');
   } else if (stateAfterIndex?.baseState === 'serving_stale') {
-    console.log('  Note: A live CodeNexus service is running in degraded stale mode.');
-    console.log('  Run `codenexus manage index` again if the repo changes. The live service will adopt the refreshed index automatically when reload succeeds.');
+    console.log('  Note: A live GNexus service is running in degraded stale mode.');
+    console.log('  Run `gnexus manage index` again if the repo changes. The live service will adopt the refreshed index automatically when reload succeeds.');
   }
 
   if (options?.indexOnly) {
-    console.log('  Note: --index-only is satisfied by default; codenexus manage index no longer mutates repo files outside .codenexus.');
+    console.log('  Note: --index-only is satisfied by default; gnexus manage index no longer mutates repo files outside .gnexus.');
   }
 
   if (kuzuWarnings.length > 0) {

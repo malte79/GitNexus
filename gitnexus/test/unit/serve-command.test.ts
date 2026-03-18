@@ -40,7 +40,7 @@ describe('serveCommand', () => {
 
     expect(process.exitCode).toBe(1);
     expect(errorSpy).toHaveBeenCalled();
-    expect(errorSpy.mock.calls.flat().join(' ')).toContain('Run `codenexus manage init` first');
+    expect(errorSpy.mock.calls.flat().join(' ')).toContain('Run `gnexus manage init` first');
 
     await repo.cleanup();
   });

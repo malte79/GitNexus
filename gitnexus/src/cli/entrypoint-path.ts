@@ -26,7 +26,7 @@ export function resolveCliInvocation(commandArgs: string[]): CliInvocation {
   }
 
   throw new Error(
-    `CodeNexus CLI child invocation requires built CLI assets at ${candidateEntrypoints[0]} or ${candidateEntrypoints[1]}. ` +
+    `GNexus CLI child invocation requires built CLI assets at ${candidateEntrypoints[0]} or ${candidateEntrypoints[1]}. ` +
       'Run `npm run build --prefix gitnexus` before using background service commands from a source checkout.',
   );
 }

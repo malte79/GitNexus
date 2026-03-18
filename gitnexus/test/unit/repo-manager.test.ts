@@ -29,10 +29,10 @@ async function createGitRepo(prefix: string) {
   return handle;
 }
 
-async function ignoreCodeNexusDir(repoPath: string): Promise<void> {
-  await fs.writeFile(path.join(repoPath, '.gitignore'), '.codenexus/\n', 'utf-8');
+async function ignoreGNexusDir(repoPath: string): Promise<void> {
+  await fs.writeFile(path.join(repoPath, '.gitignore'), '.gnexus/\n', 'utf-8');
   execSync('git add .gitignore', { cwd: repoPath });
-  execSync('git commit -q -m "ignore .codenexus"', { cwd: repoPath });
+  execSync('git commit -q -m "ignore .gnexus"', { cwd: repoPath });
 }
 
 async function createHealthServer(health: {
@@ -60,7 +60,7 @@ async function createHealthServer(health: {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       version: 1,
-      service: 'codenexus',
+      service: 'gnexus',
       port: boundPort,
       ...health,
     }));
@@ -118,17 +118,17 @@ async function createUnrelatedServer(): Promise<{ server: http.Server; port: num
 }
 
 describe('getStoragePath', () => {
-  it('appends .codenexus to resolved repo path', () => {
+  it('appends .gnexus to resolved repo path', () => {
     const result = getStoragePath('/home/user/project');
-    expect(result).toContain('.codenexus');
-    expect(path.basename(result)).toBe('.codenexus');
+    expect(result).toContain('.gnexus');
+    expect(path.basename(result)).toBe('.gnexus');
   });
 });
 
 describe('getStoragePaths', () => {
   it('returns config, meta, kuzu, and runtime paths under storagePath', () => {
     const paths = getStoragePaths('/home/user/project');
-    expect(paths.storagePath).toContain('.codenexus');
+    expect(paths.storagePath).toContain('.gnexus');
     expect(paths.configPath.startsWith(paths.storagePath)).toBe(true);
     expect(paths.metaPath.startsWith(paths.storagePath)).toBe(true);
     expect(paths.kuzuPath.startsWith(paths.storagePath)).toBe(true);
@@ -137,9 +137,9 @@ describe('getStoragePaths', () => {
 });
 
 describe('config and metadata round trips', () => {
-  it('saves and loads config from .codenexus/config.toml', async () => {
+  it('saves and loads config from .gnexus/config.toml', async () => {
     const handle = await createTempDir('repo-manager-config-');
-    const storagePath = path.join(handle.dbPath, '.codenexus');
+    const storagePath = path.join(handle.dbPath, '.gnexus');
 
     await saveConfig(storagePath, {
       version: 1,
@@ -158,9 +158,9 @@ describe('config and metadata round trips', () => {
     await handle.cleanup();
   });
 
-  it('saves and loads index metadata from .codenexus/meta.json', async () => {
+  it('saves and loads index metadata from .gnexus/meta.json', async () => {
     const handle = await createTempDir('repo-manager-meta-');
-    const storagePath = path.join(handle.dbPath, '.codenexus');
+    const storagePath = path.join(handle.dbPath, '.gnexus');
 
     await saveMeta(storagePath, {
       version: 1,
@@ -190,8 +190,8 @@ describe('repo-local state', () => {
 
   it('reports initialized_unindexed when config exists without a usable index', async () => {
     const repo = await createGitRepo('repo-manager-state-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    await saveConfig(path.join(repo.dbPath, '.codenexus'), { version: 1, port: 4747 });
+    await ignoreGNexusDir(repo.dbPath);
+    await saveConfig(path.join(repo.dbPath, '.gnexus'), { version: 1, port: 4747 });
 
     const state = await getRepoState(repo.dbPath);
     expect(state?.baseState).toBe('initialized_unindexed');
@@ -204,10 +204,10 @@ describe('repo-local state', () => {
     execSync('git config user.email "test@example.com"', { cwd: repo.dbPath });
     execSync('git config user.name "Test User"', { cwd: repo.dbPath });
     const unbornBranch = execSync('git branch --show-current', { cwd: repo.dbPath }).toString().trim();
-    await fs.writeFile(path.join(repo.dbPath, '.gitignore'), '.codenexus/\n', 'utf-8');
+    await fs.writeFile(path.join(repo.dbPath, '.gitignore'), '.gnexus/\n', 'utf-8');
     await fs.writeFile(path.join(repo.dbPath, 'hello.ts'), 'export const hello = 42;\n', 'utf-8');
 
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     await saveConfig(storagePath, { version: 1, port: 4747 });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
@@ -228,8 +228,8 @@ describe('repo-local state', () => {
 
   it('loads a usable indexed repo only when config, meta, and kuzu exist', async () => {
     const repo = await createGitRepo('repo-manager-indexed-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     await saveConfig(storagePath, { version: 1, port: 4747 });
     await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
     await saveMeta(storagePath, {
@@ -249,8 +249,8 @@ describe('repo-local state', () => {
 
   it('reports serving_current when a live local service answers on the configured port', async () => {
     const repo = await createGitRepo('repo-manager-serving-current-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     const startedAt = new Date().toISOString();
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
@@ -289,8 +289,8 @@ describe('repo-local state', () => {
 
   it('reports serving_stale when a live local service exists but the index is stale', async () => {
     const repo = await createGitRepo('repo-manager-serving-stale-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     const startedAt = new Date().toISOString();
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
@@ -330,8 +330,8 @@ describe('repo-local state', () => {
 
   it('marks runtime metadata stale when runtime.json claims a service but no live service answers', async () => {
     const repo = await createGitRepo('repo-manager-runtime-stale-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     const { server, port } = await createUnrelatedServer();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 
@@ -361,8 +361,8 @@ describe('repo-local state', () => {
 
   it('does not report serving state when an unrelated process owns the configured port', async () => {
     const repo = await createGitRepo('repo-manager-unrelated-port-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     const { server, port } = await createUnrelatedServer();
 
     await saveConfig(storagePath, { version: 1, port });
@@ -382,8 +382,8 @@ describe('repo-local state', () => {
 
   it('marks runtime metadata stale when the configured port is live but runtime.json is missing', async () => {
     const repo = await createGitRepo('repo-manager-missing-runtime-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     const loadedIndex = buildLoadedIndex(repo.dbPath);
     const { server, port } = await createHealthServer({
       mode: 'foreground',
@@ -409,7 +409,7 @@ describe('repo-local state', () => {
     await repo.cleanup();
   });
 
-  it('can probe a live CodeNexus service identity payload', async () => {
+  it('can probe a live GNexus service identity payload', async () => {
     const repo = await createGitRepo('repo-manager-health-probe-');
     const startedAt = new Date().toISOString();
     const loadedIndex = buildLoadedIndex(repo.dbPath);
@@ -423,7 +423,7 @@ describe('repo-local state', () => {
     });
 
     const health = await probeServiceHealth(port);
-    expect(health?.service).toBe('codenexus');
+    expect(health?.service).toBe('gnexus');
     expect(health?.repo_root).toBe(realpathSync(repo.dbPath));
     expect(health?.loaded_index.indexed_head).toBe(loadedIndex.indexed_head);
 
@@ -433,8 +433,8 @@ describe('repo-local state', () => {
 
   it('reports serving_stale and service_restart_required while a live service still serves an older loaded index', async () => {
     const repo = await createGitRepo('repo-manager-service-restart-required-');
-    await ignoreCodeNexusDir(repo.dbPath);
-    const storagePath = path.join(repo.dbPath, '.codenexus');
+    await ignoreGNexusDir(repo.dbPath);
+    const storagePath = path.join(repo.dbPath, '.gnexus');
     const loadedIndex = buildLoadedIndex(repo.dbPath, { indexed_at: '2026-03-09T00:00:00.000Z' });
     const { server, port } = await createHealthServer({
       mode: 'foreground',

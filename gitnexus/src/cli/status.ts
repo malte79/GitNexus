@@ -75,26 +75,26 @@ export const statusCommand = async () => {
     console.log(`Config error: ${state.configError}`);
   }
   if (state.baseState === 'indexed_stale') {
-    console.log('Refresh action: run `codenexus manage index` to refresh the on-disk index.');
+    console.log('Refresh action: run `gnexus manage index` to refresh the on-disk index.');
   }
   if (state.baseState === 'serving_stale') {
     if (state.liveHealth?.reload_error) {
       console.log('Primary stale reason: the live service failed to reload the refreshed on-disk index.');
       if (state.liveHealth.mode === 'background') {
-        console.log('Reload action: run `codenexus manage restart` to recover from the last live-reload failure.');
+        console.log('Reload action: run `gnexus manage restart` to recover from the last live-reload failure.');
       } else {
-        console.log('Reload action: stop and rerun `codenexus manage serve` to recover from the last live-reload failure.');
+        console.log('Reload action: stop and rerun `gnexus manage serve` to recover from the last live-reload failure.');
       }
     } else if (state.detailFlags.includes('service_restart_required')) {
       console.log('Primary stale reason: the live service has not adopted the refreshed on-disk index yet.');
-      console.log('Reload action: the live service is still adopting the refreshed on-disk index. Check `codenexus manage status` again shortly.');
+      console.log('Reload action: the live service is still adopting the refreshed on-disk index. Check `gnexus manage status` again shortly.');
     } else {
       if (state.detailFlags.includes('working_tree_dirty')) {
         console.log('Primary stale reason: the working tree is dirty relative to the indexed snapshot.');
       } else if (state.detailFlags.includes('head_changed') || state.detailFlags.includes('branch_changed')) {
         console.log('Primary stale reason: the repo HEAD or branch diverged from the indexed snapshot.');
       }
-      console.log('Refresh action: run `codenexus manage index` to refresh the on-disk index. The live service will adopt the refreshed index automatically.');
+      console.log('Refresh action: run `gnexus manage index` to refresh the on-disk index. The live service will adopt the refreshed index automatically.');
     }
     if (autoIndex?.backoff_until) {
       console.log('Auto-index note: automatic freshness is temporarily paused by backoff after a recent failure.');

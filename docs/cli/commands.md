@@ -2,68 +2,68 @@
 
 ## Purpose
 
-This document defines the v1 user-facing CLI contract for CodeNexus.
+This document defines the v1 user-facing CLI contract for GNexus.
 
 The CLI is split into two planes:
 
 - use plane:
-  - `codenexus help`
-  - `codenexus query`
-  - `codenexus context`
-  - `codenexus impact`
-  - `codenexus detect-changes`
-  - `codenexus cypher`
-  - `codenexus rename`
-  - `codenexus summary`
+  - `gnexus help`
+  - `gnexus query`
+  - `gnexus context`
+  - `gnexus impact`
+  - `gnexus detect-changes`
+  - `gnexus cypher`
+  - `gnexus rename`
+  - `gnexus summary`
 - manage plane:
-  - `codenexus manage init`
-  - `codenexus manage index`
-  - `codenexus manage status`
-  - `codenexus manage serve`
-  - `codenexus manage start`
-  - `codenexus manage stop`
-  - `codenexus manage restart`
+  - `gnexus manage init`
+  - `gnexus manage index`
+  - `gnexus manage status`
+  - `gnexus manage serve`
+  - `gnexus manage start`
+  - `gnexus manage stop`
+  - `gnexus manage restart`
 
 All commands resolve the nearest enclosing git root as the active repo boundary.
 
 ## Command-Surface Rules
 
 - top-level structural commands are for daily analysis work
-- `codenexus manage ...` is for repo activation, indexing, status, and service lifecycle
+- `gnexus manage ...` is for repo activation, indexing, status, and service lifecycle
 - top-level structural commands still use the repo-local MCP HTTP service
 - top-level structural commands must not bypass the service or auto-start it
-- when the service is unavailable, top-level structural commands fail clearly and point to `codenexus manage start`
-- old top-level admin commands and `codenexus info` are removed from the active CLI surface
+- when the service is unavailable, top-level structural commands fail clearly and point to `gnexus manage start`
+- old top-level admin commands and `gnexus info` are removed from the active CLI surface
 
-## `codenexus help`
+## `gnexus help`
 
-Print Markdown guidance for installing and using CodeNexus.
+Print Markdown guidance for installing and using GNexus.
 
 Contract:
 
 - read-only
 - prints Markdown only
-- explains what CodeNexus is and the split between everyday analysis commands and `manage` lifecycle commands
+- explains what GNexus is and the split between everyday analysis commands and `manage` lifecycle commands
 - documents the normal remediation path when the service is unavailable or stale:
-  - `codenexus manage start`
-  - `codenexus manage index`
-  - `codenexus manage restart`
+  - `gnexus manage start`
+  - `gnexus manage index`
+  - `gnexus manage restart`
 - includes a short example workflow for normal CLI use
 - includes brief use cases and example calls for each supported structural command type
-- documents owner-biased discovery with `codenexus query --owners`, concise subsystem summary with `codenexus summary --subsystems`, and the explicit detailed alternate `codenexus summary --subsystems-detailed`
-- does not mention GitNexus naming, `gitnexus://` resources, API endpoints, MCP, or transport internals in the default help output
+- documents owner-biased discovery with `gnexus query --owners`, concise subsystem summary with `gnexus summary --subsystems`, and the explicit detailed alternate `gnexus summary --subsystems-detailed`
+- does not mention retired product names, `gnexus://` resources, API endpoints, MCP, or transport internals in the default help output
 
 ## Top-Level Structural Commands
 
 The top-level structural commands are:
 
-- `codenexus query`
-- `codenexus context`
-- `codenexus impact`
-- `codenexus detect-changes`
-- `codenexus cypher`
-- `codenexus rename`
-- `codenexus summary`
+- `gnexus query`
+- `gnexus context`
+- `gnexus impact`
+- `gnexus detect-changes`
+- `gnexus cypher`
+- `gnexus rename`
+- `gnexus summary`
 
 Shared contract:
 
@@ -80,66 +80,66 @@ Shared contract:
 - `context`, `impact`, and `rename` use the same disambiguation model:
   - symbol name or `--uid`
   - optional `--file-path` when the symbol name is ambiguous
-- `codenexus context` also accepts `--file` as a shorthand alias for `--file-path`
-- `codenexus context` and `codenexus impact` may also resolve an obvious engineer-facing module name through the same general lookup stack when it is unambiguous:
+- `gnexus context` also accepts `--file` as a shorthand alias for `--file-path`
+- `gnexus context` and `gnexus impact` may also resolve an obvious engineer-facing module name through the same general lookup stack when it is unambiguous:
   - exact symbol name
   - exported module symbol
   - file basename
   - safe shorthand derived from indexed facts
-- `codenexus context` may explain when a Luau module is a weak returned-table wrapper and therefore only exposes grounded delegate members from the returned table
-- `codenexus context` may also surface grounded backing-container members for weak returned-table wrappers when the wrapper explicitly delegates into a named local table; those backing members are structural context, not exported module members
-- `codenexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
-- `codenexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
-- `codenexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
-- `codenexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
-- `codenexus summary --subsystems` is the concise subsystem view for daily use
+- `gnexus context` may explain when a Luau module is a weak returned-table wrapper and therefore only exposes grounded delegate members from the returned table
+- `gnexus context` may also surface grounded backing-container members for weak returned-table wrappers when the wrapper explicitly delegates into a named local table; those backing members are structural context, not exported module members
+- `gnexus impact` may return `affected_areas` when direct blast radius is grounded at the file level but the graph does not attach process or community memberships strongly enough to populate `affected_processes` or `affected_modules`
+- `gnexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
+- `gnexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
+- `gnexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
+- `gnexus summary --subsystems` is the concise subsystem view for daily use
 - concise subsystem rows prefer architecturally representative owners and hotspots, and may omit weakly grounded or helper-level labels rather than forcing them into an unrelated subsystem
 - concise subsystem rows evaluate a wider candidate set before truncation and rank by representative quality, so broad or weakly grounded buckets do not crowd out stronger subsystem rows just because they were discovered earlier
-- `codenexus summary --subsystems-detailed` is the explicit detailed subsystem breakdown
-- `codenexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
+- `gnexus summary --subsystems-detailed` is the explicit detailed subsystem breakdown
+- `gnexus cypher` must surface first-party recovery guidance for both relationship near misses such as `type(r)` and property misses such as `File.lineCount`
 - the primary Cypher recovery resources are:
-  - `gitnexus://schema`
-  - `gitnexus://properties`
-  - `gitnexus://properties/{nodeType}`
+  - `gnexus://schema`
+  - `gnexus://properties`
+  - `gnexus://properties/{nodeType}`
 
-## `codenexus manage init`
+## `gnexus manage init`
 
-Activate CodeNexus for the current repo boundary.
+Activate GNexus for the current repo boundary.
 
 Contract:
 
-- creates `.codenexus/` if missing
-- creates `.codenexus/config.toml` if missing
+- creates `.gnexus/` if missing
+- creates `.gnexus/config.toml` if missing
 - initial v1 config uses port `4747`
 - initial v1 config enables background auto-index with a `300` second interval
 - idempotent when config already exists
 - must not create index or runtime files
-- must not mutate files outside `.codenexus/`
+- must not mutate files outside `.gnexus/`
 
-## `codenexus manage index`
+## `gnexus manage index`
 
 Build or refresh the local repo index.
 
 Contract:
 
 - initial build and manual refresh path
-- creates or replaces `.codenexus/kuzu/`
-- creates or replaces `.codenexus/meta.json`
+- creates or replaces `.gnexus/kuzu/`
+- creates or replaces `.gnexus/meta.json`
 - must not rewrite `config.toml`
-- must not mutate files outside `.codenexus/`
-- owns `.codenexus/index.lock` while an index run is active
+- must not mutate files outside `.gnexus/`
+- owns `.gnexus/index.lock` while an index run is active
 - may run on a dirty working tree
 - if a service is already running, the live service adopts the rebuilt index automatically in the normal path
 - if live reload fails, it must tell the operator how to recover the affected service
 
-## `codenexus manage status`
+## `gnexus manage status`
 
 Report repo configuration, index freshness, and service state.
 
 Contract:
 
 - read-only
-- may read `.codenexus/config.toml`, `.codenexus/meta.json`, and `.codenexus/runtime.json`
+- may read `.gnexus/config.toml`, `.gnexus/meta.json`, and `.gnexus/runtime.json`
 - may probe the local MCP HTTP service
 - live probes are bounded and must not hang indefinitely
 - reports:
@@ -149,7 +149,7 @@ Contract:
   - background auto-index config and runtime facts when available
   - whether stale serving is caused primarily by dirty state, divergence, pending live adoption, reload failure, or auto-index backoff
 
-## `codenexus manage serve`
+## `gnexus manage serve`
 
 Start the repo-local MCP HTTP service for the active repo boundary in the foreground.
 
@@ -158,26 +158,26 @@ Contract:
 - fails if the repo is uninitialized
 - fails if no usable index exists
 - binds the configured port only
-- writes `.codenexus/runtime.json` on successful startup
-- removes `.codenexus/runtime.json` on graceful shutdown
+- writes `.gnexus/runtime.json` on successful startup
+- removes `.gnexus/runtime.json` on graceful shutdown
 - may serve a stale index only with explicit degraded reporting
 - must not run background auto-index polling
 
-## `codenexus manage start`
+## `gnexus manage start`
 
 Start the same repo-local MCP HTTP service in detached background mode.
 
 Contract:
 
-- uses the same runtime implementation and health contract as `codenexus manage serve`
+- uses the same runtime implementation and health contract as `gnexus manage serve`
 - fails loudly if the matching repo-local service is already running
 - only detached background mode may run automatic freshness polling
 - when `auto_index = true`, polls for repo divergence every `auto_index_interval_seconds`
 - branch switches and dirty-state flips are treated as ordinary repo divergence
-- must not trigger auto-index while another `codenexus manage index` run or live reload is already in flight
-- repeated auto-index failures must back off and remain visible through `codenexus manage status`
+- must not trigger auto-index while another `gnexus manage index` run or live reload is already in flight
+- repeated auto-index failures must back off and remain visible through `gnexus manage status`
 
-## `codenexus manage stop`
+## `gnexus manage stop`
 
 Stop the repo-local background service for the active repo boundary.
 
@@ -186,14 +186,14 @@ Contract:
 - targets only the matching repo-local service
 - must not stop unrelated processes or services for other repos
 
-## `codenexus manage restart`
+## `gnexus manage restart`
 
 Restart the repo-local background service for the active repo boundary.
 
 Contract:
 
 - deterministic stop/start cycle
-- uses the same detached runtime as `codenexus manage start`
+- uses the same detached runtime as `gnexus manage start`
 
 ## Wrong-Context Behavior
 

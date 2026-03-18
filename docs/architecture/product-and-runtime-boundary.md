@@ -2,20 +2,20 @@
 
 ## Purpose
 
-CodeNexus is a repo-activated code-intelligence backend for AI agents.
+GNexus is a repo-activated code-intelligence backend for AI agents.
 
 Its v1 product boundary is:
 
-- one repo-local state directory: `.codenexus/`
+- one repo-local state directory: `.gnexus/`
 - one primary transport: repo-local MCP over HTTP
 - one primary audience: AI agents
 - one primary storage engine: Kuzu
-- one primary lifecycle: `codenexus init`, `codenexus index`, `codenexus status`, `codenexus serve`
+- one primary lifecycle: `gnexus init`, `gnexus index`, `gnexus status`, `gnexus serve`
 
 ## V1 Invariants
 
-- CodeNexus may create or update state only under `.codenexus/`.
-- The no-mutation rule outside `.codenexus/` is absolute in v1.
+- GNexus may create or update state only under `.gnexus/`.
+- The no-mutation rule outside `.gnexus/` is absolute in v1.
 - The operative repo boundary is the nearest enclosing git root.
 - Nested git repos are separate repo boundaries from their parents.
 - Git worktrees are separate runtime boundaries in v1.
@@ -32,7 +32,7 @@ All v1 commands resolve the nearest enclosing git root and treat it as the activ
 
 ### Nested Repos
 
-If a command is run inside a nested git repo, the nested repo wins. The parent repo's `.codenexus/` must not be treated as the active boundary from inside the nested repo.
+If a command is run inside a nested git repo, the nested repo wins. The parent repo's `.gnexus/` must not be treated as the active boundary from inside the nested repo.
 
 ### Worktrees
 
@@ -53,7 +53,7 @@ The MCP service is repo-scoped, not multi-repo. It serves only the repo boundary
 - stdio as the primary runtime transport
 - automatic background freshness guarantees
 - branch-specific index stores
-- repo mutation outside `.codenexus/`
+- repo mutation outside `.gnexus/`
 - human-oriented visualization as a core product surface
 - a storage-engine migration away from Kuzu
 

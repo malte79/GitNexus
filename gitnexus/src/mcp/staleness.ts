@@ -1,7 +1,7 @@
 /**
  * Staleness Check
  * 
- * Checks if the GitNexus index is behind the current git HEAD.
+ * Checks if the GNexus index is behind the current git HEAD.
  * Returns a hint for the LLM to call analyze if stale.
  */
 

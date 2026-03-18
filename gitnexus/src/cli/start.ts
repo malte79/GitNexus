@@ -11,14 +11,14 @@ export const startCommand = async () => {
       stdio: 'ignore',
       env: {
         ...process.env,
-        CODENEXUS_SERVICE_MODE: 'background',
+        GNEXUS_SERVICE_MODE: 'background',
       },
     });
 
     child.unref();
 
     const health = await waitForRepoLocalService(process.cwd());
-    console.log(`CodeNexus service started in background (pid ${health.pid})`);
+    console.log(`GNexus service started in background (pid ${health.pid})`);
     console.log(`Listening on http://127.0.0.1:${health.port}`);
   } catch (error) {
     if (error instanceof DuplicateServiceError || error instanceof ServiceStartupError) {

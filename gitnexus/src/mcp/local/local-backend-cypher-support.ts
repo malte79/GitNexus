@@ -21,7 +21,7 @@ export class LocalBackendCypherSupport {
       return {
         error: errorMessage,
         hint: "Use the CodeRelation `type` property instead of `type(r)`. Example: MATCH (a)-[r:CodeRelation {type: 'CALLS'}]->(b) RETURN a.name, b.name LIMIT 20",
-        schema_resource: 'gitnexus://schema',
+        schema_resource: 'gnexus://schema',
         starter_queries: starterQueries,
       };
     }
@@ -32,15 +32,15 @@ export class LocalBackendCypherSupport {
       const variableName = propertyErrorMatch[2];
       const nodeType = this.extractCypherVariableLabel(query, variableName);
       const availableProperties = nodeType ? getNodeProperties(nodeType) : null;
-      const propertyResource = nodeType ? getPropertyResourceUri(nodeType) : 'gitnexus://properties';
+      const propertyResource = nodeType ? getPropertyResourceUri(nodeType) : 'gnexus://properties';
       const hint = availableProperties
         ? `Property \`${propertyName}\` is not available on ${nodeType}. Available properties include: ${availableProperties.join(', ')}.`
-        : `Property \`${propertyName}\` is not available on \`${variableName}\`. Read gitnexus://properties and gitnexus://schema to inspect available node properties.`;
+        : `Property \`${propertyName}\` is not available on \`${variableName}\`. Read gnexus://properties and gnexus://schema to inspect available node properties.`;
 
       return {
         error: errorMessage,
         hint,
-        schema_resource: 'gitnexus://schema',
+        schema_resource: 'gnexus://schema',
         property_resource: propertyResource,
         ...(availableProperties ? { available_properties: availableProperties } : {}),
         starter_queries: starterQueries,
@@ -50,8 +50,8 @@ export class LocalBackendCypherSupport {
     return {
       error: errorMessage,
       hint: 'Use read-only Cypher over the single CodeRelation table and filter edge kinds with the `type` property.',
-      schema_resource: 'gitnexus://schema',
-      property_resource: 'gitnexus://properties',
+      schema_resource: 'gnexus://schema',
+      property_resource: 'gnexus://properties',
       starter_queries: starterQueries,
     };
   }

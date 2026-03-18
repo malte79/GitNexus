@@ -1,18 +1,18 @@
 ---
 name: release
-description: Publish the current CodeNexus checkout to the server-wide codenexus command by building and globally linking it, but only when the current branch is main and the worktree is clean.
+description: Publish the current GNexus checkout to the server-wide gnexus command by building and globally linking it, but only when the current branch is main and the worktree is clean.
 ---
 
 # release
 
-Use this when the user asks to release CodeNexus globally from this checkout.
+Use this when the user asks to release GNexus globally from this checkout.
 
 ## Hard Rules
 
 - Run only from branch `main`.
 - Run only when the working tree is clean.
 - If either precondition fails, stop and report the blocking state. Do not build or link anyway.
-- This skill releases to the current machine by updating the global `codenexus` command with `npm link --prefix gitnexus`.
+- This skill releases to the current machine by updating the global `gnexus` command from the package directory with `cd gitnexus && npm link`.
 - Do not publish to npm or perform any git workflow as part of `release`.
 
 ## Workflow
@@ -25,10 +25,10 @@ Use this when the user asks to release CodeNexus globally from this checkout.
 4. Build the package:
    - `npm run build --prefix gitnexus`
 5. Install the current checkout globally on the machine:
-   - `npm link --prefix gitnexus`
+   - `cd gitnexus && npm link`
 6. Verify the installed command:
-   - `which codenexus`
-   - `codenexus --version`
+   - `which gnexus`
+   - `gnexus --version`
 
 ## Output Requirements
 
@@ -37,5 +37,5 @@ Always report:
 - clean-tree precondition result
 - build result
 - global install result
-- final `codenexus` path
-- final `codenexus` version
+- final `gnexus` path
+- final `gnexus` version

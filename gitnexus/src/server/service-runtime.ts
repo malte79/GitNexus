@@ -16,7 +16,7 @@ import {
   resolveRepoBoundary,
   saveRuntimeMeta,
   type AutoIndexStatus,
-  type CodeNexusConfig,
+  type GNexusConfig,
   type LoadedIndexIdentity,
   type RepoStateSnapshot,
   type RuntimeMeta,
@@ -27,7 +27,7 @@ export class ServiceStartupError extends Error {}
 
 export class DuplicateServiceError extends ServiceStartupError {
   constructor(public readonly health: ServiceHealth) {
-    super(`CodeNexus service is already running for this repo on port ${health.port} (pid ${health.pid}).`);
+    super(`GNexus service is already running for this repo on port ${health.port} (pid ${health.pid}).`);
   }
 }
 
@@ -47,7 +47,7 @@ export interface RunningService {
 function buildHealthPayload(
   repoRoot: string,
   worktreeRoot: string,
-  config: CodeNexusConfig,
+  config: GNexusConfig,
   startedAt: string,
   state: RepoStateSnapshot,
   mode: ServiceMode,
@@ -55,12 +55,12 @@ function buildHealthPayload(
   reloadError?: string,
 ): ServiceHealth {
   if (!state.meta) {
-    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus manage index` first.');
+    throw new ServiceStartupError('No usable GNexus index exists. Run `gnexus manage index` first.');
   }
 
   return {
     version: 1,
-    service: 'codenexus',
+    service: 'gnexus',
     pid: process.pid,
     port: config.port,
     mode,
@@ -76,7 +76,7 @@ function buildHealthPayload(
 const AUTO_INDEX_FAILURE_BACKOFF_MULTIPLIER = 2;
 const AUTO_INDEX_MAX_FAILURE_EXPONENT = 3;
 
-function buildAutoIndexStatus(config: CodeNexusConfig): AutoIndexStatus {
+function buildAutoIndexStatus(config: GNexusConfig): AutoIndexStatus {
   return {
     enabled: config.auto_index,
     interval_seconds: config.auto_index_interval_seconds,
@@ -97,15 +97,15 @@ function buildAutoIndexBackoffUntil(
 function requireStartableState(state: RepoStateSnapshot): void {
   switch (state.baseState) {
     case 'uninitialized':
-      throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus manage init` first.');
+      throw new ServiceStartupError('Repo is not initialized for GNexus. Run `gnexus manage init` first.');
     case 'invalid_config':
       throw new ServiceStartupError(
         state.configError
-          ? `Invalid CodeNexus config: ${state.configError}`
-          : 'Invalid CodeNexus config.',
+          ? `Invalid GNexus config: ${state.configError}`
+          : 'Invalid GNexus config.',
       );
     case 'initialized_unindexed':
-      throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus manage index` first.');
+      throw new ServiceStartupError('No usable GNexus index exists. Run `gnexus manage index` first.');
     case 'indexed_current':
     case 'indexed_stale':
       return;
@@ -121,7 +121,7 @@ async function createBoundBackend(repoRoot: string): Promise<LocalBackend> {
   const backend = new LocalBackend(repoRoot);
   const initialized = await backend.init();
   if (!initialized) {
-    throw new ServiceStartupError('No usable CodeNexus index exists. Run `codenexus manage index` first.');
+    throw new ServiceStartupError('No usable GNexus index exists. Run `gnexus manage index` first.');
   }
   return backend;
 }
@@ -149,11 +149,11 @@ function buildForeignServiceConflictError(
   }
 
   return new ServiceStartupError(
-    `Configured port ${liveHealth.port} is already in use by CodeNexus for repo ${liveHealth.repo_root}.`,
+    `Configured port ${liveHealth.port} is already in use by GNexus for repo ${liveHealth.repo_root}.`,
   );
 }
 
-async function assertNoConflictingCodeNexusService(
+async function assertNoConflictingGNexusService(
   port: number,
   repoRoot: string,
   worktreeRoot: string,
@@ -214,7 +214,7 @@ async function bindServer(server: http.Server, port: number): Promise<void> {
 }
 
 export async function startRepoLocalService(startPath = process.cwd()): Promise<RunningService> {
-  const mode: ServiceMode = process.env.CODENEXUS_SERVICE_MODE === 'background' ? 'background' : 'foreground';
+  const mode: ServiceMode = process.env.GNEXUS_SERVICE_MODE === 'background' ? 'background' : 'foreground';
   const boundary = resolveRepoBoundary(startPath);
   if (!boundary) {
     throw new ServiceStartupError('Not inside a git repository.');
@@ -229,7 +229,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
   requireStartableState(state);
 
   if (!state.config) {
-    throw new ServiceStartupError('Missing CodeNexus config. Run `codenexus manage init` first.');
+    throw new ServiceStartupError('Missing GNexus config. Run `gnexus manage init` first.');
   }
 
   if (state.baseState === 'serving_current' || state.baseState === 'serving_stale') {
@@ -239,7 +239,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
     }
   }
 
-  await assertNoConflictingCodeNexusService(state.config.port, repoRoot, worktreeRoot);
+  await assertNoConflictingGNexusService(state.config.port, repoRoot, worktreeRoot);
 
   const backend = await createBoundBackend(repoRoot);
   const startedAt = new Date().toISOString();
@@ -395,7 +395,7 @@ export async function startRepoLocalService(startPath = process.cwd()): Promise<
         cwd: repoRoot,
         env: {
           ...process.env,
-          CODENEXUS_INDEX_REASON: 'auto',
+          GNEXUS_INDEX_REASON: 'auto',
         },
         stdio: 'ignore',
         detached: false,
@@ -525,7 +525,7 @@ export async function stopRepoLocalService(startPath = process.cwd()): Promise<{
   const { repoRoot, worktreeRoot } = boundary;
   const state = await getRepoState(repoRoot);
   if (!state || !state.config) {
-    throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus manage init` first.');
+    throw new ServiceStartupError('Repo is not initialized for GNexus. Run `gnexus manage init` first.');
   }
 
   const { storagePath } = getStoragePaths(repoRoot);
@@ -547,7 +547,7 @@ export async function stopRepoLocalService(startPath = process.cwd()): Promise<{
 
   const stopped = await waitForServiceDown(health.port);
   if (!stopped) {
-    throw new ServiceStartupError(`Timed out waiting for CodeNexus service on port ${health.port} to stop.`);
+    throw new ServiceStartupError(`Timed out waiting for GNexus service on port ${health.port} to stop.`);
   }
 
   await removeRuntimeMeta(storagePath);
@@ -562,10 +562,10 @@ export async function waitForRepoLocalService(startPath = process.cwd(), timeout
 
   const state = await getRepoState(boundary.repoRoot);
   if (!state?.config) {
-    throw new ServiceStartupError('Repo is not initialized for CodeNexus. Run `codenexus manage init` first.');
+    throw new ServiceStartupError('Repo is not initialized for GNexus. Run `gnexus manage init` first.');
   }
 
-  await assertNoConflictingCodeNexusService(state.config.port, boundary.repoRoot, boundary.worktreeRoot);
+  await assertNoConflictingGNexusService(state.config.port, boundary.repoRoot, boundary.worktreeRoot);
 
   const liveHealth = await waitForServiceHealth(
     state.config.port,
@@ -574,7 +574,7 @@ export async function waitForRepoLocalService(startPath = process.cwd(), timeout
     timeoutMs,
   );
   if (!liveHealth) {
-    throw new ServiceStartupError(`Timed out waiting for CodeNexus service on port ${state.config.port} to start.`);
+    throw new ServiceStartupError(`Timed out waiting for GNexus service on port ${state.config.port} to start.`);
   }
   return liveHealth;
 }

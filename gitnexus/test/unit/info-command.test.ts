@@ -5,20 +5,20 @@ describe('renderHelpMarkdown', () => {
   it('documents the use-plane and manage-plane command split', () => {
     const output = renderHelpMarkdown();
 
-    expect(output).toContain('# CodeNexus');
+    expect(output).toContain('# GNexus');
     expect(output).toContain('## Everyday Commands');
     expect(output).toContain('## Admin Commands');
-    expect(output).toContain('codenexus query');
-    expect(output).toContain('codenexus query --owners');
-    expect(output).toContain('codenexus context');
-    expect(output).toContain('codenexus impact');
-    expect(output).toContain('codenexus summary --subsystems');
-    expect(output).toContain('codenexus summary --subsystems-detailed');
-    expect(output).toContain('codenexus manage init');
-    expect(output).toContain('codenexus manage index');
-    expect(output).toContain('codenexus manage status');
-    expect(output).toContain('codenexus manage start');
-    expect(output).not.toContain('codenexus info');
+    expect(output).toContain('gnexus query');
+    expect(output).toContain('gnexus query --owners');
+    expect(output).toContain('gnexus context');
+    expect(output).toContain('gnexus impact');
+    expect(output).toContain('gnexus summary --subsystems');
+    expect(output).toContain('gnexus summary --subsystems-detailed');
+    expect(output).toContain('gnexus manage init');
+    expect(output).toContain('gnexus manage index');
+    expect(output).toContain('gnexus manage status');
+    expect(output).toContain('gnexus manage start');
+    expect(output).not.toContain('gnexus info');
   });
 
   it('stays CLI-first and task-oriented', () => {
@@ -26,9 +26,9 @@ describe('renderHelpMarkdown', () => {
 
     expect(output).toContain('## Normal Workflow');
     expect(output).toContain('## Recovery');
-    expect(output).toContain('codenexus manage start');
-    expect(output).toContain('codenexus manage index');
-    expect(output).toContain('codenexus manage restart');
+    expect(output).toContain('gnexus manage start');
+    expect(output).toContain('gnexus manage index');
+    expect(output).toContain('gnexus manage restart');
   });
 
   it('includes brief use cases and example queries for supported command types', () => {
@@ -53,11 +53,12 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('shape.file');
   });
 
-  it('removes stale GitNexus and transport details from default help', () => {
+  it('removes stale legacy naming and transport details from default help', () => {
     const output = renderHelpMarkdown();
 
     expect(output).not.toContain('GitNexus');
-    expect(output).not.toContain('gitnexus://');
+    expect(output).not.toContain('CodeNexus');
+    expect(output).not.toContain('gnexus://');
     expect(output).not.toContain('MCP');
     expect(output).not.toContain('/api/mcp');
     expect(output).not.toContain('/api/health');

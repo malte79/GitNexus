@@ -1,8 +1,8 @@
 /**
  * Init Command
  *
- * Activates CodeNexus for the nearest enclosing repo boundary by creating
- * `.codenexus/config.toml` when it does not already exist.
+ * Activates GNexus for the nearest enclosing repo boundary by creating
+ * `.gnexus/config.toml` when it does not already exist.
  */
 
 import fs from 'fs/promises';
@@ -11,10 +11,10 @@ import {
   loadConfigStrict,
   resolveRepoBoundary,
   saveConfig,
-  type CodeNexusConfig,
+  type GNexusConfig,
 } from '../storage/repo-manager.js';
 
-const DEFAULT_CONFIG: CodeNexusConfig = {
+const DEFAULT_CONFIG: GNexusConfig = {
   version: 1,
   port: 4747,
   auto_index: true,
@@ -44,7 +44,7 @@ export const initCommand = async () => {
   if (await fileExists(configPath)) {
     try {
       const existing = await loadConfigStrict(storagePath);
-      console.log(`CodeNexus is already initialized for ${repoRoot}`);
+      console.log(`GNexus is already initialized for ${repoRoot}`);
       console.log(`Config: ${configPath}`);
       console.log(`Port: ${existing.port}`);
       console.log(
@@ -53,9 +53,9 @@ export const initCommand = async () => {
       return;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Invalid CodeNexus config at ${configPath}`);
+      console.error(`Invalid GNexus config at ${configPath}`);
       console.error(message);
-      console.error('Repair the existing config and rerun `codenexus manage init`.');
+      console.error('Repair the existing config and rerun `gnexus manage init`.');
       process.exitCode = 1;
       return;
     }
@@ -63,7 +63,7 @@ export const initCommand = async () => {
 
   await saveConfig(storagePath, DEFAULT_CONFIG);
 
-  console.log(`Initialized CodeNexus for ${repoRoot}`);
+  console.log(`Initialized GNexus for ${repoRoot}`);
   console.log(`Created ${configPath}`);
   console.log(`Port: ${DEFAULT_CONFIG.port}`);
   console.log(

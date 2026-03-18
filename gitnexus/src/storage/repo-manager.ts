@@ -5,7 +5,7 @@ import path from 'path';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { getCurrentBranch, getCurrentCommit, getGitRoot, isWorkingTreeDirty } from './git.js';
 
-export const CODENEXUS_DIR = '.codenexus';
+export const GNEXUS_DIR = '.gnexus';
 
 export type RepoBaseState =
   | 'uninitialized'
@@ -33,7 +33,7 @@ export interface LoadedIndexIdentity {
   worktree_root: string;
 }
 
-export interface CodeNexusConfig {
+export interface GNexusConfig {
   version: 1;
   port: number;
   auto_index: boolean;
@@ -72,7 +72,7 @@ export interface RuntimeMeta {
 
 export interface ServiceHealth {
   version: 1;
-  service: 'codenexus';
+  service: 'gnexus';
   pid: number;
   port: number;
   mode: 'foreground' | 'background';
@@ -122,7 +122,7 @@ export interface IndexedRepo {
   kuzuPath: string;
   metaPath: string;
   runtimePath: string;
-  config: CodeNexusConfig;
+  config: GNexusConfig;
   meta: RepoMeta;
 }
 
@@ -132,7 +132,7 @@ export interface RepoStateSnapshot {
   storagePath: string;
   baseState: RepoBaseState;
   detailFlags: RepoDetailFlag[];
-  config: CodeNexusConfig | null;
+  config: GNexusConfig | null;
   meta: RepoMeta | null;
   runtime: RuntimeMeta | null;
   liveHealth: ServiceHealth | null;
@@ -183,7 +183,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function validateConfig(raw: unknown): CodeNexusConfig {
+function validateConfig(raw: unknown): GNexusConfig {
   if (!isRecord(raw)) {
     throw new Error('Config must be a TOML object');
   }
@@ -400,8 +400,8 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
   if (raw.version !== 1) {
     throw new Error('Service health version must be 1');
   }
-  if (raw.service !== 'codenexus') {
-    throw new Error('Service health service must be codenexus');
+  if (raw.service !== 'gnexus') {
+    throw new Error('Service health service must be gnexus');
   }
   if (!Number.isInteger(raw.pid)) {
     throw new Error('Service health pid is required');
@@ -425,7 +425,7 @@ function validateServiceHealth(raw: unknown): ServiceHealth {
 
   return {
     version: 1,
-    service: 'codenexus',
+    service: 'gnexus',
     pid: raw.pid as number,
     port: raw.port,
     mode: raw.mode,
@@ -485,7 +485,7 @@ function loadedIndexMatchesMeta(loadedIndex: LoadedIndexIdentity, meta: RepoMeta
 }
 
 export function getStoragePath(repoPath: string): string {
-  return path.join(path.resolve(repoPath), CODENEXUS_DIR);
+  return path.join(path.resolve(repoPath), GNEXUS_DIR);
 }
 
 export function getStoragePaths(repoPath: string): RepoPaths {
@@ -510,7 +510,7 @@ export function resolveRepoBoundary(fromPath: string): RepoBoundary | null {
   };
 }
 
-export async function loadConfig(storagePath: string): Promise<CodeNexusConfig | null> {
+export async function loadConfig(storagePath: string): Promise<GNexusConfig | null> {
   const configPath = path.join(storagePath, 'config.toml');
   try {
     const raw = await fs.readFile(configPath, 'utf-8');
@@ -520,13 +520,13 @@ export async function loadConfig(storagePath: string): Promise<CodeNexusConfig |
   }
 }
 
-export async function loadConfigStrict(storagePath: string): Promise<CodeNexusConfig> {
+export async function loadConfigStrict(storagePath: string): Promise<GNexusConfig> {
   const configPath = path.join(storagePath, 'config.toml');
   const raw = await fs.readFile(configPath, 'utf-8');
   return validateConfig(parseToml(raw));
 }
 
-export async function saveConfig(storagePath: string, config: CodeNexusConfig): Promise<void> {
+export async function saveConfig(storagePath: string, config: GNexusConfig): Promise<void> {
   await fs.mkdir(storagePath, { recursive: true });
   const configPath = path.join(storagePath, 'config.toml');
   await fs.writeFile(configPath, stringifyToml(config), 'utf-8');
@@ -582,7 +582,7 @@ function isProcessAlive(pid: number): boolean {
 
 export async function loadIndexLock(storagePath: string): Promise<IndexLock | null> {
   try {
-    const { indexLockPath } = getStoragePaths(storagePath.endsWith(CODENEXUS_DIR) ? path.dirname(storagePath) : storagePath);
+    const { indexLockPath } = getStoragePaths(storagePath.endsWith(GNEXUS_DIR) ? path.dirname(storagePath) : storagePath);
     const raw = await fs.readFile(indexLockPath, 'utf-8');
     return validateIndexLock(JSON.parse(raw));
   } catch {
@@ -643,7 +643,7 @@ export async function acquireIndexLock(
     }
 
     if (await isIndexLocked(storagePath)) {
-      throw new Error('Another CodeNexus index is already running for this repo.');
+      throw new Error('Another GNexus index is already running for this repo.');
     }
 
     await writeLock();
@@ -744,7 +744,7 @@ export async function findRepo(startPath: string): Promise<IndexedRepo | null> {
 interface IndexedStateResult {
   baseState: 'uninitialized' | 'invalid_config' | 'initialized_unindexed' | 'indexed_current' | 'indexed_stale';
   detailFlags: RepoDetailFlag[];
-  config: CodeNexusConfig | null;
+  config: GNexusConfig | null;
   meta: RepoMeta | null;
   runtime: RuntimeMeta | null;
   currentHead: string;
@@ -774,7 +774,7 @@ async function evaluateIndexedState(boundary: RepoBoundary): Promise<IndexedStat
     };
   }
 
-  let config: CodeNexusConfig | null = null;
+  let config: GNexusConfig | null = null;
   let configError: string | undefined;
   try {
     config = await loadConfigStrict(storagePath);

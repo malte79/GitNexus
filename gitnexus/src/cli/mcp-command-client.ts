@@ -40,21 +40,21 @@ export async function callRepoTool(
   const config = await loadConfig(storagePath);
   if (!config) {
     throw new Error(
-      'CodeNexus is not initialized for this repo. Run `codenexus manage init`, `codenexus manage index`, then `codenexus manage start`.',
+      'GNexus is not initialized for this repo. Run `gnexus manage init`, `gnexus manage index`, then `gnexus manage start`.',
     );
   }
 
   const indexedRepo = await loadRepo(boundary.repoRoot);
   if (!indexedRepo) {
     throw new Error(
-      'CodeNexus index is not ready for this repo. Run `codenexus manage index`, then `codenexus manage start`.',
+      'GNexus index is not ready for this repo. Run `gnexus manage index`, then `gnexus manage start`.',
     );
   }
 
   const liveHealth = await probeServiceHealth(config.port);
   if (!liveHealth) {
     throw new Error(
-      'CodeNexus service is not running for this repo. Run `codenexus manage start`.',
+      'GNexus service is not running for this repo. Run `gnexus manage start`.',
     );
   }
 
@@ -63,7 +63,7 @@ export async function callRepoTool(
     liveHealth.worktree_root !== boundary.worktreeRoot
   ) {
     throw new Error(
-      `Configured port ${config.port} is serving a different repo (${liveHealth.repo_root}). Stop that service and run \`codenexus manage start\` from the current repo.`,
+      `Configured port ${config.port} is serving a different repo (${liveHealth.repo_root}). Stop that service and run \`gnexus manage start\` from the current repo.`,
     );
   }
 
@@ -71,7 +71,7 @@ export async function callRepoTool(
     new URL(`http://127.0.0.1:${liveHealth.port}/api/mcp`),
   );
   const client = new Client({
-    name: 'codenexus-cli',
+    name: 'gnexus-cli',
     version: '1.0.0',
   });
 

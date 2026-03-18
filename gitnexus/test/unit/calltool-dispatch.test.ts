@@ -66,10 +66,10 @@ import { searchFTSFromKuzu } from '../../src/core/search/bm25-index.js';
 const MOCK_REPO = {
   repoPath: '/tmp/test-project',
   worktreeRoot: '/tmp/test-project',
-  storagePath: '/tmp/test-project/.codenexus',
-  kuzuPath: '/tmp/test-project/.codenexus/kuzu',
-  metaPath: '/tmp/test-project/.codenexus/meta.json',
-  runtimePath: '/tmp/test-project/.codenexus/runtime.json',
+  storagePath: '/tmp/test-project/.gnexus',
+  kuzuPath: '/tmp/test-project/.gnexus/kuzu',
+  metaPath: '/tmp/test-project/.gnexus/meta.json',
+  runtimePath: '/tmp/test-project/.gnexus/runtime.json',
   config: { version: 1, port: 4747 },
   meta: {
     version: 1,
@@ -1036,7 +1036,7 @@ describe('LocalBackend.callTool', () => {
   it('blocks write queries through cypher', async () => {
     const result = await backend.callTool('cypher', { query: 'CREATE (n:Test)' });
     expect(result.error).toContain('Write operations');
-    expect(result.schema_resource).toBe('gitnexus://schema');
+    expect(result.schema_resource).toBe('gnexus://schema');
   });
 
   it('allows read queries through cypher', async () => {
@@ -1050,7 +1050,7 @@ describe('LocalBackend.callTool', () => {
     const result = await backend.callTool('cypher', { query: 'MATCH (a)-[r]->(b) RETURN type(r) AS relType' });
     expect(result.error).toContain('TYPE does not exist');
     expect(result.hint).toContain('CodeRelation `type` property');
-    expect(result.schema_resource).toBe('gitnexus://schema');
+    expect(result.schema_resource).toBe('gnexus://schema');
   });
 
   it('adds property-specific Cypher guidance for missing node properties', async () => {
@@ -1058,7 +1058,7 @@ describe('LocalBackend.callTool', () => {
     const result = await backend.callTool('cypher', { query: "MATCH (f:File) RETURN f.lineCount AS lines" });
     expect(result.error).toContain('lineCount');
     expect(result.hint).toContain('Property `lineCount` is not available on File');
-    expect(result.property_resource).toBe('gitnexus://properties/File');
+    expect(result.property_resource).toBe('gnexus://properties/File');
     expect(result.available_properties).toContain('filePath');
   });
 
@@ -1803,7 +1803,7 @@ describe('LocalBackend.callTool', () => {
   });
 
   it('keeps overload line counts index-consistent when freshness is stale', async () => {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codenexus-shape-'));
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gnexus-shape-'));
     try {
       const relativeFilePath = 'src/demo.lua';
       const absoluteFilePath = path.join(tempRoot, relativeFilePath);

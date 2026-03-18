@@ -2,24 +2,24 @@
 
 ## Purpose
 
-This document defines the v1 `.codenexus/` layout, config and runtime ownership, canonical repo states, and freshness semantics.
+This document defines the v1 `.gnexus/` layout, config and runtime ownership, canonical repo states, and freshness semantics.
 
-## `.codenexus/` Layout
+## `.gnexus/` Layout
 
 | Path | Type | Created by | Purpose | Safe to delete |
 |---|---|---|---|---|
-| `.codenexus/` | container | `codenexus manage init` | Repo-local CodeNexus state root | No |
-| `.codenexus/config.toml` | config | `codenexus manage init` | User-owned repo config | No |
-| `.codenexus/meta.json` | derived index metadata | `codenexus manage index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
-| `.codenexus/kuzu/` | derived index state | `codenexus manage index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |
-| `.codenexus/runtime.json` | advisory runtime state | `codenexus manage serve` or `codenexus manage start` | Last known local HTTP service facts | Yes, but service discovery falls back to live checks only |
-| `.codenexus/index.lock` | advisory index lock | `codenexus manage index` | Serialize manual and background index runs for one repo boundary | Yes, but only when no index is active |
+| `.gnexus/` | container | `gnexus manage init` | Repo-local GNexus state root | No |
+| `.gnexus/config.toml` | config | `gnexus manage init` | User-owned repo config | No |
+| `.gnexus/meta.json` | derived index metadata | `gnexus manage index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
+| `.gnexus/kuzu/` | derived index state | `gnexus manage index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |
+| `.gnexus/runtime.json` | advisory runtime state | `gnexus manage serve` or `gnexus manage start` | Last known local HTTP service facts | Yes, but service discovery falls back to live checks only |
+| `.gnexus/index.lock` | advisory index lock | `gnexus manage index` | Serialize manual and background index runs for one repo boundary | Yes, but only when no index is active |
 
 ## Config Contract
 
 Canonical path:
 
-- `.codenexus/config.toml`
+- `.gnexus/config.toml`
 
 Required fields:
 
@@ -32,10 +32,10 @@ Required fields:
 
 Rewrite rules:
 
-- `codenexus manage init` creates `config.toml` if absent
-- `codenexus manage init` is idempotent if `config.toml` already exists
-- `codenexus manage init` must not silently replace an existing configured port or other user-owned config
-- `codenexus manage index`, `codenexus manage status`, and the service runtime must never rewrite `config.toml`
+- `gnexus manage init` creates `config.toml` if absent
+- `gnexus manage init` is idempotent if `config.toml` already exists
+- `gnexus manage init` must not silently replace an existing configured port or other user-owned config
+- `gnexus manage index`, `gnexus manage status`, and the service runtime must never rewrite `config.toml`
 
 ## Runtime Metadata Contract
 
@@ -43,7 +43,7 @@ Runtime metadata is advisory only.
 
 Canonical path:
 
-- `.codenexus/runtime.json`
+- `.gnexus/runtime.json`
 
 Required fields:
 
@@ -68,8 +68,8 @@ Runtime precedence:
 
 | State | Meaning |
 |---|---|
-| `uninitialized` | `.codenexus/config.toml` is missing |
-| `invalid_config` | `.codenexus/config.toml` exists but is invalid for the v1 config contract |
+| `uninitialized` | `.gnexus/config.toml` is missing |
+| `invalid_config` | `.gnexus/config.toml` exists but is invalid for the v1 config contract |
 | `initialized_unindexed` | config exists, but no usable index exists |
 | `indexed_current` | index exists and is current for the repo boundary |
 | `indexed_stale` | index exists, but freshness checks mark it stale |
@@ -91,8 +91,8 @@ Runtime precedence:
 
 An index is current only when all of the following are true:
 
-- `.codenexus/kuzu/` exists
-- `.codenexus/meta.json` exists with required fields
+- `.gnexus/kuzu/` exists
+- `.gnexus/meta.json` exists with required fields
 - current HEAD equals `indexed_head`
 - current branch equals `indexed_branch`
 - current worktree root equals `worktree_root`
@@ -108,14 +108,14 @@ Serving states require:
 
 ## Manual And Background Refresh
 
-`codenexus manage index` is both:
+`gnexus manage index` is both:
 
 - the initial build command
 - the manual refresh command
 
 When a service is already running:
 
-- `codenexus manage index` refreshes on-disk index state
+- `gnexus manage index` refreshes on-disk index state
 - the running service should adopt the rebuilt index automatically in the normal path
 - while live adoption is still in progress, status may report `serving_stale` with `service_restart_required`
 - if live reload fails, the service continues serving the previous loaded index until the operator recovers it
@@ -123,21 +123,21 @@ When a service is already running:
 In detached background mode:
 
 - background auto-index is controlled by `config.toml`
-- only `codenexus manage start` or `codenexus manage restart` may trigger automatic reindex attempts
+- only `gnexus manage start` or `gnexus manage restart` may trigger automatic reindex attempts
 - background auto-index uses the same freshness inputs as canonical repo-state evaluation
 - background auto-index skips while another index is already running or a live reload is still in progress
 - successful background auto-index still relies on the normal live-reload path for adoption
-- repeated failures enter temporary backoff and must be surfaced through `runtime.json`, live health, and `codenexus manage status`
+- repeated failures enter temporary backoff and must be surfaced through `runtime.json`, live health, and `gnexus manage status`
 
 ## Status Reporting
 
-`codenexus manage status` reports:
+`gnexus manage status` reports:
 
 1. the canonical base state
 2. any applicable detail flags
 3. whether live service information overrode advisory runtime metadata
 
-`codenexus summary --subsystems` reuses that same freshness source for `state`, `indexed_commit`, and `current_commit` so operators do not have to reconcile a second commit identity surface.
+`gnexus summary --subsystems` reuses that same freshness source for `state`, `indexed_commit`, and `current_commit` so operators do not have to reconcile a second commit identity surface.
 
 When stale serving is reported, status should make the dominant cause legible without changing the underlying state model. Common causes include:
 

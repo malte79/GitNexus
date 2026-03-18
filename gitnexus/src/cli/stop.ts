@@ -4,14 +4,14 @@ export const stopCommand = async () => {
   try {
     const result = await stopRepoLocalService(process.cwd());
     if (result.stopped && result.health) {
-      console.log(`Stopped CodeNexus service (pid ${result.health.pid})`);
+      console.log(`Stopped GNexus service (pid ${result.health.pid})`);
       return;
     }
     if (result.cleanedStaleRuntime) {
-      console.log('Removed stale CodeNexus runtime metadata; no live service was running.');
+      console.log('Removed stale GNexus runtime metadata; no live service was running.');
       return;
     }
-    console.log('No live CodeNexus service was running for this repo.');
+    console.log('No live GNexus service was running for this repo.');
   } catch (error) {
     if (error instanceof ServiceStartupError) {
       console.error(error.message);

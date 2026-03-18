@@ -2,14 +2,14 @@
 
 ## Purpose
 
-This document maps the locked CodeNexus runtime contract onto the current repo-local implementation.
+This document maps the locked GNexus runtime contract onto the current repo-local implementation.
 
 ## Owning Modules
 
 | Surface | Owning module | Responsibility |
 |---|---|---|
 | repo boundary resolution | [git.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/git.ts) | nearest git root, current branch, current commit, dirty-worktree checks |
-| `.codenexus` paths and file contracts | [repo-manager.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/repo-manager.ts) | config, meta, runtime paths; schema validation; repo-state evaluation |
+| `.gnexus` paths and file contracts | [repo-manager.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/storage/repo-manager.ts) | config, meta, runtime paths; schema validation; repo-state evaluation |
 | repo-bound query engine coordinator | [local-backend.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend.ts) | one bound repo, one Kuzu handle, one active tool surface, and delegation across the repo-local analysis stack |
 | repo-local runtime/repo support | [local-backend-runtime-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-runtime-support.ts) | nearest-repo resolution, bound repo handle refresh, cached repo context, and repo-freshness summary for the local backend stack |
 | repo-local graph utility support | [local-backend-graph-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/gitnexus/src/mcp/local/local-backend-graph-support.ts) | owner recovery, contained-member recovery, affected-area shaping, and shared graph utility classification for local backend tools |
@@ -41,13 +41,13 @@ This document maps the locked CodeNexus runtime contract onto the current repo-l
 
 The active repo-local layout is:
 
-- `.codenexus/config.toml`
-- `.codenexus/meta.json`
-- `.codenexus/kuzu/`
-- `.codenexus/runtime.json`
-- `.codenexus/index.lock`
+- `.gnexus/config.toml`
+- `.gnexus/meta.json`
+- `.gnexus/kuzu/`
+- `.gnexus/runtime.json`
+- `.gnexus/index.lock`
 
-`codenexus manage index` owns `.codenexus/index.lock` while an index run is active so manual and background reindex attempts serialize on one repo boundary.
+`gnexus manage index` owns `.gnexus/index.lock` while an index run is active so manual and background reindex attempts serialize on one repo boundary.
 
 The live service health contract exposes the loaded index identity the service actually opened at startup. That identity is the source of truth for serving freshness, while `runtime.json` persists the same facts only as advisory recovery state.
 
@@ -56,32 +56,32 @@ The live service health contract exposes the loaded index identity the service a
 The current CLI surface is intentionally split:
 
 - use plane:
-  - `codenexus help`
-  - `codenexus query`
-  - `codenexus context`
-  - `codenexus impact`
-  - `codenexus detect-changes`
-  - `codenexus cypher`
-  - `codenexus rename`
-  - `codenexus summary`
+  - `gnexus help`
+  - `gnexus query`
+  - `gnexus context`
+  - `gnexus impact`
+  - `gnexus detect-changes`
+  - `gnexus cypher`
+  - `gnexus rename`
+  - `gnexus summary`
 - manage plane:
-  - `codenexus manage init`
-  - `codenexus manage index`
-  - `codenexus manage status`
-  - `codenexus manage serve`
-  - `codenexus manage start`
-  - `codenexus manage stop`
-  - `codenexus manage restart`
+  - `gnexus manage init`
+  - `gnexus manage index`
+  - `gnexus manage status`
+  - `gnexus manage serve`
+  - `gnexus manage start`
+  - `gnexus manage stop`
+  - `gnexus manage restart`
 
 The top-level structural commands are thin HTTP clients over the repo-local MCP service. They do not bypass the service and do not auto-start it.
 
 ## Runtime Notes
 
-- `codenexus manage serve` starts the repo-local HTTP service directly
-- `codenexus manage start` runs the same service in detached background mode
+- `gnexus manage serve` starts the repo-local HTTP service directly
+- `gnexus manage start` runs the same service in detached background mode
 - only detached background mode owns automatic freshness polling
-- successful background auto-index still reuses the normal `codenexus manage index` path and the existing live-reload adoption path
-- failure and backoff state is surfaced through `runtime.json`, `/api/health`, and `codenexus manage status`
+- successful background auto-index still reuses the normal `gnexus manage index` path and the existing live-reload adoption path
+- failure and backoff state is surfaced through `runtime.json`, `/api/health`, and `gnexus manage status`
 
 ## Query Surface Notes
 
@@ -134,4 +134,4 @@ Implementation posture:
 - `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`
 - `impact` now exposes machine-readable `risk_dimensions`, `risk_split`, and `shape.file` so operators can separate change risk, local refactor pressure, and raw overload shape on one surface
 - `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)` and property misses such as `File.lineCount`
-- Cypher schema and property discoverability are exposed through `gitnexus://schema`, `gitnexus://properties`, and `gitnexus://properties/{nodeType}`
+- Cypher schema and property discoverability are exposed through `gnexus://schema`, `gnexus://properties`, and `gnexus://properties/{nodeType}`

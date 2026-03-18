@@ -4,13 +4,13 @@ Epic 09 improves the agent-facing usefulness of the existing Luau and Rojo suppo
 
 ## Purpose
 
-CodeNexus is already correct on representative Rojo import-resolution cases. Epic 09 makes those results easier for agents to use by improving three things:
+GNexus is already correct on representative Rojo import-resolution cases. Epic 09 makes those results easier for agents to use by improving three things:
 
 - Luau module-table symbolization
 - deterministic ranking for Roblox and Luau concepts
 - concise Roblox-aware query and context summaries
 
-The goal is not fuzzy semantic retrieval. The goal is better grounded answers from the graph CodeNexus already has.
+The goal is not fuzzy semantic retrieval. The goal is better grounded answers from the graph GNexus already has.
 
 ## In-Scope Module Patterns
 
@@ -102,7 +102,7 @@ After Epic 09:
 
 ## Manual Verification
 
-Real-product verification was performed against [/Users/alex/Projects/roblox/dancegame-agent-3](/Users/alex/Projects/roblox/dancegame-agent-3) through the live `codenexus` service, then checked manually against source.
+Real-product verification was performed against [/Users/alex/Projects/roblox/dancegame-agent-3](/Users/alex/Projects/roblox/dancegame-agent-3) through the live `gnexus` service, then checked manually against source.
 
 Representative verified files:
 

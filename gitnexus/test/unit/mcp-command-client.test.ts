@@ -42,12 +42,12 @@ describe('runRepoToolCommand', () => {
       repoRoot: '/repo',
       worktreeRoot: '/repo',
     });
-    getStoragePaths.mockReturnValue({ storagePath: '/repo/.codenexus' });
+    getStoragePaths.mockReturnValue({ storagePath: '/repo/.gnexus' });
     loadConfig.mockResolvedValue({ version: 1, port: 4747, auto_index: true, auto_index_interval_seconds: 300 });
     loadRepo.mockResolvedValue({ repoPath: '/repo' });
     probeServiceHealth.mockResolvedValue({
       version: 1,
-      service: 'codenexus',
+      service: 'gnexus',
       pid: 1234,
       port: 4747,
       mode: 'background',
@@ -93,7 +93,7 @@ describe('runRepoToolCommand', () => {
     await runRepoToolCommand('query', { query: 'auth' });
 
     expect(errorSpy).toHaveBeenCalledWith(
-      'CodeNexus service is not running for this repo. Run `codenexus manage start`.',
+      'GNexus service is not running for this repo. Run `gnexus manage start`.',
     );
     expect(process.exitCode).toBe(1);
     errorSpy.mockRestore();
@@ -103,7 +103,7 @@ describe('runRepoToolCommand', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     probeServiceHealth.mockResolvedValue({
       version: 1,
-      service: 'codenexus',
+      service: 'gnexus',
       pid: 1234,
       port: 4747,
       mode: 'background',

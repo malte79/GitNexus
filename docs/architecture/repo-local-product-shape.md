@@ -2,7 +2,7 @@
 
 ## Summary
 
-CodeNexus is a globally installed but repo-activated tool for AI-agent code intelligence.
+GNexus is a globally installed but repo-activated tool for AI-agent code intelligence.
 
 The intended runtime model is:
 
@@ -10,24 +10,24 @@ The intended runtime model is:
 
 ## Repo Ownership
 
-Each activated repository owns its own local CodeNexus state under `.codenexus/`.
+Each activated repository owns its own local GNexus state under `.gnexus/`.
 
-CodeNexus should not mutate other files in the repository by default.
+GNexus should not mutate other files in the repository by default.
 
 ## Primary Lifecycle
 
 The intended v1 lifecycle is:
 
-- `codenexus init`
-- `codenexus index`
-- `codenexus status`
-- `codenexus serve`
+- `gnexus init`
+- `gnexus index`
+- `gnexus status`
+- `gnexus serve`
 
 ## Runtime Boundary
 
 The primary runtime interface is a real repo-local MCP server over HTTP.
 
-The server is scoped to one repo boundary and should expose the agent-facing CodeNexus commands for that repo only.
+The server is scoped to one repo boundary and should expose the agent-facing GNexus commands for that repo only.
 
 ## Storage
 

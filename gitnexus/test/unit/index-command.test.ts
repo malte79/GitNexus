@@ -59,11 +59,11 @@ describe('indexCommand', () => {
     getGitRoot.mockReturnValue('/repo');
     isGitRepo.mockReturnValue(true);
     getStoragePaths.mockReturnValue({
-      storagePath: '/repo/.codenexus',
-      configPath: '/repo/.codenexus/config.toml',
-      metaPath: '/repo/.codenexus/meta.json',
-      kuzuPath: '/repo/.codenexus/kuzu',
-      runtimePath: '/repo/.codenexus/runtime.json',
+      storagePath: '/repo/.gnexus',
+      configPath: '/repo/.gnexus/config.toml',
+      metaPath: '/repo/.gnexus/meta.json',
+      kuzuPath: '/repo/.gnexus/kuzu',
+      runtimePath: '/repo/.gnexus/runtime.json',
     });
     loadConfig.mockResolvedValue(null);
     loadMeta.mockResolvedValue(null);
@@ -88,7 +88,7 @@ describe('indexCommand', () => {
 
     expect(getGitRoot).toHaveBeenCalledWith('/repo/src/nested');
     expect(getStoragePaths).toHaveBeenCalledWith('/repo');
-    expect(loadConfig).toHaveBeenCalledWith('/repo/.codenexus');
+    expect(loadConfig).toHaveBeenCalledWith('/repo/.gnexus');
     expect(process.exitCode).toBe(1);
 
     logSpy.mockRestore();
@@ -100,7 +100,7 @@ describe('indexCommand', () => {
       baseState: 'serving_stale',
       detailFlags: ['service_restart_required'],
       liveHealth: {
-        service: 'codenexus',
+        service: 'gnexus',
         mode: 'background',
         pid: 1234,
         port: 4747,
@@ -125,7 +125,7 @@ describe('indexCommand', () => {
     await indexCommand('/repo');
 
     const output = logSpy.mock.calls.flat().join(' ');
-    expect(output).toContain('Note: A live CodeNexus service is still adopting the refreshed on-disk index.');
+    expect(output).toContain('Note: A live GNexus service is still adopting the refreshed on-disk index.');
 
     exitSpy.mockRestore();
     logSpy.mockRestore();
@@ -137,7 +137,7 @@ describe('indexCommand', () => {
       baseState: 'serving_stale',
       detailFlags: ['service_restart_required'],
       liveHealth: {
-        service: 'codenexus',
+        service: 'gnexus',
         mode: 'background',
         pid: 1234,
         port: 4747,
@@ -163,8 +163,8 @@ describe('indexCommand', () => {
     await indexCommand('/repo');
 
     const output = logSpy.mock.calls.flat().join(' ');
-    expect(output).toContain('Note: A live CodeNexus service failed to adopt the refreshed on-disk index automatically.');
-    expect(output).toContain('Run `codenexus manage restart` to recover the background service.');
+    expect(output).toContain('Note: A live GNexus service failed to adopt the refreshed on-disk index automatically.');
+    expect(output).toContain('Run `gnexus manage restart` to recover the background service.');
 
     exitSpy.mockRestore();
     logSpy.mockRestore();

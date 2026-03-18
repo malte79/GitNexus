@@ -10,55 +10,55 @@ const _require = createRequire(import.meta.url);
 const pkg = _require('../../package.json');
 
 const LEGACY_TOP_LEVEL_REDIRECTS: Record<string, string> = {
-  init: 'codenexus manage init',
-  index: 'codenexus manage index',
-  status: 'codenexus manage status',
-  serve: 'codenexus manage serve',
-  start: 'codenexus manage start',
-  stop: 'codenexus manage stop',
-  restart: 'codenexus manage restart',
-  info: 'codenexus help',
+  init: 'gnexus manage init',
+  index: 'gnexus manage index',
+  status: 'gnexus manage status',
+  serve: 'gnexus manage serve',
+  start: 'gnexus manage start',
+  stop: 'gnexus manage stop',
+  restart: 'gnexus manage restart',
+  info: 'gnexus help',
 };
 
 function buildManageCommand(): Command {
   const manage = new Command('manage');
 
   manage
-    .description('Manage repo-local CodeNexus setup, indexing, and service lifecycle')
+    .description('Manage repo-local GNexus setup, indexing, and service lifecycle')
     .command('init')
-    .description('Activate CodeNexus for the current repo boundary')
+    .description('Activate GNexus for the current repo boundary')
     .action(createLazyAction(() => import('./init.js'), 'initCommand'));
 
   manage
     .command('index [path]')
-    .description('Build or refresh the local .codenexus index')
+    .description('Build or refresh the local .gnexus index')
     .option('-f, --force', 'Force full re-index even if up to date')
-    .option('--index-only', 'Index without mutating repo files outside .codenexus/')
+    .option('--index-only', 'Index without mutating repo files outside .gnexus/')
     .action(createLazyAction(() => import('./index-command.js'), 'indexCommand'));
 
   manage
     .command('status')
-    .description('Show CodeNexus status for the current repo boundary')
+    .description('Show GNexus status for the current repo boundary')
     .action(createLazyAction(() => import('./status.js'), 'statusCommand'));
 
   manage
     .command('serve')
-    .description('Start the repo-local CodeNexus service in the foreground')
+    .description('Start the repo-local GNexus service in the foreground')
     .action(createLazyAction(() => import('./serve.js'), 'serveCommand'));
 
   manage
     .command('start')
-    .description('Start the repo-local CodeNexus service in background mode')
+    .description('Start the repo-local GNexus service in background mode')
     .action(createLazyAction(() => import('./start.js'), 'startCommand'));
 
   manage
     .command('stop')
-    .description('Stop the repo-local CodeNexus background service')
+    .description('Stop the repo-local GNexus background service')
     .action(createLazyAction(() => import('./stop.js'), 'stopCommand'));
 
   manage
     .command('restart')
-    .description('Restart the repo-local CodeNexus background service')
+    .description('Restart the repo-local GNexus background service')
     .action(createLazyAction(() => import('./restart.js'), 'restartCommand'));
 
   return manage;
@@ -68,14 +68,14 @@ export function buildProgram(): Command {
   const program = new Command();
 
   program
-    .name('codenexus')
-    .description('CodeNexus CLI for repo-local indexing and serving')
+    .name('gnexus')
+    .description('GNexus CLI for repo-local indexing and serving')
     .version(pkg.version)
     .helpCommand(false);
 
   program
     .command('help')
-    .description('Show usage guidance for CodeNexus analysis and management')
+    .description('Show usage guidance for GNexus analysis and management')
     .action(createLazyAction(() => import('./info.js'), 'helpCommand'));
 
   program
