@@ -14,7 +14,9 @@ run_test() {
 
 run_test test/integration/csv-pipeline.test.ts
 run_test test/integration/filesystem-walker.test.ts
-npx tsx scripts/run-local-backend-integration.ts
+# Direct `npx tsx <file>` is unstable here with native Kuzu teardown under Node 23.
+# `node --import tsx` runs the same harness without the intermittent segfault.
+node --import tsx scripts/run-local-backend-integration.ts
 run_test test/integration/kuzu-pool.test.ts forks
 run_test test/integration/parsing.test.ts
 run_test test/integration/pipeline.test.ts

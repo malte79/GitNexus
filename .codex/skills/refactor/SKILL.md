@@ -7,6 +7,9 @@ description: Use when the user requests a targeted maximum-heavy refactor strike
 
 Use this when the user wants a leaderboard-exit refactor strike on one component, not a lowest-hanging-fruit cleanup pass.
 
+This skill must use the same explicit weighted scoring model as `$refactor-list`.
+Do not declare success from narrative improvement alone.
+
 This skill expects the user to point at a specific component, for example:
 - `gitnexus/src/mcp/local/local-backend.ts`
 - `Local Backend`
@@ -65,6 +68,12 @@ Before proposing the refactor shape:
   - `detect-changes` after edits when the strike touches shared seams
 - use CodeNexus first for cross-file dependency tracing, ownership mapping, and blast-radius estimation
 - treat CodeNexus as mandatory for non-trivial refactor strikes; use `rg` only as a supplement
+- baseline and closeout must both use the shared weighted scoring families:
+  - `Subsystem Pressure`
+  - `Dominant Owner Pressure`
+  - `Blast Radius`
+  - `Boundary Confusion`
+  - `Guardrail Weakness`
 
 ## Required Inputs
 
@@ -88,6 +97,12 @@ Before proposing edits, capture the current component state:
 - mutable global state / caches / registries
 - docs/tests/schema/config companion surfaces
 - current hygiene score for the component
+
+The baseline must also capture:
+
+- `Baseline Component Score`
+- `Baseline Dominant Owner Score`
+- which weighted factors are keeping the component in the worst-offender tier
 
 The baseline must identify why the component is currently a bad offender, not merely that it is large.
 
@@ -116,6 +131,10 @@ The plan must include:
 - invariants that must remain true
 - companion docs/tests/schema/config/version updates
 - post-strike reranking target
+- expected outcome class:
+  - `Leaderboard Exit`
+  - `Major Slice Win`
+  - `Structural Prep Only`
 
 The important phrase is this:
 
@@ -137,6 +156,7 @@ Use `$implement` discipline, but with maximum-heavy refactor expectations.
 Do not declare success unless all are true:
 
 - component reranked materially lower than baseline
+- dominant-owner pressure reranked materially lower than baseline
 - no major duplicate production paths remain
 - main god-module pressure is reduced to acceptable thresholds
 - ownership boundaries are cleaner and easier to explain
@@ -146,11 +166,16 @@ Do not declare success unless all are true:
 - tests/docs/schema/config/version surfaces are in lockstep
 - new guardrails exist where regression risk was previously structural
 
+If the component score does not move enough for a leaderboard exit but the dominant owner score drops materially and real concern families moved, report that as `Major Slice Win`, not as failure and not as full success.
+
 ## Reporting Contract
 
 - `Baseline Score`
+- `Baseline Dominant Owner Score`
 - `Target Score`
+- `Target Dominant Owner Score`
 - `Primary Dominant Owner`
+- `Outcome Class`
 - `Concern Transfer Map`
 - `Before/After Architecture`
 - `Deleted Paths`
@@ -161,3 +186,14 @@ Do not declare success unless all are true:
 - `Validation Evidence`
 - `Residual Risks`
 - `Final Rerank`
+
+`Final Rerank` must state both:
+
+- component rerank
+- dominant-owner rerank
+
+and must say explicitly whether the strike achieved:
+
+- `Leaderboard Exit`
+- `Major Slice Win`
+- `Structural Prep Only`
