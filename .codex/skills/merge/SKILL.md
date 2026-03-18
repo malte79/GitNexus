@@ -13,8 +13,8 @@ This skill is integration and publish only.
 Required pre-merge gates run separately:
 - `codereview` or alias `cr`
 - `mech`
-- `npm run lint:docs --prefix gitnexus`
-- `npm run check:docs-contracts --prefix gitnexus`
+- `npm run lint:docs`
+- `npm run check:docs-contracts`
 
 `merge` must not auto-run those gates.
 The docs gates remain standalone named requirements even if `$mech` executes them as sub-gates.

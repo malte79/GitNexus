@@ -19,7 +19,7 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
   - explicit state and lifecycle ownership,
   - docs lockstep,
   - at least one structural guard that would fail if the subsystem regresses into a monolith, dual path, or ownerless state sink.
-- Use GNexus as the first structural discovery lens when the task touches product code, but do not treat it as a substitute for direct file inspection.
+- Use gnexus as the first structural discovery lens when the task touches product code, but do not treat it as a substitute for direct file inspection.
 - Plan must identify the existing seam to reuse before proposing any new abstraction.
 - Plan must not rely on temporary compatibility shims, migration toggles, or deferred cleanup production paths unless explicitly required.
 - Plan must not widen public behavior or contracts beyond the objective.
@@ -44,7 +44,7 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - when a new subsystem or major surface is proposed:
   - `.codex/skills/subsystem-hygiene/SKILL.md`
 
-If GNexus is stale or unavailable, say so explicitly and continue with direct file inspection.
+If gnexus is stale or unavailable, say so explicitly and continue with direct file inspection.
 
 ## Required Output Sections (Strict Order)
 
@@ -64,19 +64,19 @@ If GNexus is stale or unavailable, say so explicitly and continue with direct fi
 ## Validation Plan (Minimum)
 
 Use targeted checks first:
-- `npm test --prefix gitnexus`
+- `npm test`
 - when core behavior changes materially, include:
-  - `npm run test:integration --prefix gitnexus`
+  - `npm run test:integration`
 - when confidence across the main package is needed, include:
-  - `npm run test:all --prefix gitnexus`
+  - `npm run test:all`
 
-## GNexus Planning Expectations
+## gnexus Planning Expectations
 
 - Use `summary --subsystems` to locate the likely ownership area before proposing edits.
 - Use `query --owners` to identify likely files and symbols to inspect directly.
 - Use `context` to confirm the primary seam before writing the `Reuse Inventory`.
 - If the plan creates a new subsystem or major surface, name the ownership skeleton explicitly in `Boundary Checks` and `Exact Coding Instructions`.
-- If GNexus output and direct file reads disagree, the plan must call that out explicitly instead of picking one silently.
+- If gnexus output and direct file reads disagree, the plan must call that out explicitly instead of picking one silently.
 
 ## Open Questions Output Rule
 

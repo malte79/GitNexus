@@ -8,7 +8,7 @@ This document defines the v1 `.gnexus/` layout, config and runtime ownership, ca
 
 | Path | Type | Created by | Purpose | Safe to delete |
 |---|---|---|---|---|
-| `.gnexus/` | container | `gnexus manage init` | Repo-local GNexus state root | No |
+| `.gnexus/` | container | `gnexus manage init` | Repo-local gnexus state root | No |
 | `.gnexus/config.toml` | config | `gnexus manage init` | User-owned repo config | No |
 | `.gnexus/meta.json` | derived index metadata | `gnexus manage index` | Index metadata used for status and freshness checks | Yes, but index becomes unavailable |
 | `.gnexus/kuzu/` | derived index state | `gnexus manage index` | Kuzu graph store for this repo boundary | Yes, but index becomes unavailable |

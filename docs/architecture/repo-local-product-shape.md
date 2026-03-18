@@ -2,7 +2,7 @@
 
 ## Summary
 
-GNexus is a globally installed but repo-activated tool for AI-agent code intelligence.
+gnexus is a globally installed but repo-activated tool for AI-agent code intelligence.
 
 The intended runtime model is:
 
@@ -10,9 +10,9 @@ The intended runtime model is:
 
 ## Repo Ownership
 
-Each activated repository owns its own local GNexus state under `.gnexus/`.
+Each activated repository owns its own local gnexus state under `.gnexus/`.
 
-GNexus should not mutate other files in the repository by default.
+gnexus should not mutate other files in the repository by default.
 
 ## Primary Lifecycle
 
@@ -27,7 +27,7 @@ The intended v1 lifecycle is:
 
 The primary runtime interface is a real repo-local MCP server over HTTP.
 
-The server is scoped to one repo boundary and should expose the agent-facing GNexus commands for that repo only.
+The server is scoped to one repo boundary and should expose the agent-facing gnexus commands for that repo only.
 
 ## Storage
 

@@ -26,7 +26,7 @@ Structural and ownership risks:
 - multiple production orchestration paths for the same runtime flow,
 - test-only seams exposed to production callers,
 - repo-local state leaking outside `.gnexus/` without explicit approval,
-- GNexus product drift toward non-core surfaces without explicit approval.
+- gnexus product drift toward non-core surfaces without explicit approval.
 
 Advanced reliability and operational risks:
 - threading or lifecycle hazards,
@@ -43,7 +43,7 @@ Advanced reliability and operational risks:
 
 Any `P0`/`P1`/`P2` finding is blocking.
 
-Use GNexus for structural review in this repo when it is available and current, but do not let it replace direct diff reading.
+Use gnexus for structural review in this repo when it is available and current, but do not let it replace direct diff reading.
 
 Duplicate-code rule for this skill:
 - review new duplication introduced by the branch diff only,
@@ -74,12 +74,12 @@ Optional extended scope:
 - fetch remote default branch
 - enumerate changed files in `origin/<default-branch>...HEAD`
 
-2. Run GNexus structural review on the diff when the changed files touch product code:
+2. Run gnexus structural review on the diff when the changed files touch product code:
 - `gnexus manage status`
 - `gnexus detect-changes`
 - `gnexus impact <changed-symbol> --direction upstream` for the highest-risk changed seams
 - `gnexus context <changed-symbol>` when ownership or blast radius is unclear
-- if GNexus is stale or unavailable, say so and continue with direct review
+- if gnexus is stale or unavailable, say so and continue with direct review
 
 3. Run changed-code reuse scan before judging style:
 - for each changed production file, identify the nearest existing ownership seam, helper, module, or abstraction that should have been reused,

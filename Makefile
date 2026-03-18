@@ -1,7 +1,7 @@
 .PHONY: build install
 
 build:
-	npm run build --prefix gitnexus
+	npm run build
 
 install: build
-	npm link --prefix gitnexus
+	npm link
