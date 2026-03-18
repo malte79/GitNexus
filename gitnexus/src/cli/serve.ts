@@ -1,7 +1,7 @@
 /**
  * Serve Command
  *
- * Starts the real repo-local HTTP service for the current CodeNexus repo
+ * Starts the real repo-local HTTP service for the current GNexus repo
  * boundary and keeps the process alive until it is interrupted.
  */
 
@@ -11,7 +11,7 @@ export const serveCommand = async () => {
   try {
     const runtime = await startRepoLocalService(process.cwd());
 
-    console.log(`CodeNexus service started for ${runtime.repoRoot}`);
+    console.log(`GNexus service started for ${runtime.repoRoot}`);
     console.log(`Mode: ${runtime.mode}`);
     console.log(`Listening on http://127.0.0.1:${runtime.port}`);
     if (runtime.degraded) {
@@ -33,7 +33,7 @@ export const serveCommand = async () => {
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`Failed to start CodeNexus service: ${message}`);
+    console.error(`Failed to start GNexus service: ${message}`);
     process.exitCode = 1;
   }
 };

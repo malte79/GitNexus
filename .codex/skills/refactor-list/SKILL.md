@@ -36,9 +36,9 @@ Do not sort components by narrative intuition alone.
 - repo-local skills and guard scripts that affect structural quality
 
 Before ranking:
-- run `codenexus manage status`
-- if freshness matters for a large ranking pass and the index is stale, run `codenexus manage index`
-- use CodeNexus to map subsystem boundaries and dependency shape before relying on broad grep/manual impressions
+- run `gnexus manage status`
+- if freshness matters for a large ranking pass and the index is stale, run `gnexus manage index`
+- use GNexus to map subsystem boundaries and dependency shape before relying on broad grep/manual impressions
 - prefer:
   - `summary --subsystems` for the first broad subsystem/centrality pass
   - `query "<subsystem concept>" --owners` for subsystem discovery
@@ -52,7 +52,7 @@ Before ranking:
 Score each component from `0.0` to `10.0` using the weighted model below.
 
 - `Subsystem Pressure` (`30%`)
-  - CodeNexus subsystem pressure from `summary --subsystems`
+  - GNexus subsystem pressure from `summary --subsystems`
   - production file count
   - visible hotspots
   - visible lifecycle chokepoints
@@ -96,7 +96,7 @@ Build the ranking from current code only. Use signals such as:
 - mutable global state, caches, registries, and lifecycle complexity
 - clarity of engine/MCP/CLI/storage separation
 - testability and guardrail coverage
-- dependency fan-in / fan-out and cross-boundary reachability as seen through CodeNexus `impact`
+- dependency fan-in / fan-out and cross-boundary reachability as seen through GNexus `impact`
 - how hard it is to explain the component cleanly after reading it
 - whether the current dominant owner still owns multiple concern families that should live elsewhere
 

@@ -1,22 +1,22 @@
-# CodeNexus Documentation Policy
+# GNexus Documentation Policy
 
 ## Scope
 
-This repository does not aim to document the inherited GitNexus system wholesale.
+This repository does not aim to document the inherited upstream system wholesale.
 
-The documentation contract applies only to CodeNexus-owned changes:
+The documentation contract applies only to GNexus-owned changes:
 
 - new or changed product contracts
 - new or changed CLI behavior
 - new or changed runtime-state behavior
 - new or changed repo-local filesystem/state ownership
-- new or changed workflow rules that CodeNexus relies on
+- new or changed workflow rules that GNexus relies on
 
-Inherited upstream behavior remains out of scope unless a CodeNexus-owned change modifies it or depends on it as an explicit contract.
+Inherited upstream behavior remains out of scope unless a GNexus-owned change modifies it or depends on it as an explicit contract.
 
 ## Required Documentation Rule
 
-Every CodeNexus-owned contract or behavior change must update matching governed docs in the same change.
+Every GNexus-owned contract or behavior change must update matching governed docs in the same change.
 
 This includes:
 
@@ -26,41 +26,42 @@ This includes:
 
 Required workflow surfaces include the repo-owned workflow contracts in `AGENTS.md` and the required workflow skills used for review, validation, prep, and merge.
 
-In this repo, workflow-skill contract changes also include meaningful shifts in how those skills are expected to use CodeNexus itself. For example:
+In this repo, workflow-skill contract changes also include meaningful shifts in how those skills are expected to use GNexus itself. For example:
 
-- planning skills that now require CodeNexus-first structural discovery before direct file inspection
-- implementation skills that now require CodeNexus seam and blast-radius checks around edits
-- review and ranking skills that now rely on CodeNexus structural outputs as part of their required procedure
+- planning skills that now require GNexus-first structural discovery before direct file inspection
+- implementation skills that now require GNexus seam and blast-radius checks around edits
+- review and ranking skills that now rely on GNexus structural outputs as part of their required procedure
 - new subsystem workflow rules that require an ownership skeleton up front: one thin public seam, focused internal owners, explicit state/lifecycle ownership, docs lockstep, and at least one structural guard
 - leaderboard-exit refactor rules that judge success by authority removal rather than helper extraction alone
 - refactor workflow rules that now require a dedicated `codex/` branch to be created and selected before a refactor strike proceeds, unless the current branch is already the active refactor lane for that target
+- epic assignment workflow rules that now require a dedicated `codex/` branch to be created and selected when assigning an epic to the current agent, unless the current branch is already the active lane for that epic
 - refactor ranking rules that now use an explicit weighted scoring model instead of narrative-only ordering
 - refactor closeout rules that now report both component score and dominant-owner score, plus an explicit outcome class such as `Leaderboard Exit`, `Major Slice Win`, or `Structural Prep Only`
 
-When a CodeNexus-owned contract surface changes, the matching durable update must include a document under `docs/`. Planning-doc-only changes are not sufficient.
+When a GNexus-owned contract surface changes, the matching durable update must include a document under `docs/`. Planning-doc-only changes are not sufficient.
 
 Epics must name exact documentation surfaces in their `Docs:` lines. Placeholder instructions such as `update docs`, `TBD`, `later`, or `if needed` are not acceptable.
 
 ## Pure Refactors
 
-Pure refactors with no CodeNexus-owned contract or behavior change do not require docs updates.
+Pure refactors with no GNexus-owned contract or behavior change do not require docs updates.
 
 They are allowed to pass without governed docs changes only when the docs-contract gate can conclude that no governed docs update is required.
 
 ## Canonical Ownership
 
-Durable CodeNexus documentation lives under `docs/`.
+Durable GNexus documentation lives under `docs/`.
 
 Planning docs remain governed because they lock active direction and epic execution, but they are not the long-term home for durable product documentation.
 
 ## Required Documentation Surfaces
 
-The initial CodeNexus documentation categories are:
+The initial GNexus documentation categories are:
 
 - architecture and contract docs
 - CLI docs
 - decision records
-- feature docs for new CodeNexus-owned systems
+- feature docs for new GNexus-owned systems
 
 The initial stable paths for those categories are defined in [docs/README.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/README.md).
 
@@ -76,7 +77,7 @@ That manifest is the source of truth for:
 
 ## Merge Gates
 
-CodeNexus-owned changes are not merge-ready until the required docs gates pass.
+GNexus-owned changes are not merge-ready until the required docs gates pass.
 
 The named docs gates are:
 

@@ -4,7 +4,7 @@ Epic 08 adds Roblox-aware static resolution for Rojo-based projects on top of Lu
 
 ## Scope
 
-CodeNexus supports Roblox project resolution only for repos that define a [`default.project.json`](https://rojo.space/docs/v7/project-format/).
+GNexus supports Roblox project resolution only for repos that define a [`default.project.json`](https://rojo.space/docs/v7/project-format/).
 
 Supported in this phase:
 
@@ -36,11 +36,11 @@ Rojo project behavior is grounded in the official documentation:
 
 Rojo sourcemap output may be used as a comparison oracle in tests or manual validation, but it is not a runtime dependency.
 
-The [`luau-lsp`](https://github.com/JohnnyMorganz/luau-lsp) project is reference-only and is not integrated into CodeNexus.
+The [`luau-lsp`](https://github.com/JohnnyMorganz/luau-lsp) project is reference-only and is not integrated into GNexus.
 
 ## Project Mapping Model
 
-CodeNexus parses `default.project.json` and derives one or more deterministic mounts:
+GNexus parses `default.project.json` and derives one or more deterministic mounts:
 
 - source path in the repo
 - corresponding DataModel segments
@@ -59,7 +59,7 @@ Luau source files are mapped to Roblox instance paths with these rules:
 
 ## Supported Static Path Forms
 
-CodeNexus resolves Roblox-aware `require(...)` targets for these forms:
+GNexus resolves Roblox-aware `require(...)` targets for these forms:
 
 - `require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Log"))`
 - `require(script.Parent:WaitForChild("UI"):WaitForChild("UIService"))`
@@ -71,7 +71,7 @@ Shallow aliasing is syntax-local only:
 
 - top-level local assignment aliases are supported
 - aliases are only resolved when they point directly to a supported rooted path form
-- CodeNexus does not perform broad data-flow or interprocedural alias reasoning in this phase
+- GNexus does not perform broad data-flow or interprocedural alias reasoning in this phase
 
 ## Conservative Failure Posture
 
@@ -80,7 +80,7 @@ If a path cannot be resolved statically from:
 - the Rojo mapping, and
 - the supported local syntax forms
 
-then CodeNexus leaves it unresolved.
+then GNexus leaves it unresolved.
 
 It does not guess.
 

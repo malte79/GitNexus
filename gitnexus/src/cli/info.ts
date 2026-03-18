@@ -1,54 +1,54 @@
 export function renderHelpMarkdown(): string {
-  return `# CodeNexus
+  return `# GNexus
 
-CodeNexus is the repo-local CLI for structural analysis, indexing, and service lifecycle.
+GNexus is the repo-local CLI for structural analysis, indexing, and service lifecycle.
 
-Use the top-level \`codenexus\` commands for everyday analysis work.
-Use \`codenexus manage ...\` when you need to initialize a repo, refresh the index, check status, or recover the service.
+Use the top-level \`gnexus\` commands for everyday analysis work.
+Use \`gnexus manage ...\` when you need to initialize a repo, refresh the index, check status, or recover the service.
 
 ## Everyday Commands
 
-- \`codenexus query\`: broad discovery for files, symbols, and subsystem entrypoints
-- \`codenexus query --owners\`: bias broad discovery toward likely production owners
-- \`codenexus context\`: inspect one symbol in depth
-- \`codenexus impact\`: estimate blast radius before changing a symbol
-- \`codenexus detect-changes\`: trace the effect of local git changes
-- \`codenexus cypher\`: ask an advanced read-only graph question
-- \`codenexus rename\`: preview or apply a coordinated rename
-- \`codenexus summary\`: get a compact structural summary
-- \`codenexus summary --subsystems\`: get a subsystem-oriented architectural view
-- \`codenexus summary --subsystems-detailed\`: inspect the full detailed subsystem breakdown
+- \`gnexus query\`: broad discovery for files, symbols, and subsystem entrypoints
+- \`gnexus query --owners\`: bias broad discovery toward likely production owners
+- \`gnexus context\`: inspect one symbol in depth
+- \`gnexus impact\`: estimate blast radius before changing a symbol
+- \`gnexus detect-changes\`: trace the effect of local git changes
+- \`gnexus cypher\`: ask an advanced read-only graph question
+- \`gnexus rename\`: preview or apply a coordinated rename
+- \`gnexus summary\`: get a compact structural summary
+- \`gnexus summary --subsystems\`: get a subsystem-oriented architectural view
+- \`gnexus summary --subsystems-detailed\`: inspect the full detailed subsystem breakdown
 
 ## Admin Commands
 
-- \`codenexus manage init\`: create repo-local CodeNexus config
-- \`codenexus manage index\`: build or refresh the repo-local index
-- \`codenexus manage status\`: show repo, index, and service state
-- \`codenexus manage start\`: start the background service
-- \`codenexus manage restart\`: restart the background service after a refresh problem
-- \`codenexus manage stop\`: stop the background service
-- \`codenexus manage serve\`: run the service in the foreground
+- \`gnexus manage init\`: create repo-local GNexus config
+- \`gnexus manage index\`: build or refresh the repo-local index
+- \`gnexus manage status\`: show repo, index, and service state
+- \`gnexus manage start\`: start the background service
+- \`gnexus manage restart\`: restart the background service after a refresh problem
+- \`gnexus manage stop\`: stop the background service
+- \`gnexus manage serve\`: run the service in the foreground
 
 ## Normal Workflow
 
 \`\`\`bash
-codenexus manage init
-codenexus manage index
-codenexus manage start
-codenexus manage status
+gnexus manage init
+gnexus manage index
+gnexus manage start
+gnexus manage status
 
-codenexus summary --subsystems
-codenexus query "bridge http lifecycle status start stop studio automation" --owners
-codenexus context CommandBridgeHandler --file typed/bridge/http
-codenexus impact ProtocolRouter --direction upstream --max-depth 4
+gnexus summary --subsystems
+gnexus query "bridge http lifecycle status start stop studio automation" --owners
+gnexus context CommandBridgeHandler --file typed/bridge/http
+gnexus impact ProtocolRouter --direction upstream --max-depth 4
 \`\`\`
 
 ## Recovery
 
-- if the service is down, run \`codenexus manage start\`
-- if \`codenexus manage status\` says the repo is stale, run \`codenexus manage index\`
-- if the service does not pick up a fresh index, run \`codenexus manage restart\`
-- if you need certainty immediately, run \`codenexus manage index\` instead of waiting for background refresh
+- if the service is down, run \`gnexus manage start\`
+- if \`gnexus manage status\` says the repo is stale, run \`gnexus manage index\`
+- if the service does not pick up a fresh index, run \`gnexus manage restart\`
+- if you need certainty immediately, run \`gnexus manage index\` instead of waiting for background refresh
 
 ## Command Guide
 
@@ -62,9 +62,9 @@ Good for:
 Examples:
 
 \`\`\`bash
-codenexus query round start show logic
-codenexus query bridge http lifecycle status start stop studio automation
-codenexus query bridge http lifecycle status start stop studio automation --owners
+gnexus query round start show logic
+gnexus query bridge http lifecycle status start stop studio automation
+gnexus query bridge http lifecycle status start stop studio automation --owners
 \`\`\`
 
 Notes:
@@ -81,8 +81,8 @@ Good for:
 Examples:
 
 \`\`\`bash
-codenexus context SpotlightRegistry
-codenexus context CommandBridgeHandler --file typed/bridge/http
+gnexus context SpotlightRegistry
+gnexus context CommandBridgeHandler --file typed/bridge/http
 \`\`\`
 
 Notes:
@@ -98,9 +98,9 @@ Good for:
 Examples:
 
 \`\`\`bash
-codenexus impact LightingShowService --direction upstream
-codenexus impact ProtocolRouter --direction upstream --max-depth 4
-codenexus impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4
+gnexus impact LightingShowService --direction upstream
+gnexus impact ProtocolRouter --direction upstream --max-depth 4
+gnexus impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4
 \`\`\`
 
 ### \`detect-changes\`
@@ -113,8 +113,8 @@ Good for:
 Examples:
 
 \`\`\`bash
-codenexus detect-changes
-codenexus detect-changes --scope compare --base-ref main
+gnexus detect-changes
+gnexus detect-changes --scope compare --base-ref main
 \`\`\`
 
 ### \`cypher\`
@@ -127,7 +127,7 @@ Good for:
 Example:
 
 \`\`\`bash
-codenexus cypher "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20"
+gnexus cypher "MATCH (a)-[:CodeRelation {type: 'CALLS'}]->(b:Function {name: 'start'}) RETURN a.name, a.filePath LIMIT 20"
 \`\`\`
 
 ### \`rename\`
@@ -140,8 +140,8 @@ Good for:
 Examples:
 
 \`\`\`bash
-codenexus rename LightingShowService --new-name ShowLightingService
-codenexus rename UIService --file-path src/server/Game/UIService.lua --new-name GameUIService --apply
+gnexus rename LightingShowService --new-name ShowLightingService
+gnexus rename UIService --file-path src/server/Game/UIService.lua --new-name GameUIService --apply
 \`\`\`
 
 ### \`summary\`
@@ -154,10 +154,10 @@ Good for:
 Examples:
 
 \`\`\`bash
-codenexus summary
-codenexus summary --limit 10 --no-processes
-codenexus summary --subsystems --limit 8
-codenexus summary --subsystems-detailed --limit 4
+gnexus summary
+gnexus summary --limit 10 --no-processes
+gnexus summary --subsystems --limit 8
+gnexus summary --subsystems-detailed --limit 4
 \`\`\`
 
 Notes:

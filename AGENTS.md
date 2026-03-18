@@ -17,7 +17,7 @@ Do not modify sibling repos or other agent lanes from this checkout.
 - **No unauthorized workarounds** - Do not introduce compatibility shims, fallback behavior, or silent behavior changes for fixes unless the user approves.
 - **No deferred-cleanup production paths** - Avoid "temporary" parallel runtime paths, migration branches, or TODO follow-ups that preserve bad structure in production.
 - **Keep the product headless-first** - Prioritize the repo-local indexing engine, Kuzu-backed graph, and agent-facing MCP surface over human-facing extras.
-- **Preserve repo-local ownership** - New repo state should live under `.codenexus/` only unless the user explicitly approves another location.
+- **Preserve repo-local ownership** - New repo state should live under `.gnexus/` only unless the user explicitly approves another location.
 
 ## Skill Bootstrapping (Mandatory)
 

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document defines what CodeNexus means by Luau support in Epic 07.
+This document defines what GNexus means by Luau support in Epic 07.
 
-Epic 07 adds Luau as a real indexed language in the existing CodeNexus engine. It does not add Roblox or Rojo semantics. Luau support must be useful through the real product surface, not only through parser-level tests.
+Epic 07 adds Luau as a real indexed language in the existing GNexus engine. It does not add Roblox or Rojo semantics. Luau support must be useful through the real product surface, not only through parser-level tests.
 
 ## Supported Extensions
 
@@ -63,7 +63,7 @@ If a `require(...)` cannot be resolved conservatively, it must remain unresolved
 
 Luau support in Epic 07 is only complete if it is useful through the existing product:
 
-- `codenexus index` must ingest Luau files
+- `gnexus index` must ingest Luau files
 - Luau definitions must appear in the graph
 - basic call edges must be created where statically visible
 - basic import edges must be created where conservatively resolvable
@@ -92,4 +92,4 @@ Epic 09 then improves the agent ergonomics on top of those foundations by turnin
 
 `luau-lsp` is reference material only.
 
-It may be used to sanity-check construct coverage, fixture quality, and Luau-specific blind spots. It must not be integrated as a dependency, subprocess, or runtime component of CodeNexus.
+It may be used to sanity-check construct coverage, fixture quality, and Luau-specific blind spots. It must not be integrated as a dependency, subprocess, or runtime component of GNexus.

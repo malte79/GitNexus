@@ -2,16 +2,16 @@
 
 ## Current Direction
 
-This fork is evolving from `GitNexus` into `CodeNexus`, a globally installed but repo-activated tool for AI-agent code intelligence. The canonical executable will be `codenexus`, but the broader rename remains lazy and incremental outside the user-facing CLI/product surface. One concrete rename already chosen at the product-design level is the repo-local state directory: use `.codenexus/` instead of `.gitnexus/`.
+This fork is now standardizing on `GNexus` as a globally installed but repo-activated tool for AI-agent code intelligence. The only supported executable is `gnexus`, the only supported repo-local state directory is `.gnexus/`, and the breaking rename is meant to be total across active product, runtime, package, MCP, and workflow surfaces. Repo-internal checkout path names are intentionally out of scope.
 
 ## Core Product Intent
 
-Each repository should be self-contained and isolated. A repo that uses the tool is explicitly activated, and all index data plus runtime metadata should live only under `.codenexus/`. The tool should not mutate other files in the repo by default. The previously added `--index-only` behavior is important because it already aligns with that principle, and the broader product direction is pushing toward making that model the norm rather than an exception.
+Each repository should be self-contained and isolated. A repo that uses the tool is explicitly activated, and all index data plus runtime metadata should live only under `.gnexus/`. The tool should not mutate other files in the repo by default. The previously added `--index-only` behavior is important because it already aligns with that principle, and the broader product direction is pushing toward making that model the norm rather than an exception.
 
 ## V1 Invariants
 
-- CodeNexus may create or update repo state only under `.codenexus/`
-- The no-mutation rule outside `.codenexus/` is absolute
+- GNexus may create or update repo state only under `.gnexus/`
+- The no-mutation rule outside `.gnexus/` is absolute
 - The nearest enclosing git root is the operative repo boundary
 - Nested git repos are separate repo boundaries from their parents
 - Git worktrees are separate runtime boundaries in v1
@@ -25,7 +25,7 @@ Each repository should be self-contained and isolated. A repo that uses the tool
 - stdio as the primary runtime transport
 - automatic background freshness guarantees
 - branch-specific index stores
-- repo mutation outside `.codenexus/`
+- repo mutation outside `.gnexus/`
 - human-oriented visualization as a core product surface
 - a storage-engine migration away from Kuzu
 
@@ -37,9 +37,9 @@ Based on that, a separate daemon is not automatically justified. If all it would
 
 `agent <-> repo-local MCP server <-> local repo Kuzu DB`
 
-Epic 03 implements the architectural pivot underneath the retained `gitnexus` shims:
+Epic 03 implements the architectural pivot while leaving repo-internal path names alone:
 
-- `.codenexus/` is now the only active repo-state boundary
+- `.gnexus/` is now the only active repo-state boundary
 - the backend is bound to one repo boundary
 - the old global registry and repo-discovery affordances are no longer part of the active runtime model
 
@@ -49,24 +49,24 @@ HTTP is the chosen transport, not stdio, for the repo-local MCP service. The int
 
 ## Operational Model
 
-- `codenexus init`
-  - run inside a repo to activate CodeNexus for that repo
-  - creates `.codenexus/`
+- `gnexus init`
+  - run inside a repo to activate GNexus for that repo
+  - creates `.gnexus/`
   - writes repo-local config
-- `codenexus index`
-  - builds or refreshes the local index in `.codenexus/`
-- `codenexus serve`
+- `gnexus index`
+  - builds or refreshes the local index in `.gnexus/`
+- `gnexus serve`
   - starts a repo-specific MCP HTTP server
   - serves only that repo
   - listens on the port defined in repo-local config
-  - writes advisory runtime metadata under `.codenexus/`
-- `codenexus start`
+  - writes advisory runtime metadata under `.gnexus/`
+- `gnexus start`
   - starts the same repo-local service in detached background mode
-- `codenexus stop`
+- `gnexus stop`
   - stops the matching repo-local background service
-- `codenexus restart`
+- `gnexus restart`
   - restarts the matching repo-local background service
-- `codenexus status`
+- `gnexus status`
   - reports repo config, freshness, and whether the local MCP service is running
 
 Durable command and runtime contracts live in:
@@ -81,17 +81,17 @@ Durable command and runtime contracts live in:
 
 Config and live state must be separate.
 
-- Config should live in `.codenexus/`, created by `codenexus init`
+- Config should live in `.gnexus/`, created by `gnexus init`
 - Config should include at least the port for the repo-local MCP service
-- Runtime or live state should also live under `.codenexus/`, but in separate files from config
+- Runtime or live state should also live under `.gnexus/`, but in separate files from config
 - Runtime state would cover things like PID, active port, timestamps, and service health markers
 
 The v1 contract is intentionally minimal:
 
-- `.codenexus/config.toml`
-- `.codenexus/meta.json`
-- `.codenexus/kuzu/`
-- `.codenexus/runtime.json`
+- `.gnexus/config.toml`
+- `.gnexus/meta.json`
+- `.gnexus/kuzu/`
+- `.gnexus/runtime.json`
 
 ## Freshness And Indexing
 
@@ -101,16 +101,16 @@ The v1 repo-state model uses a finite base-state set with detail flags rather th
 
 Manual refresh in v1 is explicit:
 
-- `codenexus index` refreshes the on-disk index
+- `gnexus index` refreshes the on-disk index
 - a running service adopts the rebuilt index automatically in the normal path
 - if live reload fails, the service keeps serving the previous loaded index until recovered
 
 Background mode now adds a bounded convenience layer on top of that manual model:
 
-- `codenexus start` may auto-index on a repo-local interval when the repo diverges from the indexed snapshot
+- `gnexus start` may auto-index on a repo-local interval when the repo diverges from the indexed snapshot
 - auto-index remains repo-local and uses the same deterministic freshness inputs as normal repo-state evaluation
-- foreground `codenexus serve` remains the debugging path and does not auto-index
-- manual `codenexus index` remains the immediate override when certainty is needed
+- foreground `gnexus serve` remains the debugging path and does not auto-index
+- manual `gnexus index` remains the immediate override when certainty is needed
 
 ## Scope And Priorities
 
@@ -120,12 +120,12 @@ Background mode now adds a bounded convenience layer on top of that manual model
 
 ## Documentation Discipline
 
-- CodeNexus-owned contract and behavior changes must update matching docs in the same change
-- Durable CodeNexus documentation lives under `docs/`
+- GNexus-owned contract and behavior changes must update matching docs in the same change
+- Durable GNexus documentation lives under `docs/`
 - Planning docs remain governed while they lock active direction, but they are not the long-term home for durable product documentation
 - The governed docs surface set is defined by `docs/governed-paths.toml`
 - Required docs gates are `npm run lint:docs --prefix gitnexus` and `npm run check:docs-contracts --prefix gitnexus`
-- Pure refactors with no CodeNexus-owned contract or behavior change may skip docs updates only when the docs-contract gate concludes no governed docs change is required
+- Pure refactors with no GNexus-owned contract or behavior change may skip docs updates only when the docs-contract gate concludes no governed docs change is required
 
 ## Implementation Posture
 
@@ -145,8 +145,8 @@ The fork should retain only the core pieces needed for the intended product:
 
 The fork should be intentionally reduced toward a headless core for agents:
 
-- one repo-local state directory: `.codenexus/`
-- one repo-local lifecycle: `codenexus init`, `codenexus index`, `codenexus status`, `codenexus serve`
+- one repo-local state directory: `.gnexus/`
+- one repo-local lifecycle: `gnexus init`, `gnexus index`, `gnexus status`, `gnexus serve`
 - one primary runtime audience: AI agents
 - one primary transport: HTTP MCP
 - one primary storage engine: Kuzu
@@ -158,7 +158,7 @@ The fork should be intentionally reduced toward a headless core for agents:
 - A database migration is deferred until there is a concrete product or performance reason to do it
 - Forking Kuzu is also deferred unless a specific missing feature or blocker makes that necessary
 
-The current posture is to keep Kuzu while CodeNexus is stripped down and reshaped. The more important near-term work is product simplification, repo-local architecture, and strong Luau or Roblox support rather than replacing the database layer prematurely.
+The current posture is to keep Kuzu while GNexus is stripped down and reshaped. The more important near-term work is product simplification, repo-local architecture, and strong Luau or Roblox support rather than replacing the database layer prematurely.
 
 The fork should remove, defer, or deprioritize non-core layers such as:
 
@@ -169,7 +169,7 @@ The fork should remove, defer, or deprioritize non-core layers such as:
 More concretely, the current fork should be stripped toward:
 
 - a core ingestion and graph engine
-- repo-local config and runtime state under `.codenexus/`
+- repo-local config and runtime state under `.gnexus/`
 - a repo-local MCP HTTP service
 - a thin CLI
 
@@ -177,7 +177,7 @@ And stripped away from:
 
 - multi-surface product complexity
 - browser-first or human-visualization surfaces
-- plugin or editor packaging work that is not core to CodeNexus
+- plugin or editor packaging work that is not core to GNexus
 - evaluation harnesses and other side systems not needed for the main product
 
 ## Embeddings Direction
@@ -187,21 +187,21 @@ And stripped away from:
 - V1 should work well with compact lexical retrieval and graph traversal alone
 - Complexity budget should go first to strong structural understanding, repo-local architecture, and Roblox or Luau support rather than semantic embeddings
 
-Embeddings are still valuable in the future for fuzzy semantic retrieval when user language and code vocabulary do not match, but they are not considered core to the first useful CodeNexus product.
+Embeddings are still valuable in the future for fuzzy semantic retrieval when user language and code vocabulary do not match, but they are not considered core to the first useful GNexus product.
 
 ## Roblox And Luau Direction
 
-- Luau is now supported as a real indexed language through the existing CodeNexus engine
+- Luau is now supported as a real indexed language through the existing GNexus engine
 - Roblox support is also a real product goal
 - Rojo-based Roblox projects are the initial support target
 - The Rojo-only restriction is intentional because it gives a deterministic mapping from filesystem source to Roblox instance tree and makes practical support much more feasible
 
 The implementation order remains deliberate:
 
-- Epic 07 adds Luau as a real indexed language through the existing CodeNexus engine
+- Epic 07 adds Luau as a real indexed language through the existing GNexus engine
 - Epic 08 adds Roblox- and Rojo-specific semantics on top of that language support
 
-For Rojo-based Roblox projects, CodeNexus now understands:
+For Rojo-based Roblox projects, GNexus now understands:
 
 - Luau source structure
 - `default.project.json` project structure
@@ -216,7 +216,7 @@ The current Roblox support remains intentionally conservative:
 - no dynamic instance-tree inference
 - no world projection yet
 
-On top of that correctness layer, CodeNexus is now improving Luau and Roblox query ergonomics:
+On top of that correctness layer, GNexus is now improving Luau and Roblox query ergonomics:
 
 - common returned Luau module tables are treated as first-class symbols where the pattern is deterministic
 - Roblox and Luau ranking is improved through deterministic signals such as exact module names, file basenames, split-word service aliases, `runtimeArea`, and Rojo path context
@@ -227,7 +227,7 @@ On top of that correctness layer, CodeNexus is now improving Luau and Roblox que
 - The SQLite world projection concept remains part of long-term intent
 - It is considered complementary to the code graph, not a replacement for it
 - It is explicitly a future subsystem and not an immediate implementation priority
-- When added later, it should likely be modeled as a separate but linkable world-state dataset inside CodeNexus
+- When added later, it should likely be modeled as a separate but linkable world-state dataset inside GNexus
 
 ## Reduction Strategy
 
@@ -235,8 +235,8 @@ The fork should be simplified in a deliberate order rather than by random deleti
 
 Preferred strategy:
 
-1. define the minimal CodeNexus product shape clearly
-2. redirect core flows toward repo-local `.codenexus/` ownership and repo-local MCP over HTTP
+1. define the minimal GNexus product shape clearly
+2. redirect core flows toward repo-local `.gnexus/` ownership and repo-local MCP over HTTP
 3. isolate and disable non-core product surfaces
 4. remove dead code and dead tests only after the core path is stable
 
@@ -260,7 +260,7 @@ And it should remove or strongly deprioritize:
 
 ## Naming Direction
 
-- Product name: `CodeNexus`
-- CLI name: `codenexus`
-- Repo-local state directory: `.codenexus/`
-- Renaming strategy: lazy and piecemeal, only where the old `gitnexus` name is getting in the way
+- Product name: `GNexus`
+- CLI name: `gnexus`
+- Repo-local state directory: `.gnexus/`
+- Renaming strategy: full breaking sweep across active product and workflow surfaces, with no legacy aliases

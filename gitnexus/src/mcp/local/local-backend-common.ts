@@ -32,5 +32,5 @@ export function isWriteQuery(query: string): boolean {
 /** Structured error logging for query failures. */
 export function logQueryError(context: string, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
-  console.error(`CodeNexus [${context}]: ${msg}`);
+  console.error(`GNexus [${context}]: ${msg}`);
 }

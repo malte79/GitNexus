@@ -188,7 +188,7 @@ export class LocalBackendSearchQuerySupport {
     try {
       bm25Results = await searchFTSFromKuzu(query, limit, repo.id);
     } catch (err: any) {
-      console.error('CodeNexus: BM25/FTS search failed (FTS indexes may not exist) -', err.message);
+      console.error('GNexus: BM25/FTS search failed (FTS indexes may not exist) -', err.message);
       return [];
     }
     return bm25Results.map((bm25Result: any) => ({

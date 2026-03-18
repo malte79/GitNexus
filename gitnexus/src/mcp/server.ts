@@ -38,19 +38,19 @@ function getNextStepHint(toolName: string, args: Record<string, any> | undefined
       return `\n\n---\n**Next:** To understand a specific symbol in depth, use context({name: "<symbol_name>"}) to see categorized refs and process participation.`;
 
     case 'context':
-      return `\n\n---\n**Next:** If planning changes, use impact({target: "${args?.name || '<name>'}", direction: "upstream"}) to check blast radius. To see execution flows, READ gitnexus://processes.`;
+      return `\n\n---\n**Next:** If planning changes, use impact({target: "${args?.name || '<name>'}", direction: "upstream"}) to check blast radius. To see execution flows, READ gnexus://processes.`;
 
     case 'impact':
-      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gitnexus://processes.`;
+      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gnexus://processes.`;
 
     case 'detect_changes':
-      return `\n\n---\n**Next:** Review affected processes. Use context() on high-risk changed symbols. READ gitnexus://process/{name} for full execution traces.`;
+      return `\n\n---\n**Next:** Review affected processes. Use context() on high-risk changed symbols. READ gnexus://process/{name} for full execution traces.`;
 
     case 'rename':
       return `\n\n---\n**Next:** Run detect_changes() to verify no unexpected side effects from the rename.`;
 
     case 'cypher':
-      return `\n\n---\n**Next:** To explore a result symbol, use context({name: "<name>"}). For schema reference, READ gitnexus://schema.`;
+      return `\n\n---\n**Next:** To explore a result symbol, use context({name: "<name>"}). For schema reference, READ gnexus://schema.`;
 
     // Legacy tool names — still return useful hints
     case 'search':
@@ -58,7 +58,7 @@ function getNextStepHint(toolName: string, args: Record<string, any> | undefined
     case 'explore':
       return `\n\n---\n**Next:** If planning changes, use impact({target: "<name>", direction: "upstream"}).`;
     case 'overview':
-      return `\n\n---\n**Next:** To drill into an area, READ gitnexus://cluster/{name}. To see execution flows, READ gitnexus://processes.`;
+      return `\n\n---\n**Next:** To drill into an area, READ gnexus://cluster/{name}. To see execution flows, READ gnexus://processes.`;
 
     default:
       return '';
@@ -74,7 +74,7 @@ export function createMCPServer(backend: LocalBackend): Server {
   const pkgVersion: string = require('../../package.json').version;
   const server = new Server(
     {
-      name: 'codenexus',
+      name: 'gnexus',
       version: pkgVersion,
     },
     {

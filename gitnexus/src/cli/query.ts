@@ -13,7 +13,7 @@ export async function queryCommand(
 ): Promise<void> {
   const query = terms?.join(' ').trim();
   if (!query) {
-    console.error('Query text is required. Usage: `codenexus query <terms...>`.');
+    console.error('Query text is required. Usage: `gnexus query <terms...>`.');
     process.exitCode = 1;
     return;
   }

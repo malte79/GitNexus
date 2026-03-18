@@ -1,7 +1,7 @@
 /**
  * MCP over HTTP
  *
- * Mounts the CodeNexus MCP server on Express using StreamableHTTP transport.
+ * Mounts the GNexus MCP server on Express using StreamableHTTP transport.
  * Each connecting client gets its own stateful session; the LocalBackend
  * is shared across all sessions for one bound repo.
  *
@@ -131,6 +131,6 @@ export function mountMCPEndpoints(
     await Promise.allSettled(closers);
   };
 
-  console.log('CodeNexus HTTP endpoints mounted at /api/mcp and /api/health');
+  console.log('GNexus HTTP endpoints mounted at /api/mcp and /api/health');
   return cleanup;
 }

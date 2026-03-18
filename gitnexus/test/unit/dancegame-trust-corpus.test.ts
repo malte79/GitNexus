@@ -6,19 +6,19 @@ describe('dancegame trust corpus fixture', () => {
     expect(corpus.repoPath).toBe('/Users/alex/Projects/roblox/dancegame-agent-2');
     expect(corpus.baselineCommands).toEqual(expect.arrayContaining([
       'git rev-parse HEAD',
-      'codenexus manage status',
-      "codenexus summary --subsystems | wc -l",
-      "codenexus query \"client ui shell\" --owners | sed -n '1,80p'",
-      "codenexus impact ManifestCompiler --direction upstream | sed -n '1,20p'",
+      'gnexus manage status',
+      "gnexus summary --subsystems | wc -l",
+      "gnexus query \"client ui shell\" --owners | sed -n '1,80p'",
+      "gnexus impact ManifestCompiler --direction upstream | sed -n '1,20p'",
     ]));
   });
 
   it('locks the operator install workflow used for final measurement', () => {
     expect(corpus.installWorkflow).toEqual([
       'npm run build --prefix gitnexus',
-      'npm link --prefix gitnexus',
-      'which codenexus',
-      'codenexus --version',
+      'cd gitnexus && npm link',
+      'which gnexus',
+      'gnexus --version',
     ]);
   });
 

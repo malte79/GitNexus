@@ -1,7 +1,7 @@
 /**
  * Local Backend
  *
- * Provides tool implementations for one repo-local .codenexus index.
+ * Provides tool implementations for one repo-local .gnexus index.
  * The backend is bound to the nearest enclosing git repo boundary.
  * KuzuDB connections are opened lazily on first query.
  */
@@ -95,8 +95,6 @@ export class LocalBackend {
       getNodeKind: this.graphSupport.getNodeKind.bind(this.graphSupport),
       humanizeSummaryLabel: this.summaryPresentationSupport.humanizeSummaryLabel.bind(this.summaryPresentationSupport),
       isLowSignalSubsystemLabel: this.summaryPresentationSupport.isLowSignalSubsystemLabel.bind(this.summaryPresentationSupport),
-      context: this.context.bind(this),
-      getShapeSignals: this.getShapeSignals.bind(this),
       lookupNamedSymbols: this.searchSupport.lookupNamedSymbols.bind(this.searchSupport),
       getPrimaryModuleSymbols: this.searchSupport.getPrimaryModuleSymbols.bind(this.searchSupport),
       getRojoProjectIndex: this.searchSupport.getRojoProjectIndex.bind(this.searchSupport),
@@ -112,7 +110,7 @@ export class LocalBackend {
 
   /**
    * Initialize against the nearest enclosing repo boundary.
-   * Returns true only when a usable local .codenexus index exists.
+   * Returns true only when a usable local .gnexus index exists.
    */
   async init(): Promise<boolean> {
     return this.runtimeSupport.init();

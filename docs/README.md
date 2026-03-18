@@ -1,8 +1,8 @@
-# CodeNexus Docs
+# GNexus Docs
 
-This directory is the canonical home for durable CodeNexus documentation.
+This directory is the canonical home for durable GNexus documentation.
 
-It does not attempt to document the inherited GitNexus system wholesale. It documents the CodeNexus contracts, workflow rules, and product behavior that we own.
+It does not attempt to document the inherited upstream system wholesale. It documents the GNexus contracts, workflow rules, and product behavior that we own.
 
 ## Information Architecture
 
@@ -18,7 +18,7 @@ Stable documentation categories:
 - `docs/decisions/`
   - short ADR-style decisions when a choice needs durable explanation
 - `docs/features/`
-  - feature-specific docs for implemented CodeNexus systems
+  - feature-specific docs for implemented GNexus systems
 
 The tree should stay minimal. Do not create placeholder directories or speculative docs for future systems.
 

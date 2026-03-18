@@ -9,3 +9,4 @@ Alias for `epic-assign`.
 Use the same workflow and constraints.
 Default owner is lane-derived: `Assigned to: Agent <n>` from `rsproxy-agent-<n>` when no owner is provided.
 Always set `Status: doing` when assigning.
+When the epic is assigned to the current agent, also create and switch to a dedicated `codex/epic-<epic-slug>` branch unless the current branch is already that epic's active branch.

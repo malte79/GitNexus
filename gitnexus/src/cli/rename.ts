@@ -10,7 +10,7 @@ export async function renameCommand(
   },
 ): Promise<void> {
   if (!symbolName && !options.uid) {
-    console.error('Provide a symbol name or `--uid`. Usage: `codenexus rename <symbolName> --new-name <name>`.');
+    console.error('Provide a symbol name or `--uid`. Usage: `gnexus rename <symbolName> --new-name <name>`.');
     process.exitCode = 1;
     return;
   }

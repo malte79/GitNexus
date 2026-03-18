@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the v1 repo-local MCP-over-HTTP service contract for one CodeNexus repo boundary.
+This document defines the v1 repo-local MCP-over-HTTP service contract for one GNexus repo boundary.
 
 ## Runtime Scope
 
@@ -15,34 +15,34 @@ This document defines the v1 repo-local MCP-over-HTTP service contract for one C
 
 The HTTP runtime is the primary execution path for:
 
-- top-level `codenexus query`
-- top-level `codenexus context`
-- top-level `codenexus impact`
-- top-level `codenexus detect-changes`
-- top-level `codenexus cypher`
-- top-level `codenexus rename`
-- top-level `codenexus summary`
+- top-level `gnexus query`
+- top-level `gnexus context`
+- top-level `gnexus impact`
+- top-level `gnexus detect-changes`
+- top-level `gnexus cypher`
+- top-level `gnexus rename`
+- top-level `gnexus summary`
 
-Those commands are thin clients over the repo-local MCP HTTP service. They do not bypass it and do not auto-start it. When the service is unavailable, they fail clearly and point users to `codenexus manage start`.
+Those commands are thin clients over the repo-local MCP HTTP service. They do not bypass it and do not auto-start it. When the service is unavailable, they fail clearly and point users to `gnexus manage start`.
 
 The same HTTP-served tool contracts also own:
 
 - symbol disambiguation inputs such as `uid` and `file_path`
 - bounded read-only Cypher recovery resources:
-  - `gitnexus://schema`
-  - `gitnexus://properties`
-  - `gitnexus://properties/{nodeType}`
+  - `gnexus://schema`
+  - `gnexus://properties`
+  - `gnexus://properties/{nodeType}`
 
 ## Config Discovery
 
-`codenexus manage serve` and `codenexus manage start` resolve the active repo boundary and then read:
+`gnexus manage serve` and `gnexus manage start` resolve the active repo boundary and then read:
 
-- `.codenexus/config.toml`
+- `.gnexus/config.toml`
 
 The service must fail if:
 
 - no repo boundary is found
-- `.codenexus/config.toml` is missing
+- `.gnexus/config.toml` is missing
 - required config fields are invalid
 
 ## Port Binding
@@ -53,15 +53,15 @@ The service must fail if:
 
 ## Runtime Metadata
 
-On successful startup, foreground and detached service modes write `.codenexus/runtime.json` with the required runtime fields defined in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
+On successful startup, foreground and detached service modes write `.gnexus/runtime.json` with the required runtime fields defined in [repo-state-model.md](/Users/alex/Projects/GitNexusFork-agent-1/docs/architecture/repo-state-model.md).
 
-`codenexus manage status` may read and compare runtime metadata, but it must not rewrite it.
+`gnexus manage status` may read and compare runtime metadata, but it must not rewrite it.
 
-On graceful shutdown, the service removes `.codenexus/runtime.json`.
+On graceful shutdown, the service removes `.gnexus/runtime.json`.
 
 If the process crashes or is killed before cleanup runs, `runtime.json` may remain behind as stale advisory state until the next live probe or lifecycle command corrects it.
 
-When `codenexus manage index` rewrites `.codenexus/meta.json`:
+When `gnexus manage index` rewrites `.gnexus/meta.json`:
 
 - the running service detects a changed loaded-index generation
 - it prepares a fresh backend against the rebuilt index
@@ -90,7 +90,7 @@ The health payload must prove service identity for the current repo boundary by 
 - service start time
 - loaded index identity captured at service startup
 
-Raw port reachability is never enough to claim a live CodeNexus service.
+Raw port reachability is never enough to claim a live GNexus service.
 
 The health payload must also expose:
 
@@ -100,9 +100,9 @@ The health payload must also expose:
 
 ## Foreground And Detached Lifecycle
 
-`codenexus manage serve` is the foreground and debugging path.
+`gnexus manage serve` is the foreground and debugging path.
 
-`codenexus manage start`, `codenexus manage stop`, and `codenexus manage restart` manage the same repo-local service implementation in detached background mode.
+`gnexus manage start`, `gnexus manage stop`, and `gnexus manage restart` manage the same repo-local service implementation in detached background mode.
 
 - `manage start` launches the repo-local service in background mode
 - `manage stop` terminates only the matching repo-local service
@@ -112,17 +112,17 @@ Detached mode is per-repo only. There is no global service registry.
 
 Only detached background mode owns automatic freshness polling in v1.
 
-- `codenexus manage serve` does not start background auto-index behavior
-- `codenexus manage start` and `codenexus manage restart` run the same service with background auto-index enabled when config allows it
-- auto-index checks use the same repo-state freshness inputs as `codenexus manage status`
+- `gnexus manage serve` does not start background auto-index behavior
+- `gnexus manage start` and `gnexus manage restart` run the same service with background auto-index enabled when config allows it
+- auto-index checks use the same repo-state freshness inputs as `gnexus manage status`
 - branch switches are just normal repo divergence
-- auto-index attempts are serialized with live reload and must not overlap another `codenexus manage index` run
+- auto-index attempts are serialized with live reload and must not overlap another `gnexus manage index` run
 - repeated auto-index failures back off rather than retrying aggressively
 
 When detached background auto-index is enabled and the repo diverges from the indexed state:
 
 - the running service records an auto-index attempt
-- it triggers the normal `codenexus manage index` command path in a child process
+- it triggers the normal `gnexus manage index` command path in a child process
 - on success, the existing live-reload path adopts the rebuilt index
 - on failure, the service keeps serving the previous loaded index and reports failure details through health and status
 
@@ -133,8 +133,8 @@ If a running service detects rebuilt on-disk index state but cannot prepare or s
 - the previous loaded index remains active
 - the service reports stale or degraded serving state
 - health includes reload failure details
-- detached background recovery uses `codenexus manage restart`
-- foreground recovery uses stop and rerun of `codenexus manage serve`
+- detached background recovery uses `gnexus manage restart`
+- foreground recovery uses stop and rerun of `gnexus manage serve`
 
 ## Client Expectations
 

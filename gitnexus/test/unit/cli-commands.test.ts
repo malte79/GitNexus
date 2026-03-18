@@ -23,10 +23,12 @@ describe('CLI commands', () => {
   });
 
   describe('package.json bin entry', () => {
-    it('exposes only the codenexus binary', async () => {
+    it('exposes only the gnexus binary', async () => {
       const pkg = await import('../../package.json', { with: { type: 'json' } });
       expect(pkg.default.bin).toBeDefined();
-      expect(pkg.default.bin.codenexus || pkg.default.bin).toBeDefined();
+      expect(pkg.default.bin.gnexus).toBeDefined();
+      expect(pkg.default.name).toBe('gnexus');
+      expect(pkg.default.bin.codenexus).toBeUndefined();
       expect(pkg.default.bin.gitnexus).toBeUndefined();
     });
   });
@@ -36,7 +38,7 @@ describe('CLI commands', () => {
       const { buildProgram } = await import('../../src/cli/index.js');
       const program = buildProgram();
 
-      expect(program.name()).toBe('codenexus');
+      expect(program.name()).toBe('gnexus');
       expect(program.commands.map((command) => command.name())).toEqual([
         'help',
         'query',
@@ -85,7 +87,7 @@ describe('CLI commands', () => {
       const queryHelp = program.commands.find((command) => command.name() === 'query')?.helpInformation() || '';
       const summaryHelp = program.commands.find((command) => command.name() === 'summary')?.helpInformation() || '';
 
-      expect(help).toContain('codenexus');
+      expect(help).toContain('gnexus');
       expect(help).toContain('help');
       expect(help).toContain('query');
       expect(help).toContain('context');
@@ -106,6 +108,7 @@ describe('CLI commands', () => {
       expect(help).not.toContain('\nstart');
       expect(help).not.toContain('\nstop');
       expect(help).not.toContain('\nrestart');
+      expect(help).not.toContain('codenexus');
       expect(help).not.toContain('gitnexus');
     });
   });
@@ -115,16 +118,16 @@ describe('CLI commands', () => {
       const { handleLegacyTopLevelCommand } = await import('../../src/cli/index.js');
       const messages: string[] = [];
 
-      expect(handleLegacyTopLevelCommand(['node', 'codenexus', 'status'], (line) => messages.push(line))).toBe(true);
-      expect(messages.join('\n')).toContain('Use `codenexus manage status` instead.');
+      expect(handleLegacyTopLevelCommand(['node', 'gnexus', 'status'], (line) => messages.push(line))).toBe(true);
+      expect(messages.join('\n')).toContain('Use `gnexus manage status` instead.');
     });
 
-    it('redirects codenexus info to codenexus help', async () => {
+    it('redirects gnexus info to gnexus help', async () => {
       const { handleLegacyTopLevelCommand } = await import('../../src/cli/index.js');
       const messages: string[] = [];
 
-      expect(handleLegacyTopLevelCommand(['node', 'codenexus', 'info'], (line) => messages.push(line))).toBe(true);
-      expect(messages.join('\n')).toContain('Use `codenexus help` instead.');
+      expect(handleLegacyTopLevelCommand(['node', 'gnexus', 'info'], (line) => messages.push(line))).toBe(true);
+      expect(messages.join('\n')).toContain('Use `gnexus help` instead.');
     });
   });
 

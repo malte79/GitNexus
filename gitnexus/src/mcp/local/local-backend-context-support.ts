@@ -174,8 +174,8 @@ export class LocalBackendContextSupport {
         ? 'Direct container edges were not available for this symbol, so related members were recovered from grounded file-level definitions in the same source file. Results are materially better, but container ownership is still partial.'
         : symbolKind === 'Module' && typeof symbolDescription === 'string' && symbolDescription.startsWith('luau-module:weak') && memberRows.length > 0
           ? hasBackingContainerMembers
-            ? 'This Luau module is a weak returned-table wrapper. CodeNexus is showing both the grounded exported wrapper members and the grounded backing-container methods that the wrapper explicitly delegates into. Backing-container members are structural context, not exported module members.'
-            : 'This Luau module is a weak returned-table wrapper. CodeNexus is showing the grounded members referenced directly from the returned table, including delegate methods and explicit exported fields. Internal same-file tables and methods are intentionally not treated as exported module members unless the wrapper points to them explicitly.'
+            ? 'This Luau module is a weak returned-table wrapper. GNexus is showing both the grounded exported wrapper members and the grounded backing-container methods that the wrapper explicitly delegates into. Backing-container members are structural context, not exported module members.'
+            : 'This Luau module is a weak returned-table wrapper. GNexus is showing the grounded members referenced directly from the returned table, including delegate methods and explicit exported fields. Internal same-file tables and methods are intentionally not treated as exported module members unless the wrapper points to them explicitly.'
           : partialCoverage
             ? 'Direct relationships on this container symbol are sparse. Member-based relationships are shown where available, but graph coverage may still be incomplete.'
             : memberRelationshipCount > 0

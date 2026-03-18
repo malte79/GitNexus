@@ -58,16 +58,16 @@ Before proposing the refactor shape:
 - do not continue a refactor strike directly on `main`, `master`, or an unrelated task branch when a fresh dedicated lane can be created
 - if existing uncommitted changes are carried onto the new branch, call that out explicitly before continuing
 
-- run `codenexus manage status`
-- if the target component is stale in the index and structural certainty matters, run `codenexus manage index`
+- run `gnexus manage status`
+- if the target component is stale in the index and structural certainty matters, run `gnexus manage index`
 - use the top-level structural CLI:
   - `summary --subsystems` for an initial centrality/subsystem overview
   - `query "<component concept>" --owners` for subsystem discovery
   - `context <symbol>` for the main anchor symbols
   - `impact <symbol> --direction upstream` for blast-radius estimation before extraction or moves
   - `detect-changes` after edits when the strike touches shared seams
-- use CodeNexus first for cross-file dependency tracing, ownership mapping, and blast-radius estimation
-- treat CodeNexus as mandatory for non-trivial refactor strikes; use `rg` only as a supplement
+- use GNexus first for cross-file dependency tracing, ownership mapping, and blast-radius estimation
+- treat GNexus as mandatory for non-trivial refactor strikes; use `rg` only as a supplement
 - baseline and closeout must both use the shared weighted scoring families:
   - `Subsystem Pressure`
   - `Dominant Owner Pressure`

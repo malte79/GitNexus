@@ -37,5 +37,5 @@ export function listInspectableNodeTypes(): string[] {
 }
 
 export function getPropertyResourceUri(nodeType: string): string {
-  return `gitnexus://properties/${encodeURIComponent(normalizeNodeType(nodeType) || nodeType)}`;
+  return `gnexus://properties/${encodeURIComponent(normalizeNodeType(nodeType) || nodeType)}`;
 }

@@ -10,7 +10,7 @@ export async function contextCommand(
   },
 ): Promise<void> {
   if (!name && !options.uid) {
-    console.error('Provide a symbol name or `--uid`. Usage: `codenexus context <name>`.');
+    console.error('Provide a symbol name or `--uid`. Usage: `gnexus context <name>`.');
     process.exitCode = 1;
     return;
   }

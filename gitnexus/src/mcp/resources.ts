@@ -30,31 +30,31 @@ export interface ResourceTemplate {
 export function getResourceDefinitions(): ResourceDefinition[] {
   return [
     {
-      uri: 'gitnexus://context',
+      uri: 'gnexus://context',
       name: 'Repo Overview',
       description: 'Codebase stats, staleness check, and available tools for the bound repo.',
       mimeType: 'text/yaml',
     },
     {
-      uri: 'gitnexus://clusters',
+      uri: 'gnexus://clusters',
       name: 'Repo Modules',
       description: 'All functional areas for the bound repo.',
       mimeType: 'text/yaml',
     },
     {
-      uri: 'gitnexus://processes',
+      uri: 'gnexus://processes',
       name: 'Repo Processes',
       description: 'All execution flows for the bound repo.',
       mimeType: 'text/yaml',
     },
     {
-      uri: 'gitnexus://schema',
+      uri: 'gnexus://schema',
       name: 'Graph Schema',
       description: 'Node and edge schema for Cypher queries.',
       mimeType: 'text/yaml',
     },
     {
-      uri: 'gitnexus://properties',
+      uri: 'gnexus://properties',
       name: 'Graph Properties',
       description: 'Inspectable node properties for common Cypher query targets.',
       mimeType: 'text/yaml',
@@ -65,19 +65,19 @@ export function getResourceDefinitions(): ResourceDefinition[] {
 export function getResourceTemplates(): ResourceTemplate[] {
   return [
     {
-      uriTemplate: 'gitnexus://cluster/{clusterName}',
+      uriTemplate: 'gnexus://cluster/{clusterName}',
       name: 'Module Detail',
       description: 'Deep dive into a specific functional area in the bound repo.',
       mimeType: 'text/yaml',
     },
     {
-      uriTemplate: 'gitnexus://process/{processName}',
+      uriTemplate: 'gnexus://process/{processName}',
       name: 'Process Trace',
       description: 'Step-by-step execution trace in the bound repo.',
       mimeType: 'text/yaml',
     },
     {
-      uriTemplate: 'gitnexus://properties/{nodeType}',
+      uriTemplate: 'gnexus://properties/{nodeType}',
       name: 'Node Properties',
       description: 'Inspectable properties for a specific node type.',
       mimeType: 'text/yaml',
@@ -86,23 +86,23 @@ export function getResourceTemplates(): ResourceTemplate[] {
 }
 
 function parseUri(uri: string): { resourceType: string; param?: string } {
-  if (uri === 'gitnexus://context') return { resourceType: 'context' };
-  if (uri === 'gitnexus://clusters') return { resourceType: 'clusters' };
-  if (uri === 'gitnexus://processes') return { resourceType: 'processes' };
-  if (uri === 'gitnexus://schema') return { resourceType: 'schema' };
-  if (uri === 'gitnexus://properties') return { resourceType: 'properties' };
+  if (uri === 'gnexus://context') return { resourceType: 'context' };
+  if (uri === 'gnexus://clusters') return { resourceType: 'clusters' };
+  if (uri === 'gnexus://processes') return { resourceType: 'processes' };
+  if (uri === 'gnexus://schema') return { resourceType: 'schema' };
+  if (uri === 'gnexus://properties') return { resourceType: 'properties' };
 
-  const clusterMatch = uri.match(/^gitnexus:\/\/cluster\/(.+)$/);
+  const clusterMatch = uri.match(/^gnexus:\/\/cluster\/(.+)$/);
   if (clusterMatch) {
     return { resourceType: 'cluster', param: decodeURIComponent(clusterMatch[1]) };
   }
 
-  const processMatch = uri.match(/^gitnexus:\/\/process\/(.+)$/);
+  const processMatch = uri.match(/^gnexus:\/\/process\/(.+)$/);
   if (processMatch) {
     return { resourceType: 'process', param: decodeURIComponent(processMatch[1]) };
   }
 
-  const propertiesMatch = uri.match(/^gitnexus:\/\/properties\/(.+)$/);
+  const propertiesMatch = uri.match(/^gnexus:\/\/properties\/(.+)$/);
   if (propertiesMatch) {
     return { resourceType: 'properties-detail', param: decodeURIComponent(propertiesMatch[1]) };
   }
@@ -140,7 +140,7 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   const context = backend.getContext();
 
   if (!context) {
-    return 'error: No codebase loaded. Create .codenexus/config.toml and run codenexus manage index';
+    return 'error: No codebase loaded. Create .gnexus/config.toml and run gnexus manage index';
   }
 
   const staleness = checkStaleness(repo.repoPath, repo.lastCommit || 'HEAD');
@@ -169,14 +169,14 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   lines.push('  - cypher: Raw graph queries');
   lines.push('');
   lines.push('resources_available:');
-  lines.push('  - gitnexus://context');
-  lines.push('  - gitnexus://clusters');
-  lines.push('  - gitnexus://processes');
-  lines.push('  - gitnexus://schema');
-  lines.push('  - gitnexus://properties');
-  lines.push('  - gitnexus://cluster/{name}');
-  lines.push('  - gitnexus://process/{name}');
-  lines.push('  - gitnexus://properties/{nodeType}');
+  lines.push('  - gnexus://context');
+  lines.push('  - gnexus://clusters');
+  lines.push('  - gnexus://processes');
+  lines.push('  - gnexus://schema');
+  lines.push('  - gnexus://properties');
+  lines.push('  - gnexus://cluster/{name}');
+  lines.push('  - gnexus://process/{name}');
+  lines.push('  - gnexus://properties/{nodeType}');
 
   return lines.join('\n');
 }
@@ -186,7 +186,7 @@ async function getClustersResource(backend: LocalBackend): Promise<string> {
     const result = await backend.queryClusters(100);
 
     if (!result.clusters || result.clusters.length === 0) {
-      return 'modules: []\n# No functional areas detected. Run: codenexus manage index';
+      return 'modules: []\n# No functional areas detected. Run: gnexus manage index';
     }
 
     const displayLimit = 20;
@@ -217,7 +217,7 @@ async function getProcessesResource(backend: LocalBackend): Promise<string> {
     const result = await backend.queryProcesses(50);
 
     if (!result.processes || result.processes.length === 0) {
-      return 'processes: []\n# No processes detected. Run: codenexus manage index';
+      return 'processes: []\n# No processes detected. Run: gnexus manage index';
     }
 
     const displayLimit = 20;
@@ -242,7 +242,7 @@ async function getProcessesResource(backend: LocalBackend): Promise<string> {
 }
 
 function getSchemaResource(): string {
-  return `# CodeNexus Graph Schema
+  return `# GNexus Graph Schema
 
 nodes:
   - File: Source code files
@@ -273,7 +273,7 @@ relationship_table: "All relationships use a single CodeRelation table with a ty
 
 function getPropertiesIndexResource(): string {
   const lines = [
-    '# CodeNexus Node Properties',
+    '# GNexus Node Properties',
     '',
     'node_types:',
   ];
@@ -284,7 +284,7 @@ function getPropertiesIndexResource(): string {
   }
 
   lines.push('');
-  lines.push('usage: "READ gitnexus://properties/{nodeType} to inspect available properties before writing Cypher against that node label."');
+  lines.push('usage: "READ gnexus://properties/{nodeType} to inspect available properties before writing Cypher against that node label."');
   return lines.join('\n');
 }
 
@@ -292,7 +292,7 @@ function getPropertiesDetailResource(nodeType: string): string {
   const normalized = normalizeNodeType(nodeType);
   const properties = getNodeProperties(normalized);
   if (!properties) {
-    return `error: Unknown node type '${nodeType}'. Read gitnexus://properties for supported node labels.`;
+    return `error: Unknown node type '${nodeType}'. Read gnexus://properties for supported node labels.`;
   }
 
   return [
@@ -300,7 +300,7 @@ function getPropertiesDetailResource(nodeType: string): string {
     'properties:',
     ...properties.map((propertyName) => `  - ${propertyName}`),
     '',
-    `schema_uri: gitnexus://schema`,
+    `schema_uri: gnexus://schema`,
   ].join('\n');
 }
 

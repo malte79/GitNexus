@@ -1,6 +1,6 @@
 ---
 name: warmup
-description: Use when the user asks to warm up or reorient. Run a deterministic read-only orientation pass for CodeNexus repo state, core engine surfaces, and git state.
+description: Use when the user asks to warm up or reorient. Run a deterministic read-only orientation pass for GNexus repo state, core engine surfaces, and git state.
 ---
 
 # warmup
@@ -31,10 +31,10 @@ Run a deterministic read-only orientation pass.
 - `gitnexus/src/core/ingestion/pipeline.ts`
 - `gitnexus/src/core/kuzu/kuzu-adapter.ts`
 
-4. Refresh CodeNexus self-index view
-- `codenexus manage status`
-- `codenexus summary --subsystems`
-- `codenexus query "cli mcp storage core" --owners`
+4. Refresh GNexus self-index view
+- `gnexus manage status`
+- `gnexus summary --subsystems`
+- `gnexus query "cli mcp storage core" --owners`
 
 5. Refresh branch state
 - `git rev-parse --abbrev-ref HEAD`
@@ -42,7 +42,7 @@ Run a deterministic read-only orientation pass.
 
 6. Report
 - environment checks
-- CodeNexus freshness and top subsystem view
+- GNexus freshness and top subsystem view
 - current branch and worktree state
 - major architecture risks or shape observations
 - what to focus on next
@@ -50,4 +50,4 @@ Run a deterministic read-only orientation pass.
 ## Requirements
 
 - Keep output concise and actionable.
-- Do not suggest workflows unrelated to CodeNexus development.
+- Do not suggest workflows unrelated to GNexus development.

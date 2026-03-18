@@ -93,9 +93,9 @@ function closeOne(repoId: string): void {
   const entry = pool.get(repoId);
   if (!entry) return;
   for (const conn of entry.available) {
-    try { conn.close(); } catch (e) { console.error('CodeNexus [pool:close-conn]:', e instanceof Error ? e.message : e); }
+    try { conn.close(); } catch (e) { console.error('GNexus [pool:close-conn]:', e instanceof Error ? e.message : e); }
   }
-  try { entry.db.close(); } catch (e) { console.error('CodeNexus [pool:close-db]:', e instanceof Error ? e.message : e); }
+  try { entry.db.close(); } catch (e) { console.error('GNexus [pool:close-db]:', e instanceof Error ? e.message : e); }
   pool.delete(repoId);
 }
 
@@ -136,7 +136,7 @@ const reloads = new Map<string, Promise<void>>();
 
 /**
  * Initialize (or reuse) a Database + connection pool for a specific repo.
- * Retries on lock errors (e.g., when `codenexus index` is running).
+ * Retries on lock errors (e.g., when `gnexus index` is running).
  */
 export const initKuzu = async (repoId: string, dbPath: string): Promise<void> => {
   const existing = pool.get(repoId);
@@ -149,14 +149,14 @@ export const initKuzu = async (repoId: string, dbPath: string): Promise<void> =>
   try {
     await fs.stat(dbPath);
   } catch {
-    throw new Error(`KuzuDB not found at ${dbPath}. Run: codenexus manage index`);
+    throw new Error(`KuzuDB not found at ${dbPath}. Run: gnexus manage index`);
   }
 
   evictLRU();
 
   // Open in read-only mode — MCP server never writes to the database.
   // This allows multiple MCP server instances to read concurrently, and
-  // avoids lock conflicts when `codenexus index` is writing.
+  // avoids lock conflicts when `gnexus index` is writing.
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= LOCK_RETRY_ATTEMPTS; attempt++) {
     silenceStdout();
@@ -415,9 +415,9 @@ export const reloadKuzu = async (repoId: string, dbPath: string): Promise<void> 
     try {
       await waitForIdle(entry);
       for (const conn of entry.available) {
-        try { conn.close(); } catch (e) { console.error('CodeNexus [pool:reload-close-conn]:', e instanceof Error ? e.message : e); }
+        try { conn.close(); } catch (e) { console.error('GNexus [pool:reload-close-conn]:', e instanceof Error ? e.message : e); }
       }
-      try { entry.db.close(); } catch (e) { console.error('CodeNexus [pool:reload-close-db]:', e instanceof Error ? e.message : e); }
+      try { entry.db.close(); } catch (e) { console.error('GNexus [pool:reload-close-db]:', e instanceof Error ? e.message : e); }
 
       const reopened = await openDatabase(dbPath);
       pool.set(repoId, {
@@ -446,7 +446,7 @@ export const reloadKuzu = async (repoId: string, dbPath: string): Promise<void> 
           idleWaiters: [],
         });
       } catch (reopenError) {
-        console.error('CodeNexus [pool:reload-restore-failed]:', reopenError instanceof Error ? reopenError.message : reopenError);
+        console.error('GNexus [pool:reload-restore-failed]:', reopenError instanceof Error ? reopenError.message : reopenError);
         pool.delete(repoId);
       }
       throw error;

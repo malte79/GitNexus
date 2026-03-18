@@ -38,7 +38,7 @@ describe('statusCommand', () => {
       liveHealth: null,
       currentHead: 'fedcba654321',
       currentBranch: 'main',
-      storagePath: '/repo/.codenexus',
+      storagePath: '/repo/.gnexus',
       worktreeRoot: '/repo',
     });
 
@@ -48,7 +48,7 @@ describe('statusCommand', () => {
     await statusCommand();
 
     const output = logSpy.mock.calls.flat().join(' ');
-    expect(output).toContain('Refresh action: run `codenexus manage index` to refresh the on-disk index.');
+    expect(output).toContain('Refresh action: run `gnexus manage index` to refresh the on-disk index.');
 
     logSpy.mockRestore();
   });
@@ -71,7 +71,7 @@ describe('statusCommand', () => {
       runtime: null,
       liveHealth: {
         version: 1,
-        service: 'codenexus',
+        service: 'gnexus',
         pid: 12345,
         port: 4747,
         mode: 'background',
@@ -95,7 +95,7 @@ describe('statusCommand', () => {
       },
       currentHead: 'abcdef123456',
       currentBranch: 'main',
-      storagePath: '/repo/.codenexus',
+      storagePath: '/repo/.gnexus',
       worktreeRoot: '/repo',
     });
 
@@ -133,7 +133,7 @@ describe('statusCommand', () => {
       runtime: null,
       liveHealth: {
         version: 1,
-        service: 'codenexus',
+        service: 'gnexus',
         pid: 12345,
         port: 4747,
         mode: 'background',
@@ -159,7 +159,7 @@ describe('statusCommand', () => {
       },
       currentHead: 'abcdef123456',
       currentBranch: 'main',
-      storagePath: '/repo/.codenexus',
+      storagePath: '/repo/.gnexus',
       worktreeRoot: '/repo',
     });
 
@@ -171,7 +171,7 @@ describe('statusCommand', () => {
     const output = logSpy.mock.calls.flat().join(' ');
     expect(output).toContain('Reload error: reload failed');
     expect(output).toContain('Primary stale reason: the live service failed to reload the refreshed on-disk index.');
-    expect(output).toContain('Reload action: run `codenexus manage restart` to recover from the last live-reload failure.');
+    expect(output).toContain('Reload action: run `gnexus manage restart` to recover from the last live-reload failure.');
     expect(output).toContain('Auto-index error: Auto-index exited with code 1');
     expect(output).toContain('Auto-index backoff until:');
     expect(output).toContain('Auto-index note: automatic freshness is temporarily paused by backoff');
