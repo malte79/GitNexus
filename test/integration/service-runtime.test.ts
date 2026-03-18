@@ -1,0 +1,290 @@
+import { describe, it, expect } from 'vitest';
+import fs from 'fs/promises';
+import { realpathSync } from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import { createTempDir } from '../helpers/test-db.js';
+import { saveConfig, saveMeta, getRepoState, probeServiceHealth, computeIndexGeneration, type LoadedIndexIdentity } from '../../src/storage/repo-manager.js';
+import { startRepoLocalService, DuplicateServiceError, ServiceStartupError } from '../../src/server/service-runtime.js';
+
+async function createGitRepo(prefix: string) {
+  const handle = await createTempDir(prefix);
+  execSync('git init -q', { cwd: handle.dbPath });
+  execSync('git config user.email "test@example.com"', { cwd: handle.dbPath });
+  execSync('git config user.name "Test User"', { cwd: handle.dbPath });
+  await fs.writeFile(path.join(handle.dbPath, 'README.md'), 'hello\n', 'utf-8');
+  execSync('git add README.md', { cwd: handle.dbPath });
+  execSync('git commit -q -m "init"', { cwd: handle.dbPath });
+  return handle;
+}
+
+async function buildLoadedIndex(repoPath: string, overrides: Partial<LoadedIndexIdentity> = {}): Promise<LoadedIndexIdentity> {
+  return {
+    indexed_head: execSync('git rev-parse HEAD', { cwd: repoPath }).toString().trim(),
+    indexed_branch: execSync('git branch --show-current', { cwd: repoPath }).toString().trim(),
+    indexed_at: new Date().toISOString(),
+    indexed_dirty: false,
+    worktree_root: repoPath,
+    ...overrides,
+  };
+}
+
+async function prepareIndexedRepo(
+  repoPath: string,
+  port: number,
+  configOverrides: Partial<{ auto_index: boolean; auto_index_interval_seconds: number }> = {},
+) {
+  const storagePath = path.join(repoPath, '.gnexus');
+  await fs.writeFile(path.join(repoPath, '.gitignore'), '.gnexus/\n', 'utf-8');
+  execSync('git add .gitignore', { cwd: repoPath });
+  execSync('git commit -q -m "ignore .gnexus"', { cwd: repoPath });
+
+  await saveConfig(storagePath, {
+    version: 1,
+    port,
+    auto_index: true,
+    auto_index_interval_seconds: 300,
+    ...configOverrides,
+  });
+  await fs.mkdir(path.join(storagePath, 'kuzu'), { recursive: true });
+  const loadedIndex = await buildLoadedIndex(repoPath);
+  await saveMeta(storagePath, {
+    version: 1,
+    ...loadedIndex,
+  });
+
+  return { storagePath, loadedIndex };
+}
+
+async function reservePort(): Promise<number> {
+  const net = await import('net');
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected TCP address');
+  }
+  const port = address.port;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+  return port;
+}
+
+function normalizeRepoPath(value: string): string {
+  try {
+    return realpathSync(value);
+  } catch {
+    return value;
+  }
+}
+
+describe('repo-local HTTP service runtime', () => {
+  it('starts a live service for an indexed repo and cleans up runtime metadata on shutdown', async () => {
+    const repo = await createGitRepo('service-runtime-live-');
+    const port = await reservePort();
+    const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
+
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    expect(runtime.port).toBe(port);
+    expect(runtime.degraded).toBe(false);
+
+    const stateWhileServing = await getRepoState(repo.dbPath);
+    expect(stateWhileServing?.baseState).toBe('serving_current');
+
+    const runtimePath = path.join(storagePath, 'runtime.json');
+    await expect(fs.access(runtimePath)).resolves.toBeUndefined();
+
+    await runtime.close();
+
+    const stateAfterShutdown = await getRepoState(repo.dbPath);
+    expect(stateAfterShutdown?.baseState).toBe('indexed_current');
+    await expect(fs.access(runtimePath)).rejects.toThrow();
+
+    await repo.cleanup();
+  });
+
+  it('refuses duplicate serve attempts for the same repo boundary', async () => {
+    const repo = await createGitRepo('service-runtime-duplicate-');
+    const port = await reservePort();
+    await prepareIndexedRepo(repo.dbPath, port);
+
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    await expect(startRepoLocalService(repo.dbPath)).rejects.toBeInstanceOf(DuplicateServiceError);
+
+    await runtime.close();
+    await repo.cleanup();
+  });
+
+  it('fails cleanly when the configured port is already owned by another repo-local service', async () => {
+    const firstRepo = await createGitRepo('service-runtime-foreign-conflict-a-');
+    const secondRepo = await createGitRepo('service-runtime-foreign-conflict-b-');
+    const port = await reservePort();
+    await prepareIndexedRepo(firstRepo.dbPath, port);
+    await prepareIndexedRepo(secondRepo.dbPath, port);
+
+    const runtime = await startRepoLocalService(firstRepo.dbPath);
+
+    await expect(startRepoLocalService(secondRepo.dbPath)).rejects.toThrow(
+      `Configured port ${port} is already in use by gnexus for repo ${normalizeRepoPath(firstRepo.dbPath)}.`,
+    );
+
+    await runtime.close();
+    await firstRepo.cleanup();
+    await secondRepo.cleanup();
+  });
+
+  it('starts in degraded mode when the indexed repo is stale', async () => {
+    const repo = await createGitRepo('service-runtime-stale-');
+    const port = await reservePort();
+    await prepareIndexedRepo(repo.dbPath, port);
+    await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'changed\n', 'utf-8');
+
+    const runtime = await startRepoLocalService(repo.dbPath);
+    expect(runtime.degraded).toBe(true);
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('serving_stale');
+
+    await runtime.close();
+    await repo.cleanup();
+  });
+
+  it('refuses to start when no usable index exists', async () => {
+    const repo = await createGitRepo('service-runtime-unindexed-');
+    const storagePath = path.join(repo.dbPath, '.gnexus');
+    await saveConfig(storagePath, { version: 1, port: await reservePort() });
+
+    await expect(startRepoLocalService(repo.dbPath)).rejects.toBeInstanceOf(ServiceStartupError);
+
+    await repo.cleanup();
+  });
+
+  it('cleans up the bound server when runtime metadata cannot be written', async () => {
+    const repo = await createGitRepo('service-runtime-runtime-write-failure-');
+    const port = await reservePort();
+    const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
+
+    await fs.chmod(storagePath, 0o555);
+    try {
+      await expect(startRepoLocalService(repo.dbPath)).rejects.toBeInstanceOf(Error);
+      expect(await probeServiceHealth(port)).toBeNull();
+    } finally {
+      await fs.chmod(storagePath, 0o755);
+      await repo.cleanup();
+    }
+  });
+
+  it('adopts the rebuilt on-disk index automatically without manual restart', async () => {
+    const repo = await createGitRepo('service-runtime-refresh-stale-');
+    const port = await reservePort();
+    const { storagePath } = await prepareIndexedRepo(repo.dbPath, port);
+
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    const refreshedIdentity = await buildLoadedIndex(repo.dbPath, {
+      indexed_at: '2026-03-09T01:00:00.000Z',
+    });
+    const refreshedMeta = {
+      version: 1,
+      ...refreshedIdentity,
+      index_generation: computeIndexGeneration(refreshedIdentity),
+    };
+    await saveMeta(storagePath, refreshedMeta);
+
+    const started = Date.now();
+    while (Date.now() - started < 5_000) {
+      const state = await getRepoState(repo.dbPath);
+      if (
+        state?.baseState === 'serving_current' &&
+        !state.detailFlags.includes('service_restart_required') &&
+        state.liveHealth?.loaded_index.index_generation === refreshedMeta.index_generation
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    const state = await getRepoState(repo.dbPath);
+    expect(state?.baseState).toBe('serving_current');
+    expect(state?.detailFlags).not.toContain('service_restart_required');
+    expect(state?.liveHealth?.loaded_index.index_generation).toBe(refreshedMeta.index_generation);
+
+    await runtime.close();
+    await repo.cleanup();
+  });
+
+  it('auto-indexes repo changes in background mode', async () => {
+    const repo = await createGitRepo('service-runtime-auto-index-background-');
+    const port = await reservePort();
+    await prepareIndexedRepo(repo.dbPath, port, {
+      auto_index: true,
+      auto_index_interval_seconds: 1,
+    });
+
+    const previousMode = process.env.GNEXUS_SERVICE_MODE;
+    process.env.GNEXUS_SERVICE_MODE = 'background';
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    try {
+      await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'background refresh\n', 'utf-8');
+
+      const started = Date.now();
+      while (Date.now() - started < 10_000) {
+        const state = await getRepoState(repo.dbPath);
+        if (
+          state?.baseState === 'serving_current' &&
+          state.liveHealth?.loaded_index.indexed_dirty === true &&
+          !!state.liveHealth.auto_index?.last_succeeded_at
+        ) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      const state = await getRepoState(repo.dbPath);
+      expect(state?.baseState).toBe('serving_current');
+      expect(state?.liveHealth?.mode).toBe('background');
+      expect(state?.liveHealth?.loaded_index.indexed_dirty).toBe(true);
+      expect(state?.liveHealth?.auto_index?.last_succeeded_at).toBeTruthy();
+      expect(state?.detailFlags).not.toContain('service_restart_required');
+    } finally {
+      process.env.GNEXUS_SERVICE_MODE = previousMode;
+      await runtime.close();
+      await repo.cleanup();
+    }
+  });
+
+  it('does not auto-index repo changes in foreground mode', async () => {
+    const repo = await createGitRepo('service-runtime-auto-index-foreground-');
+    const port = await reservePort();
+    await prepareIndexedRepo(repo.dbPath, port, {
+      auto_index: true,
+      auto_index_interval_seconds: 1,
+    });
+
+    const previousMode = process.env.GNEXUS_SERVICE_MODE;
+    delete process.env.GNEXUS_SERVICE_MODE;
+    const runtime = await startRepoLocalService(repo.dbPath);
+
+    try {
+      await fs.writeFile(path.join(repo.dbPath, 'README.md'), 'foreground stays stale\n', 'utf-8');
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+
+      const state = await getRepoState(repo.dbPath);
+      expect(state?.baseState).toBe('serving_stale');
+      expect(state?.liveHealth?.mode).toBe('foreground');
+      expect(state?.liveHealth?.auto_index?.last_attempt_at).toBeUndefined();
+      expect(state?.detailFlags).toContain('working_tree_dirty');
+    } finally {
+      process.env.GNEXUS_SERVICE_MODE = previousMode;
+      await runtime.close();
+      await repo.cleanup();
+    }
+  });
+});

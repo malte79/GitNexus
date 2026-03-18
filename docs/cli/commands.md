@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the v1 user-facing CLI contract for GNexus.
+This document defines the v1 user-facing CLI contract for gnexus.
 
 The CLI is split into two planes:
 
@@ -37,13 +37,13 @@ All commands resolve the nearest enclosing git root as the active repo boundary.
 
 ## `gnexus help`
 
-Print Markdown guidance for installing and using GNexus.
+Print Markdown guidance for installing and using gnexus.
 
 Contract:
 
 - read-only
 - prints Markdown only
-- explains what GNexus is and the split between everyday analysis commands and `manage` lifecycle commands
+- explains what gnexus is and the split between everyday analysis commands and `manage` lifecycle commands
 - documents the normal remediation path when the service is unavailable or stale:
   - `gnexus manage start`
   - `gnexus manage index`
@@ -104,7 +104,7 @@ Shared contract:
 
 ## `gnexus manage init`
 
-Activate GNexus for the current repo boundary.
+Activate gnexus for the current repo boundary.
 
 Contract:
 

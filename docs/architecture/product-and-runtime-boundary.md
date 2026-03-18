@@ -2,7 +2,7 @@
 
 ## Purpose
 
-GNexus is a repo-activated code-intelligence backend for AI agents.
+gnexus is a repo-activated code-intelligence backend for AI agents.
 
 Its v1 product boundary is:
 
@@ -14,7 +14,7 @@ Its v1 product boundary is:
 
 ## V1 Invariants
 
-- GNexus may create or update state only under `.gnexus/`.
+- gnexus may create or update state only under `.gnexus/`.
 - The no-mutation rule outside `.gnexus/` is absolute in v1.
 - The operative repo boundary is the nearest enclosing git root.
 - Nested git repos are separate repo boundaries from their parents.

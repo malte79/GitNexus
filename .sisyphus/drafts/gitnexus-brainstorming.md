@@ -9,7 +9,7 @@
 - Current Focus: Implementing **Clustering** and **Process Maps**.
 
 ## Findings
-- **Clustering**: Found `gitnexus/src/core/ingestion/cluster-enricher.ts`.
+- **Clustering**: Found `src/core/ingestion/cluster-enricher.ts`.
 - **Process Maps**: No files matched `*process*map*` yet. Searching content next.
 
 ## Open Questions

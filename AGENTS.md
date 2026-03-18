@@ -36,11 +36,11 @@ When a request maps cleanly to a repo-local workflow, use the matching skill exp
 ## Repo Context (Mandatory)
 
 - Product intent: `planning/master-intent.md`
-- Main package: `gitnexus/`
-- Core engine: `gitnexus/src/core/`
-- MCP layer: `gitnexus/src/mcp/`
-- CLI layer: `gitnexus/src/cli/`
-- Storage layer: `gitnexus/src/storage/`
+- Main package: repository root
+- Core engine: `src/core/`
+- MCP layer: `src/mcp/`
+- CLI layer: `src/cli/`
+- Storage layer: `src/storage/`
 
 ## Branch Naming (Mandatory)
 
@@ -51,15 +51,15 @@ When a request maps cleanly to a repo-local workflow, use the matching skill exp
 Use validation commands from repository root unless a task requires otherwise.
 
 - Docs markdown lint:
-  - `npm run lint:docs --prefix gitnexus`
+  - `npm run lint:docs`
 - Docs contract lint:
-  - `npm run check:docs-contracts --prefix gitnexus`
+  - `npm run check:docs-contracts`
 - Main package unit tests:
-  - `npm test --prefix gitnexus`
+  - `npm test`
 - Main package integration tests:
-  - `npm run test:integration --prefix gitnexus`
+  - `npm run test:integration`
 - Full main package test suite:
-  - `npm run test:all --prefix gitnexus`
+  - `npm run test:all`
 
 If changed surfaces make a command inapplicable or blocked, report that explicitly.
 
@@ -79,8 +79,8 @@ Required quality gates before merge:
 
 - `$cr`
 - `$mech`
-- `npm run lint:docs --prefix gitnexus`
-- `npm run check:docs-contracts --prefix gitnexus`
+- `npm run lint:docs`
+- `npm run check:docs-contracts`
 
 `$cr` is the AI code-review gate.
 `$mech` is the mechanical validation gate.

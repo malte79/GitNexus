@@ -2,7 +2,7 @@
 
 ## Current Direction
 
-This fork is now standardizing on `GNexus` as a globally installed but repo-activated tool for AI-agent code intelligence. The only supported executable is `gnexus`, the only supported repo-local state directory is `.gnexus/`, and the breaking rename is meant to be total across active product, runtime, package, MCP, and workflow surfaces. Repo-internal checkout path names are intentionally out of scope.
+This fork is now standardizing on `gnexus` as a globally installed but repo-activated tool for AI-agent code intelligence. The only supported executable is `gnexus`, the only supported repo-local state directory is `.gnexus/`, and the breaking rename is meant to be total across active product, runtime, package, MCP, and workflow surfaces. Repo-internal checkout path names are intentionally out of scope.
 
 ## Core Product Intent
 
@@ -10,7 +10,7 @@ Each repository should be self-contained and isolated. A repo that uses the tool
 
 ## V1 Invariants
 
-- GNexus may create or update repo state only under `.gnexus/`
+- gnexus may create or update repo state only under `.gnexus/`
 - The no-mutation rule outside `.gnexus/` is absolute
 - The nearest enclosing git root is the operative repo boundary
 - Nested git repos are separate repo boundaries from their parents
@@ -50,7 +50,7 @@ HTTP is the chosen transport, not stdio, for the repo-local MCP service. The int
 ## Operational Model
 
 - `gnexus init`
-  - run inside a repo to activate GNexus for that repo
+  - run inside a repo to activate gnexus for that repo
   - creates `.gnexus/`
   - writes repo-local config
 - `gnexus index`
@@ -120,12 +120,12 @@ Background mode now adds a bounded convenience layer on top of that manual model
 
 ## Documentation Discipline
 
-- GNexus-owned contract and behavior changes must update matching docs in the same change
-- Durable GNexus documentation lives under `docs/`
+- gnexus-owned contract and behavior changes must update matching docs in the same change
+- Durable gnexus documentation lives under `docs/`
 - Planning docs remain governed while they lock active direction, but they are not the long-term home for durable product documentation
 - The governed docs surface set is defined by `docs/governed-paths.toml`
-- Required docs gates are `npm run lint:docs --prefix gitnexus` and `npm run check:docs-contracts --prefix gitnexus`
-- Pure refactors with no GNexus-owned contract or behavior change may skip docs updates only when the docs-contract gate concludes no governed docs change is required
+- Required docs gates are `npm run lint:docs` and `npm run check:docs-contracts`
+- Pure refactors with no gnexus-owned contract or behavior change may skip docs updates only when the docs-contract gate concludes no governed docs change is required
 
 ## Implementation Posture
 
@@ -158,7 +158,7 @@ The fork should be intentionally reduced toward a headless core for agents:
 - A database migration is deferred until there is a concrete product or performance reason to do it
 - Forking Kuzu is also deferred unless a specific missing feature or blocker makes that necessary
 
-The current posture is to keep Kuzu while GNexus is stripped down and reshaped. The more important near-term work is product simplification, repo-local architecture, and strong Luau or Roblox support rather than replacing the database layer prematurely.
+The current posture is to keep Kuzu while gnexus is stripped down and reshaped. The more important near-term work is product simplification, repo-local architecture, and strong Luau or Roblox support rather than replacing the database layer prematurely.
 
 The fork should remove, defer, or deprioritize non-core layers such as:
 
@@ -177,7 +177,7 @@ And stripped away from:
 
 - multi-surface product complexity
 - browser-first or human-visualization surfaces
-- plugin or editor packaging work that is not core to GNexus
+- plugin or editor packaging work that is not core to gnexus
 - evaluation harnesses and other side systems not needed for the main product
 
 ## Embeddings Direction
@@ -187,21 +187,21 @@ And stripped away from:
 - V1 should work well with compact lexical retrieval and graph traversal alone
 - Complexity budget should go first to strong structural understanding, repo-local architecture, and Roblox or Luau support rather than semantic embeddings
 
-Embeddings are still valuable in the future for fuzzy semantic retrieval when user language and code vocabulary do not match, but they are not considered core to the first useful GNexus product.
+Embeddings are still valuable in the future for fuzzy semantic retrieval when user language and code vocabulary do not match, but they are not considered core to the first useful gnexus product.
 
 ## Roblox And Luau Direction
 
-- Luau is now supported as a real indexed language through the existing GNexus engine
+- Luau is now supported as a real indexed language through the existing gnexus engine
 - Roblox support is also a real product goal
 - Rojo-based Roblox projects are the initial support target
 - The Rojo-only restriction is intentional because it gives a deterministic mapping from filesystem source to Roblox instance tree and makes practical support much more feasible
 
 The implementation order remains deliberate:
 
-- Epic 07 adds Luau as a real indexed language through the existing GNexus engine
+- Epic 07 adds Luau as a real indexed language through the existing gnexus engine
 - Epic 08 adds Roblox- and Rojo-specific semantics on top of that language support
 
-For Rojo-based Roblox projects, GNexus now understands:
+For Rojo-based Roblox projects, gnexus now understands:
 
 - Luau source structure
 - `default.project.json` project structure
@@ -216,7 +216,7 @@ The current Roblox support remains intentionally conservative:
 - no dynamic instance-tree inference
 - no world projection yet
 
-On top of that correctness layer, GNexus is now improving Luau and Roblox query ergonomics:
+On top of that correctness layer, gnexus is now improving Luau and Roblox query ergonomics:
 
 - common returned Luau module tables are treated as first-class symbols where the pattern is deterministic
 - Roblox and Luau ranking is improved through deterministic signals such as exact module names, file basenames, split-word service aliases, `runtimeArea`, and Rojo path context
@@ -227,7 +227,7 @@ On top of that correctness layer, GNexus is now improving Luau and Roblox query 
 - The SQLite world projection concept remains part of long-term intent
 - It is considered complementary to the code graph, not a replacement for it
 - It is explicitly a future subsystem and not an immediate implementation priority
-- When added later, it should likely be modeled as a separate but linkable world-state dataset inside GNexus
+- When added later, it should likely be modeled as a separate but linkable world-state dataset inside gnexus
 
 ## Reduction Strategy
 
@@ -235,7 +235,7 @@ The fork should be simplified in a deliberate order rather than by random deleti
 
 Preferred strategy:
 
-1. define the minimal GNexus product shape clearly
+1. define the minimal gnexus product shape clearly
 2. redirect core flows toward repo-local `.gnexus/` ownership and repo-local MCP over HTTP
 3. isolate and disable non-core product surfaces
 4. remove dead code and dead tests only after the core path is stable
@@ -260,7 +260,7 @@ And it should remove or strongly deprioritize:
 
 ## Naming Direction
 
-- Product name: `GNexus`
+- Product name: `gnexus`
 - CLI name: `gnexus`
 - Repo-local state directory: `.gnexus/`
 - Renaming strategy: full breaking sweep across active product and workflow surfaces, with no legacy aliases

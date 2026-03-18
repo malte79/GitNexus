@@ -4,13 +4,13 @@ Epic 09 improves the agent-facing usefulness of the existing Luau and Rojo suppo
 
 ## Purpose
 
-GNexus is already correct on representative Rojo import-resolution cases. Epic 09 makes those results easier for agents to use by improving three things:
+gnexus is already correct on representative Rojo import-resolution cases. Epic 09 makes those results easier for agents to use by improving three things:
 
 - Luau module-table symbolization
 - deterministic ranking for Roblox and Luau concepts
 - concise Roblox-aware query and context summaries
 
-The goal is not fuzzy semantic retrieval. The goal is better grounded answers from the graph GNexus already has.
+The goal is not fuzzy semantic retrieval. The goal is better grounded answers from the graph gnexus already has.
 
 ## In-Scope Module Patterns
 

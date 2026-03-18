@@ -19,7 +19,7 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
   - explicit state and lifecycle ownership,
   - docs lockstep,
   - at least one structural guard that enforces the intended boundary.
-- Use GNexus as the first structural lens for subsystem, seam, and blast-radius discovery, but do not replace direct code reading with tool output.
+- Use gnexus as the first structural lens for subsystem, seam, and blast-radius discovery, but do not replace direct code reading with tool output.
 - Do not introduce temporary compatibility shims, migration toggles, or "cleanup later" production paths unless the approved plan explicitly requires them.
 - Do not widen public behavior or contracts beyond the approved plan.
 - No hidden fallback or fail-open behavior.
@@ -40,12 +40,12 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
   - `gnexus context <primary-symbol>` for the likely owning seam
   - `gnexus impact <primary-symbol> --direction upstream` when the change touches shared behavior
 
-If GNexus is stale or unavailable, report that before falling back to direct file inspection alone.
+If gnexus is stale or unavailable, report that before falling back to direct file inspection alone.
 
 ## Execution Contract
 
 1. Lock scope before edits.
-2. Assimilate owning surfaces before edits with GNexus plus direct file reads.
+2. Assimilate owning surfaces before edits with gnexus plus direct file reads.
 3. If the work creates a new subsystem or major surface, confirm the ownership skeleton and the structural guard before writing production code.
 4. Bind to existing seams first.
 5. Implement in bounded passes.
@@ -56,11 +56,11 @@ If GNexus is stale or unavailable, report that before falling back to direct fil
 ## Verification Requirements
 
 Run relevant checks and report outcomes:
-- `npm test --prefix gitnexus`
+- `npm test`
 - when core behavior changes materially:
-  - `npm run test:integration --prefix gitnexus`
+  - `npm run test:integration`
 - when broad confidence is needed:
-  - `npm run test:all --prefix gitnexus`
+  - `npm run test:all`
 
 ## Reporting Contract
 
@@ -75,7 +75,7 @@ Run relevant checks and report outcomes:
 - `Blockers`
 - `Touched Surfaces`
 
-## GNexus Implementation Expectations
+## gnexus Implementation Expectations
 
 - Before edits, use:
   - `query --owners` for subsystem discovery
@@ -83,4 +83,4 @@ Run relevant checks and report outcomes:
   - `impact` for shared-code blast radius when relevant
 - When a new subsystem or major surface is created, use `detect-changes` before closeout if it will confirm the intended public seam and owner split.
 - After edits, prefer `detect-changes` as the structural diff summary when it adds signal.
-- If GNexus results contradict the implementation reality seen in files or tests, report that mismatch explicitly.
+- If gnexus results contradict the implementation reality seen in files or tests, report that mismatch explicitly.

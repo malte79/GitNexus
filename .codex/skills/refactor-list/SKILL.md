@@ -38,7 +38,7 @@ Do not sort components by narrative intuition alone.
 Before ranking:
 - run `gnexus manage status`
 - if freshness matters for a large ranking pass and the index is stale, run `gnexus manage index`
-- use GNexus to map subsystem boundaries and dependency shape before relying on broad grep/manual impressions
+- use gnexus to map subsystem boundaries and dependency shape before relying on broad grep/manual impressions
 - prefer:
   - `summary --subsystems` for the first broad subsystem/centrality pass
   - `query "<subsystem concept>" --owners` for subsystem discovery
@@ -52,7 +52,7 @@ Before ranking:
 Score each component from `0.0` to `10.0` using the weighted model below.
 
 - `Subsystem Pressure` (`30%`)
-  - GNexus subsystem pressure from `summary --subsystems`
+  - gnexus subsystem pressure from `summary --subsystems`
   - production file count
   - visible hotspots
   - visible lifecycle chokepoints
@@ -96,7 +96,7 @@ Build the ranking from current code only. Use signals such as:
 - mutable global state, caches, registries, and lifecycle complexity
 - clarity of engine/MCP/CLI/storage separation
 - testability and guardrail coverage
-- dependency fan-in / fan-out and cross-boundary reachability as seen through GNexus `impact`
+- dependency fan-in / fan-out and cross-boundary reachability as seen through gnexus `impact`
 - how hard it is to explain the component cleanly after reading it
 - whether the current dominant owner still owns multiple concern families that should live elsewhere
 

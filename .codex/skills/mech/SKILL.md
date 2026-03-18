@@ -24,13 +24,13 @@ Provide deterministic validation evidence before `prep` or `merge`.
 Choose checks from changed surfaces:
 
 1) Always consider:
-- `npm test --prefix gitnexus`
+- `npm test`
 
 2) If core ingestion, MCP, CLI, storage, or search behavior changed materially:
-- `npm run test:integration --prefix gitnexus`
+- `npm run test:integration`
 
 3) If broad behavior changed across the main package or release confidence is required:
-- `npm run test:all --prefix gitnexus`
+- `npm run test:all`
 
 4) If only documentation or planning files changed:
 - report that no mechanical gates were required

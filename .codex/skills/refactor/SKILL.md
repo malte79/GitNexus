@@ -11,9 +11,9 @@ This skill must use the same explicit weighted scoring model as `$refactor-list`
 Do not declare success from narrative improvement alone.
 
 This skill expects the user to point at a specific component, for example:
-- `gitnexus/src/mcp/local/local-backend.ts`
+- `src/mcp/local/local-backend.ts`
 - `Local Backend`
-- `gitnexus/src/storage/repo-manager.ts`
+- `src/storage/repo-manager.ts`
 
 Its job is:
 
@@ -66,8 +66,8 @@ Before proposing the refactor shape:
   - `context <symbol>` for the main anchor symbols
   - `impact <symbol> --direction upstream` for blast-radius estimation before extraction or moves
   - `detect-changes` after edits when the strike touches shared seams
-- use GNexus first for cross-file dependency tracing, ownership mapping, and blast-radius estimation
-- treat GNexus as mandatory for non-trivial refactor strikes; use `rg` only as a supplement
+- use gnexus first for cross-file dependency tracing, ownership mapping, and blast-radius estimation
+- treat gnexus as mandatory for non-trivial refactor strikes; use `rg` only as a supplement
 - baseline and closeout must both use the shared weighted scoring families:
   - `Subsystem Pressure`
   - `Dominant Owner Pressure`
@@ -79,7 +79,7 @@ Before proposing the refactor shape:
 
 The refactor request must identify:
 
-- `Target Component`: exact path/surface, for example `gitnexus/src/mcp/local/local-backend.ts`
+- `Target Component`: exact path/surface, for example `src/mcp/local/local-backend.ts`
 - `Behavior Contract`: what must remain stable
 - `Refactor Objective`: leaderboard-exit, not general cleanup
 

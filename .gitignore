@@ -3,7 +3,7 @@ node_modules/
 
 # Build output
 dist/
-gitnexus/bin/
+bin/
 
 # TypeScript build info
 *.tsbuildinfo
@@ -56,6 +56,7 @@ assets/
 repomix-output*
 
 # Repo-local runtime/index state
+.gnexus/
 .codenexus/
 
 # Design docs (local only)

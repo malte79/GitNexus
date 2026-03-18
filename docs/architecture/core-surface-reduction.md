@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records the Epic 02 reduction of the inherited upstream repo toward the minimum surfaces needed for the headless GNexus core.
+This document records the Epic 02 reduction of the inherited upstream repo toward the minimum surfaces needed for the headless gnexus core.
 
 The reduction rule used here is strict:
 
@@ -14,32 +14,32 @@ The reduction rule used here is strict:
 
 | Surface | Current role | Decision | Rationale |
 |---|---|---|---|
-| `gitnexus/src/core/ingestion/` | core indexing pipeline | keep for epic 03 | Required for repo-local indexing and later Luau work |
-| `gitnexus/src/core/graph/` | graph model | keep for epic 03 | Required core data model |
-| `gitnexus/src/core/kuzu/` | graph persistence/querying | keep for epic 03 | Kuzu remains the storage engine for now |
-| `gitnexus/src/core/search/bm25-index.ts` | lexical retrieval | keep for epic 03 | Lexical/BM25 retrieval remains part of the bare core |
-| `gitnexus/src/core/tree-sitter/` | parser loading | keep for epic 07 | Required for language indexing |
-| `gitnexus/src/core/wiki/` | wiki generation | remove now | Human-facing output mode outside the approved product |
-| `gitnexus/src/core/augmentation/` | hook/search augmentation | remove now | Side-system not required for the headless core |
-| `gitnexus/src/core/embeddings/` | semantic embeddings | remove now | Explicitly deferred future upgrade |
-| `gitnexus/src/core/search/hybrid-search.ts` | semantic+BM25 blend | remove now | Embeddings removed; lexical search remains |
-| `gitnexus/src/cli/index-command.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to `gnexus index` |
-| `gitnexus/src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `gnexus status` |
-| `gitnexus/src/cli/serve.ts` | serve entrypoint | keep | Active `gnexus serve` command for the repo-local HTTP runtime |
-| `gitnexus/src/cli/index.ts` | CLI dispatcher | keep for epic 04 | Required CLI seam, but reduced to the minimal current surface |
-| `gitnexus/src/cli/setup.ts` | editor/plugin setup | remove now | Outside the headless product |
-| `gitnexus/src/cli/serve.ts` | web UI server command | remove now | Web UI is no longer a product surface |
-| `gitnexus/src/cli/list.ts` | multi-repo listing command | remove now | Not part of the near-term CLI surface |
-| `gitnexus/src/cli/clean.ts` | cleanup command | remove now | Not part of the near-term CLI surface |
-| `gitnexus/src/cli/wiki.ts` | wiki command | remove now | Wiki generation removed |
-| `gitnexus/src/cli/augment.ts` | augmentation command | remove now | Augmentation removed |
-| `gitnexus/src/cli/tool.ts` | direct tool CLI commands | remove now | MCP remains the primary agent-facing surface |
-| `gitnexus/src/cli/eval-server.ts` | eval daemon | remove now | Eval subsystem removed |
-| `gitnexus/src/cli/ai-context.ts` | AGENTS/context file generation | remove now | Product rule is no repo mutation outside repo state |
-| `gitnexus/src/mcp/` | MCP tool/server seam | keep | Active repo-local MCP surface |
-| `gitnexus/src/server/mcp-http.ts` | HTTP MCP transport mount | keep | Active repo-local HTTP runtime seam |
-| `gitnexus/src/server/api.ts` | web/browser API server | remove now | Web UI surface removed |
-| `gitnexus/src/storage/` | repo/git storage helpers | keep for epic 03 | Required until repo-local state rewrite lands |
+| `src/core/ingestion/` | core indexing pipeline | keep for epic 03 | Required for repo-local indexing and later Luau work |
+| `src/core/graph/` | graph model | keep for epic 03 | Required core data model |
+| `src/core/kuzu/` | graph persistence/querying | keep for epic 03 | Kuzu remains the storage engine for now |
+| `src/core/search/bm25-index.ts` | lexical retrieval | keep for epic 03 | Lexical/BM25 retrieval remains part of the bare core |
+| `src/core/tree-sitter/` | parser loading | keep for epic 07 | Required for language indexing |
+| `src/core/wiki/` | wiki generation | remove now | Human-facing output mode outside the approved product |
+| `src/core/augmentation/` | hook/search augmentation | remove now | Side-system not required for the headless core |
+| `src/core/embeddings/` | semantic embeddings | remove now | Explicitly deferred future upgrade |
+| `src/core/search/hybrid-search.ts` | semantic+BM25 blend | remove now | Embeddings removed; lexical search remains |
+| `src/cli/index-command.ts` | indexing entrypoint | keep for epic 04 | Still the shortest path to `gnexus index` |
+| `src/cli/status.ts` | status entrypoint | keep for epic 04 | Still the shortest path to future `gnexus status` |
+| `src/cli/serve.ts` | serve entrypoint | keep | Active `gnexus serve` command for the repo-local HTTP runtime |
+| `src/cli/index.ts` | CLI dispatcher | keep for epic 04 | Required CLI seam, but reduced to the minimal current surface |
+| `src/cli/setup.ts` | editor/plugin setup | remove now | Outside the headless product |
+| `src/cli/serve.ts` | web UI server command | remove now | Web UI is no longer a product surface |
+| `src/cli/list.ts` | multi-repo listing command | remove now | Not part of the near-term CLI surface |
+| `src/cli/clean.ts` | cleanup command | remove now | Not part of the near-term CLI surface |
+| `src/cli/wiki.ts` | wiki command | remove now | Wiki generation removed |
+| `src/cli/augment.ts` | augmentation command | remove now | Augmentation removed |
+| `src/cli/tool.ts` | direct tool CLI commands | remove now | MCP remains the primary agent-facing surface |
+| `src/cli/eval-server.ts` | eval daemon | remove now | Eval subsystem removed |
+| `src/cli/ai-context.ts` | AGENTS/context file generation | remove now | Product rule is no repo mutation outside repo state |
+| `src/mcp/` | MCP tool/server seam | keep | Active repo-local MCP surface |
+| `src/server/mcp-http.ts` | HTTP MCP transport mount | keep | Active repo-local HTTP runtime seam |
+| `src/server/api.ts` | web/browser API server | remove now | Web UI surface removed |
+| `src/storage/` | repo/git storage helpers | keep for epic 03 | Required until repo-local state rewrite lands |
 | `gitnexus-web/` | browser UI product | remove now | Human-facing visualization is out of scope |
 | `gitnexus-claude-plugin/` | Claude plugin product | remove now | Editor/plugin packaging is out of scope |
 | `gitnexus-cursor-integration/` | Cursor integration product | remove now | Editor/plugin packaging is out of scope |
@@ -50,9 +50,9 @@ The reduction rule used here is strict:
 | `.github/workflows/claude*.yml` | Claude-specific automation | remove now | Workflow tied to removed product surfaces |
 | `.github/workflows/ci.yml` | CI | keep for repo workflow | Supports the retained package |
 | `.github/workflows/publish.yml` | package publish | keep for repo workflow | Supports the retained package |
-| `gitnexus/hooks/` | Claude hook scripts | remove now | Hook/onboarding surface removed |
-| `gitnexus/skills/` | legacy repo skill pack | remove now | Product-specific helper pack removed |
-| `gitnexus/vendor/` | retained package support code | keep for epic 03 | Still shipped by the retained package; revisit when architecture changes |
+| `hooks/` | Claude hook scripts | remove now | Hook/onboarding surface removed |
+| `skills/` | legacy repo skill pack | remove now | Product-specific helper pack removed |
+| `vendor/` | retained package support code | keep for epic 03 | Still shipped by the retained package; revisit when architecture changes |
 
 ## Resulting Product Surface
 

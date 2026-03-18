@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the v1 repo-local MCP-over-HTTP service contract for one GNexus repo boundary.
+This document defines the v1 repo-local MCP-over-HTTP service contract for one gnexus repo boundary.
 
 ## Runtime Scope
 
@@ -90,7 +90,7 @@ The health payload must prove service identity for the current repo boundary by 
 - service start time
 - loaded index identity captured at service startup
 
-Raw port reachability is never enough to claim a live GNexus service.
+Raw port reachability is never enough to claim a live gnexus service.
 
 The health payload must also expose:
 
