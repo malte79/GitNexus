@@ -7,6 +7,7 @@ export type ChangeSurfaceSource =
   | 'impact'
   | 'impact_process'
   | 'impact_module'
+  | 'intent_hint'
   | 'adjacent_test'
   | 'reported_change'
   | 'owner_overlap';

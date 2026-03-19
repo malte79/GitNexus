@@ -1,0 +1,111 @@
+{
+  "artifact_type": "engineering_baseline_pilot",
+  "scope": "three engineering tasks from the pinned corpus",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/baseline",
+  "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+  "runtime_signature": "manual-cli-pilot-baseline-v1",
+  "notes": [
+    "This is a real measured pilot slice, not the final benchmark run artifact.",
+    "These observations come from baseline owner-query flows only.",
+    "The slice is intentionally strict about gold-surface coverage: partial hits do not count as success."
+  ],
+  "task_observations": [
+    {
+      "task_id": "engineering-new-cli-surface",
+      "role": "engineering",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Add a new top-level analysis command that routes through the MCP HTTP runtime\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.74,
+        "total_task_time_seconds": 0.74
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/cli/mcp-command-client.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/cli/index.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/server/mcp-http.ts",
+          "src/mcp/local/local-backend-search-ranking-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query found the runtime transport client seam but missed the CLI command-registration seam.",
+        "This task would require more exploration before implementation could start safely."
+      ]
+    },
+    {
+      "task_id": "engineering-new-mcp-tool",
+      "role": "engineering",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Add a new agent-facing tool that reuses existing Local Backend analysis seams\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.724,
+        "total_task_time_seconds": 0.724
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "src/mcp/tools.ts",
+          "src/mcp/server.ts",
+          "src/mcp/local/local-backend-analysis-support.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-summary-presentation-support.ts",
+          "src/mcp/local/local-backend-search-enrichment-support.ts",
+          "src/mcp/local/local-backend-runtime-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query clustered around Local support internals instead of the actual MCP tool-registration seams.",
+        "This is not sufficient to guide implementation safely."
+      ]
+    },
+    {
+      "task_id": "engineering-structural-guard",
+      "role": "engineering",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Add a structure test that prevents Local Backend analysis from regrowing into a monolith\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.627,
+        "total_task_time_seconds": 0.627
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "test/unit/local-backend-structure.test.ts",
+          "src/mcp/local/local-backend-analysis-support.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-runtime-support.ts",
+          "src/mcp/local/local-backend-search-ranking-support.ts",
+          "src/mcp/local/local-backend-graph-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query failed to find either the guard test or the analysis seam that the task gold requires.",
+        "It overfit to other Local internals instead."
+      ]
+    }
+  ]
+}

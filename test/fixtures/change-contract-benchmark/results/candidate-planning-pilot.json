@@ -1,0 +1,109 @@
+{
+  "artifact_type": "planning_candidate_pilot",
+  "scope": "first three planning tasks from the pinned corpus",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/candidate",
+  "repo_commit": "000ead1",
+  "runtime_signature": "manual-cli-pilot-candidate-v1",
+  "notes": [
+    "This is a real measured pilot slice, not the final benchmark run artifact.",
+    "Time measurements come from local plan-change timing in the clean candidate worktree.",
+    "orientation_tokens_before_first_edit and full trustworthiness scoring are not captured here because this pilot did not run through a live agent-session token counter.",
+    "Use this pilot together with baseline-planning-pilot.json to calibrate full-run adjudication before filling results/candidate.json."
+  ],
+  "task_observations": [
+    {
+      "task_id": "planning-repo-manager-split",
+      "role": "planning",
+      "candidate_flow": [
+        "node dist/cli/index.js plan-change \"Split repo state evaluation away from runtime coordination in repo-manager\""
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.402,
+        "total_task_time_seconds": 1.402
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/storage/repo-manager.ts",
+          "src/server/service-runtime.ts"
+        ],
+        "missed_gold_surfaces": [],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-runtime-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": true,
+      "rework_count": 0,
+      "notes": [
+        "The contract returned both gold edit surfaces in one command.",
+        "It also included adjacent runtime-support surfaces and test-file recommendations, which improved context density but did not improve command-level test recall against the corpus gold."
+      ]
+    },
+    {
+      "task_id": "planning-local-backend-ranking",
+      "role": "planning",
+      "candidate_flow": [
+        "node dist/cli/index.js plan-change \"Reduce authority concentration in Local Backend ranking and graph recovery\""
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.308,
+        "total_task_time_seconds": 1.308
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/mcp/local/local-backend-search-ranking-support.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/mcp/local/local-backend-graph-support.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-change-evidence-support.ts",
+          "src/mcp/local/local-backend-runtime-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The contract anchored strongly on ranking support but still failed to surface the graph-support companion seam required by the corpus gold.",
+        "This task would still need another exploration pass before the planning result is complete."
+      ]
+    },
+    {
+      "task_id": "planning-ingestion-call-surface",
+      "role": "planning",
+      "candidate_flow": [
+        "node dist/cli/index.js plan-change \"Reduce truth-family concentration around call resolution in ingestion\""
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.157,
+        "total_task_time_seconds": 1.157
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/core/ingestion/call-processor.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/core/ingestion/symbol-table.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/core/ingestion/pipeline-support.ts",
+          "src/core/ingestion/parsing-processor.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The contract improved focus on call-processor but still did not surface the symbol-table companion seam required by the corpus gold.",
+        "The extra parsing and pipeline owners add context, but they are not sufficient to mark the planning task complete."
+      ]
+    }
+  ]
+}

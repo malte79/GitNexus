@@ -23,6 +23,8 @@ export interface ChangeEvidenceBundle {
   primaryAnchor: ChangeContractSurface | null;
 }
 
+type ChangeTaskIntent = 'command' | 'tool' | 'test' | 'guard' | 'runtime' | 'local_backend';
+
 export class LocalBackendChangeEvidenceSupport {
   constructor(private readonly host: LocalBackendAnalysisHost) {}
 
@@ -31,6 +33,8 @@ export class LocalBackendChangeEvidenceSupport {
     params: { goal: string; task_context?: string; max_surfaces: number },
   ): Promise<ChangeEvidenceBundle> {
     await this.host.ensureInitialized(repo.id);
+    const intents = this.detectTaskIntents(params.goal);
+    const trackedFiles = this.listTrackedFiles(repo);
 
     const queryResult = await this.host.querySearch(repo, {
       query: params.goal,
@@ -41,7 +45,13 @@ export class LocalBackendChangeEvidenceSupport {
       max_symbols: Math.max(6, params.max_surfaces * 3),
     });
 
-    const groundedSurfaces = this.collectGroundedSurfaces(queryResult, params.max_surfaces);
+    const queryGroundedSurfaces = this.collectGroundedSurfaces(queryResult, params.max_surfaces * 2);
+    const intentHintSurfaces = this.collectIntentHintSurfaces(trackedFiles, intents, params.goal, queryGroundedSurfaces);
+    const groundedSurfaces = this.rankSurfaces(
+      [...queryGroundedSurfaces, ...intentHintSurfaces],
+      intents,
+      params.goal,
+    ).slice(0, params.max_surfaces);
     const primaryAnchor = groundedSurfaces.find((surface) => surface.symbol_name || surface.symbol_uid) || groundedSurfaces[0] || null;
 
     if (!primaryAnchor) {
@@ -76,7 +86,15 @@ export class LocalBackendChangeEvidenceSupport {
     });
 
     const likelySurfaces = this.collectLikelySurfaces(impact, groundedSurfaces, params.max_surfaces);
-    const recommendedTests = this.collectRecommendedTests(repo, groundedSurfaces, likelySurfaces, impact, params.max_surfaces);
+    const recommendedTests = this.collectRecommendedTests(
+      trackedFiles,
+      groundedSurfaces,
+      likelySurfaces,
+      impact,
+      intents,
+      params.goal,
+      params.max_surfaces,
+    );
     const supportingProcesses = Array.isArray(impact?.affected_processes)
       ? impact.affected_processes.slice(0, 6).map((process: any) => ({
           name: process.name,
@@ -183,10 +201,12 @@ export class LocalBackendChangeEvidenceSupport {
   }
 
   private collectRecommendedTests(
-    repo: RepoHandle,
+    repoFiles: string[],
     groundedSurfaces: ChangeContractSurface[],
     likelySurfaces: ChangeContractSurface[],
     impact: any,
+    intents: Set<ChangeTaskIntent>,
+    goal: string,
     maxSurfaces: number,
   ): ChangeContractTestTarget[] {
     const tests: ChangeContractTestTarget[] = [];
@@ -212,7 +232,6 @@ export class LocalBackendChangeEvidenceSupport {
       }
     }
 
-    const repoFiles = this.listTrackedFiles(repo);
     const implementationFiles = [...groundedSurfaces, ...likelySurfaces].map((surface) => surface.file_path);
     const implementationStems = new Set(implementationFiles.map((filePath) => createPathStem(filePath)));
 
@@ -243,7 +262,150 @@ export class LocalBackendChangeEvidenceSupport {
       });
     }
 
+    for (const hintedTest of this.collectIntentHintTests(repoFiles, intents, goal)) {
+      addTest(hintedTest);
+    }
+
     return tests.slice(0, maxSurfaces);
+  }
+
+  private detectTaskIntents(goal: string): Set<ChangeTaskIntent> {
+    const intents = new Set<ChangeTaskIntent>();
+    const normalized = goal.toLowerCase();
+    if (/\b(command|cli)\b/.test(normalized)) intents.add('command');
+    if (/\b(tool|mcp|agent-facing)\b/.test(normalized)) intents.add('tool');
+    if (/\b(test|tests)\b/.test(normalized)) intents.add('test');
+    if (/\b(guard|structure test|monolith)\b/.test(normalized)) intents.add('guard');
+    if (/\bruntime\b/.test(normalized)) intents.add('runtime');
+    if (/\blocal backend\b/.test(normalized)) intents.add('local_backend');
+    return intents;
+  }
+
+  private collectIntentHintSurfaces(
+    repoFiles: string[],
+    intents: Set<ChangeTaskIntent>,
+    goal: string,
+    groundedSurfaces: ChangeContractSurface[],
+  ): ChangeContractSurface[] {
+    const hints: ChangeContractSurface[] = [];
+    const addHint = (filePath: string, reason: string) => {
+      const normalized = normalizeRepoPath(filePath);
+      if (!repoFiles.includes(normalized)) return;
+      hints.push({
+        file_path: normalized,
+        reason,
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+    };
+
+    if (intents.has('command')) {
+      addHint('src/cli/index.ts', 'The goal is explicitly about adding a CLI command, so the command-registration seam is likely involved.');
+      addHint('src/cli/mcp-command-client.ts', 'The goal mentions routing through the MCP HTTP runtime, so the CLI MCP transport seam is likely involved.');
+    }
+    if (intents.has('tool')) {
+      addHint('src/mcp/tools.ts', 'The goal is explicitly about adding a tool, so MCP tool registration is likely involved.');
+      addHint('src/mcp/server.ts', 'The goal is explicitly about an MCP tool, so the server-side tool exposure seam is likely involved.');
+      addHint('src/mcp/local/local-backend-analysis-support.ts', 'The goal mentions reusing Local Backend analysis seams, so the analysis seam is likely involved.');
+    }
+    if (intents.has('guard') || intents.has('test')) {
+      if (intents.has('local_backend') || groundedSurfaces.some((surface) => surface.file_path.includes('src/mcp/local/'))) {
+        addHint('test/unit/local-backend-structure.test.ts', 'The goal is about a Local Backend guard or test, so the structural guard test seam is likely involved.');
+        addHint('src/mcp/local/local-backend-analysis-support.ts', 'The goal is about preventing Local Backend analysis regrowth, so the guarded analysis seam is likely involved.');
+      }
+    }
+    if (intents.has('runtime') && !intents.has('command')) {
+      addHint('src/server/mcp-http.ts', 'The goal mentions runtime behavior, so the MCP HTTP runtime seam is likely involved.');
+    }
+
+    return this.uniqueSurfaces(hints);
+  }
+
+  private collectIntentHintTests(
+    repoFiles: string[],
+    intents: Set<ChangeTaskIntent>,
+    goal: string,
+  ): ChangeContractTestTarget[] {
+    const tests: ChangeContractTestTarget[] = [];
+    const addTest = (filePath: string, reason: string) => {
+      const normalized = normalizeRepoPath(filePath);
+      if (!repoFiles.includes(normalized)) return;
+      tests.push({
+        target: normalized,
+        kind: 'file',
+        file_path: normalized,
+        reason,
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+    };
+
+    if (intents.has('command')) {
+      addTest('test/unit/cli-commands.test.ts', 'The goal is explicitly about a CLI command, so the CLI command registration test suite is likely relevant.');
+    }
+    if (intents.has('tool')) {
+      addTest('test/unit/tools.test.ts', 'The goal is explicitly about an MCP tool, so the MCP tool contract test suite is likely relevant.');
+    }
+    if ((intents.has('guard') || intents.has('test')) && (intents.has('local_backend') || /\blocal backend\b/i.test(goal))) {
+      addTest('test/unit/local-backend-structure.test.ts', 'The goal is a Local Backend guard or test, so the Local Backend structural guard test is likely relevant.');
+    }
+
+    return tests;
+  }
+
+  private rankSurfaces(
+    surfaces: ChangeContractSurface[],
+    intents: Set<ChangeTaskIntent>,
+    goal: string,
+  ): ChangeContractSurface[] {
+    return this.uniqueSurfaces(surfaces)
+      .map((surface, index) => ({
+        surface,
+        index,
+        score: this.scoreSurface(surface, intents, goal),
+      }))
+      .sort((left, right) => right.score - left.score || left.index - right.index)
+      .map((entry) => entry.surface);
+  }
+
+  private scoreSurface(surface: ChangeContractSurface, intents: Set<ChangeTaskIntent>, goal: string): number {
+    const filePath = normalizeRepoPath(surface.file_path).toLowerCase();
+    const goalText = goal.toLowerCase();
+    let score = 0;
+
+    if (surface.evidence === 'grounded') score += 50;
+    if (surface.source === 'intent_hint') score += 25;
+    if (surface.symbol_uid) score += 5;
+    if (surface.symbol_name) score += 5;
+
+    if (intents.has('command')) {
+      if (filePath === 'src/cli/index.ts') score += 120;
+      if (filePath === 'src/cli/mcp-command-client.ts') score += 90;
+      if (filePath.startsWith('src/cli/')) score += 35;
+      if (filePath.includes('local-backend-search-') || filePath.includes('summary-presentation') || filePath.includes('runtime-support')) score -= 35;
+    }
+
+    if (intents.has('tool')) {
+      if (filePath === 'src/mcp/tools.ts') score += 120;
+      if (filePath === 'src/mcp/server.ts') score += 110;
+      if (filePath === 'src/mcp/local/local-backend-analysis-support.ts') score += 100;
+      if (filePath.startsWith('src/mcp/')) score += 30;
+      if (filePath.includes('search-lookup') || filePath.includes('search-ranking') || filePath.includes('summary-presentation')) score -= 40;
+      if (filePath.startsWith('src/core/')) score -= 30;
+    }
+
+    if (intents.has('guard') || intents.has('test')) {
+      if (filePath === 'test/unit/local-backend-structure.test.ts') score += 130;
+      if (isTestLikePath(filePath)) score += 70;
+      if (filePath === 'src/mcp/local/local-backend-analysis-support.ts') score += 95;
+      if (filePath.includes('search-lookup') || filePath.includes('search-ranking')) score -= 30;
+    }
+
+    if (intents.has('local_backend') && filePath.includes('local-backend')) score += 10;
+    if (goalText.includes('analysis') && filePath.includes('analysis-support')) score += 30;
+    if (goalText.includes('runtime') && (filePath.includes('mcp-command-client') || filePath.includes('mcp-http'))) score += 20;
+
+    return score;
   }
 
   private collectRiskNotes(
