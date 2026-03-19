@@ -278,8 +278,11 @@ describe('LocalBackendChangeContractSupport engineering intent hints', () => {
         'src/cli/mcp-command-client.ts',
       ]),
     );
-    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.file_path)).toContain(
-      'test/unit/cli-commands.test.ts',
+    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.target)).toEqual(
+      expect.arrayContaining([
+        'test/unit/cli-commands.test.ts',
+        'npm test',
+      ]),
     );
   });
 
@@ -296,8 +299,12 @@ describe('LocalBackendChangeContractSupport engineering intent hints', () => {
         'src/mcp/local/local-backend-analysis-support.ts',
       ]),
     );
-    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.file_path)).toContain(
-      'test/unit/tools.test.ts',
+    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.target)).toEqual(
+      expect.arrayContaining([
+        'test/unit/tools.test.ts',
+        'npm test',
+        'npm run test:integration',
+      ]),
     );
   });
 
@@ -313,8 +320,11 @@ describe('LocalBackendChangeContractSupport engineering intent hints', () => {
         'src/mcp/local/local-backend-analysis-support.ts',
       ]),
     );
-    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.file_path)).toContain(
-      'test/unit/local-backend-structure.test.ts',
+    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.target)).toEqual(
+      expect.arrayContaining([
+        'test/unit/local-backend-structure.test.ts',
+        'npm test',
+      ]),
     );
   });
 

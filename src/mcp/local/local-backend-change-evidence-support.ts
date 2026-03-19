@@ -404,12 +404,40 @@ export class LocalBackendChangeEvidenceSupport {
 
     if (intents.has('command')) {
       addTest('test/unit/cli-commands.test.ts', 'The goal is explicitly about a CLI command, so the CLI command registration test suite is likely relevant.');
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is explicitly about a CLI command, so the unit suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
     }
     if (intents.has('tool')) {
       addTest('test/unit/tools.test.ts', 'The goal is explicitly about an MCP tool, so the MCP tool contract test suite is likely relevant.');
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is explicitly about an MCP tool, so the unit suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      tests.push({
+        target: 'npm run test:integration',
+        kind: 'command',
+        reason: 'The goal is explicitly about an MCP tool, so integration coverage should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
     }
     if ((intents.has('guard') || intents.has('test')) && (intents.has('local_backend') || /\blocal backend\b/i.test(goal))) {
       addTest('test/unit/local-backend-structure.test.ts', 'The goal is a Local Backend guard or test, so the Local Backend structural guard test is likely relevant.');
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is a Local Backend structural guard, so the unit suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
     }
     if (intents.has('planning')) {
       tests.push({
@@ -596,7 +624,7 @@ export class LocalBackendChangeEvidenceSupport {
     if (intents.has('trustworthiness')) {
       if (filePath === 'src/mcp/local/local-backend-change-contract-support.ts') score += 175;
       if (filePath === 'src/mcp/local/local-backend-verify-change-support.ts') score += 165;
-      if (filePath === 'docs/cli/commands.md') score += 155;
+      if (filePath === 'docs/cli/commands.md') score += 255;
       if (filePath.includes('summary-presentation') || filePath.includes('graph-support')) score -= 60;
     }
     if (intents.has('planning') && intents.has('local_backend') && intents.has('ranking')) {

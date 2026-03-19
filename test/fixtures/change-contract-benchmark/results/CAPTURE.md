@@ -7,7 +7,7 @@ This directory holds the real preserved benchmark artifacts for Epic 20:
 
 Do not invent these files from synthetic unit-test data. Every numeric field must come from a real run or explicit human adjudication against the pinned corpus.
 
-## Prepared Worktrees
+## Worktree Targets
 
 - Baseline worktree:
   - path: `/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/baseline`
@@ -15,10 +15,17 @@ Do not invent these files from synthetic unit-test data. Every numeric field mus
   - port: `4751`
 - Candidate worktree:
   - path: `/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/candidate`
-  - commit: `000ead1`
+  - commit: `53b829a025e0ba0dc73b208a57ebb0b049204328`
   - port: `4752`
 
-Both worktrees are initialized and indexed. Run benchmark tasks against those exact paths unless the corpus is intentionally repinned.
+These worktrees are target checkouts only. Before capture, each one still needs local provisioning in its own path:
+- `npm install`
+- `npm run build`
+- `node dist/cli/index.js manage init`
+- `node dist/cli/index.js manage index`
+- `node dist/cli/index.js manage start`
+
+Do not assume they are already initialized or indexed from this guide alone. Verify local runtime state in each worktree before capturing any result artifact.
 
 ## Run Discipline
 
