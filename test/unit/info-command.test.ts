@@ -24,11 +24,16 @@ describe('renderHelpMarkdown', () => {
   it('stays CLI-first and task-oriented', () => {
     const output = renderHelpMarkdown();
 
+    expect(output).toContain('## Start Here');
     expect(output).toContain('## Normal Workflow');
+    expect(output).toContain('## Recommended Workflows');
     expect(output).toContain('## Recovery');
     expect(output).toContain('gnexus manage start');
     expect(output).toContain('gnexus manage index');
     expect(output).toContain('gnexus manage restart');
+    expect(output).toContain('start with `gnexus plan-change` when the task is multi-file, cross-cutting, ambiguous');
+    expect(output).toContain('use `gnexus query --owners` when you first need to discover the likely production owners');
+    expect(output).toContain('use `gnexus verify-change` after editing or before handoff');
   });
 
   it('includes brief use cases and example queries for supported command types', () => {
@@ -37,6 +42,8 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('### `query`');
     expect(output).toContain('### `context`');
     expect(output).toContain('### `impact`');
+    expect(output).toContain('### `plan-change`');
+    expect(output).toContain('### `verify-change`');
     expect(output).toContain('### `detect-changes`');
     expect(output).toContain('### `cypher`');
     expect(output).toContain('### `rename`');
@@ -47,6 +54,9 @@ describe('renderHelpMarkdown', () => {
     expect(output).toContain('context CommandBridgeHandler --file typed/bridge/http');
     expect(output).toContain('ProtocolRouter');
     expect(output).toContain('impact onTransportClosed --file-path typed/plugin/runtime/runtime_manager.lua --direction upstream --max-depth 4');
+    expect(output).toContain('split repo state evaluation away from runtime coordination');
+    expect(output).toContain('identify the highest-value regression checks for repo-local runtime identity rename');
+    expect(output).toContain('--contract-file ./contract.json --reported-test-target "npm test"');
     expect(output).toContain('summary --subsystems');
     expect(output).toContain('summary --subsystems-detailed');
     expect(output).toContain('risk_dimensions');

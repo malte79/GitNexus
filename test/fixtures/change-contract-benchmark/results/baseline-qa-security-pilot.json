@@ -1,0 +1,213 @@
+{
+  "artifact_type": "qa_security_baseline_pilot",
+  "scope": "six QA and security tasks from the pinned corpus",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/baseline",
+  "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+  "runtime_signature": "manual-cli-pilot-baseline-v1",
+  "notes": [
+    "This is a real measured pilot slice, not the final benchmark run artifact.",
+    "These observations come from baseline owner-query flows only.",
+    "The slice is intentionally strict about gold-surface and expected-test coverage: partial hits do not count as success."
+  ],
+  "task_observations": [
+    {
+      "task_id": "qa-runtime-rename-regression",
+      "role": "qa",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Identify the highest-value regression checks for command, state-dir, and runtime identity rename work\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.723,
+        "total_task_time_seconds": 0.723
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/storage/repo-manager.ts",
+          "src/server/service-runtime.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/cli/index.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-runtime-support.ts",
+          "src/mcp/local/local-backend-summary-presentation-support.ts",
+          "src/core/ingestion/import-language-config-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query anchored on repo-manager and service-runtime but never surfaced the CLI registration seam.",
+        "It also did not recover any of the benchmark-required verification commands."
+      ]
+    },
+    {
+      "task_id": "qa-change-contract-tests",
+      "role": "qa",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Identify the regression tests needed for plan-change and verify-change to remain trustworthy\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.694,
+        "total_task_time_seconds": 0.694
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "test/unit/tools.test.ts",
+          "test/unit/cli-commands.test.ts",
+          "test/unit/local-backend-structure.test.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-graph-support.ts",
+          "src/mcp/local/local-backend-summary-presentation-support.ts",
+          "src/storage/repo-manager.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query clustered around unrelated Local internals and repo-manager instead of the actual test surfaces.",
+        "It did not surface the benchmark runner command either."
+      ]
+    },
+    {
+      "task_id": "qa-flattening-regression",
+      "role": "qa",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Identify what should be tested so old nested package paths do not silently linger\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.653,
+        "total_task_time_seconds": 0.653
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "scripts/run-integration-tests.sh",
+          "src/server/service-runtime.ts",
+          "README.md"
+        ],
+        "wrong_surface_hits": [
+          "src/core/ingestion/import-language-config-support.ts",
+          "src/storage/repo-manager.ts",
+          "src/storage/git.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query overfit to import-path and storage helpers instead of the root runtime and docs surfaces that the flattening task actually needs.",
+        "No benchmark-required build or integration command was surfaced."
+      ]
+    },
+    {
+      "task_id": "security-runtime-boundary-audit",
+      "role": "security",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Identify the security-sensitive boundaries touched by repo-local MCP over HTTP startup and repo matching\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.56,
+        "total_task_time_seconds": 0.56
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/cli/mcp-command-client.ts",
+          "src/storage/repo-manager.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/server/service-runtime.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-graph-support.ts",
+          "src/mcp/local/local-backend-search-query-support.ts",
+          "src/mcp/local/local-backend-runtime-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query recovered the CLI and storage edges but missed the core runtime service boundary.",
+        "It also provided no verification commands for the trust boundary checks."
+      ]
+    },
+    {
+      "task_id": "security-change-contract-overconfidence",
+      "role": "security",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Identify how plan-change and verify-change could overclaim certainty or hide contract defects\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.397,
+        "total_task_time_seconds": 0.397
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "src/mcp/local/local-backend-change-contract-support.ts",
+          "src/mcp/local/local-backend-verify-change-support.ts",
+          "docs/cli/commands.md"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-summary-presentation-support.ts",
+          "src/mcp/local/local-backend-graph-support.ts",
+          "src/storage/repo-manager.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query completely missed the planner truthfulness seams and instead clustered around summary presentation, graph support, and repo-manager.",
+        "This is not sufficient to audit overconfidence risk."
+      ]
+    },
+    {
+      "task_id": "security-rename-command-boundary",
+      "role": "security",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Identify the security-sensitive boundaries touched by the coordinated rename surface\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.442,
+        "total_task_time_seconds": 0.442
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/mcp/local/local-backend-rename-support.ts",
+          "src/cli/rename.ts"
+        ],
+        "missed_gold_surfaces": [],
+        "wrong_surface_hits": [
+          "src/server/service-runtime.ts",
+          "src/storage/repo-manager.ts",
+          "src/mcp/local/local-backend-search-query-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query did find the rename seams, but it still failed the task because it never surfaced the required unit-suite command.",
+        "It also overexpanded into runtime and storage surfaces that were not required by the task gold."
+      ]
+    }
+  ]
+}

@@ -95,6 +95,9 @@ export class LocalBackend {
       getNodeKind: this.graphSupport.getNodeKind.bind(this.graphSupport),
       humanizeSummaryLabel: this.summaryPresentationSupport.humanizeSummaryLabel.bind(this.summaryPresentationSupport),
       isLowSignalSubsystemLabel: this.summaryPresentationSupport.isLowSignalSubsystemLabel.bind(this.summaryPresentationSupport),
+      querySearch: this.searchSupport.query.bind(this.searchSupport),
+      detectChanges: (repo, params) => this.analysisSupport.detectChanges(repo, params),
+      analyzeImpact: (repo, params) => this.analysisSupport.impact(repo, params),
       lookupNamedSymbols: this.searchSupport.lookupNamedSymbols.bind(this.searchSupport),
       getPrimaryModuleSymbols: this.searchSupport.getPrimaryModuleSymbols.bind(this.searchSupport),
       getRojoProjectIndex: this.searchSupport.getRojoProjectIndex.bind(this.searchSupport),
@@ -157,6 +160,10 @@ export class LocalBackend {
         return this.analysisSupport.detectChanges(repo, params);
       case 'rename':
         return this.analysisSupport.rename(repo, params);
+      case 'plan_change':
+        return this.analysisSupport.planChange(repo, params);
+      case 'verify_change':
+        return this.analysisSupport.verifyChange(repo, params);
       // Legacy aliases for backwards compatibility
       case 'search':
         return this.searchSupport.query(repo, params);

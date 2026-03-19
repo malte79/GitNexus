@@ -18,6 +18,8 @@ The HTTP runtime is the primary execution path for:
 - top-level `gnexus query`
 - top-level `gnexus context`
 - top-level `gnexus impact`
+- top-level `gnexus plan-change`
+- top-level `gnexus verify-change`
 - top-level `gnexus detect-changes`
 - top-level `gnexus cypher`
 - top-level `gnexus rename`
@@ -28,6 +30,7 @@ Those commands are thin clients over the repo-local MCP HTTP service. They do no
 The same HTTP-served tool contracts also own:
 
 - symbol disambiguation inputs such as `uid` and `file_path`
+- bounded-confidence change-contract evidence buckets and verification mismatch categories
 - bounded read-only Cypher recovery resources:
   - `gnexus://schema`
   - `gnexus://properties`

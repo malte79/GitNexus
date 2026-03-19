@@ -44,6 +44,8 @@ describe('CLI commands', () => {
         'query',
         'context',
         'impact',
+        'plan-change',
+        'verify-change',
         'detect-changes',
         'cypher',
         'rename',
@@ -63,6 +65,8 @@ describe('CLI commands', () => {
       ]);
 
       const impact = program.commands.find((command) => command.name() === 'impact');
+      const planChange = program.commands.find((command) => command.name() === 'plan-change');
+      const verifyChange = program.commands.find((command) => command.name() === 'verify-change');
       const context = program.commands.find((command) => command.name() === 'context');
       const query = program.commands.find((command) => command.name() === 'query');
       const summary = program.commands.find((command) => command.name() === 'summary');
@@ -78,6 +82,12 @@ describe('CLI commands', () => {
       expect(summary?.options.map((option) => option.long)).toEqual(
         expect.arrayContaining(['--subsystems', '--subsystems-detailed', '--limit']),
       );
+      expect(planChange?.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining(['--task-context', '--max-surfaces']),
+      );
+      expect(verifyChange?.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining(['--contract-file', '--scope', '--base-ref', '--changed-file', '--reported-test-target']),
+      );
     });
 
     it('renders help for the new use-plane and manage-plane tree', async () => {
@@ -92,6 +102,8 @@ describe('CLI commands', () => {
       expect(help).toContain('query');
       expect(help).toContain('context');
       expect(help).toContain('impact');
+      expect(help).toContain('plan-change');
+      expect(help).toContain('verify-change');
       expect(help).toContain('detect-changes');
       expect(help).toContain('cypher');
       expect(help).toContain('rename');
@@ -141,6 +153,8 @@ describe('CLI commands', () => {
       const { queryCommand } = await import('../../src/cli/query.js');
       const { contextCommand } = await import('../../src/cli/context.js');
       const { impactCommand } = await import('../../src/cli/impact.js');
+      const { planChangeCommand } = await import('../../src/cli/plan-change.js');
+      const { verifyChangeCommand } = await import('../../src/cli/verify-change.js');
       const { detectChangesCommand } = await import('../../src/cli/detect-changes.js');
       const { cypherCommand } = await import('../../src/cli/cypher.js');
       const { renameCommand } = await import('../../src/cli/rename.js');
@@ -149,6 +163,8 @@ describe('CLI commands', () => {
       expect(typeof queryCommand).toBe('function');
       expect(typeof contextCommand).toBe('function');
       expect(typeof impactCommand).toBe('function');
+      expect(typeof planChangeCommand).toBe('function');
+      expect(typeof verifyChangeCommand).toBe('function');
       expect(typeof detectChangesCommand).toBe('function');
       expect(typeof cypherCommand).toBe('function');
       expect(typeof renameCommand).toBe('function');

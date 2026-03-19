@@ -164,6 +164,8 @@ async function getContextResource(backend: LocalBackend): Promise<string> {
   lines.push('  - query: Process-grouped code intelligence');
   lines.push('  - context: 360-degree symbol view');
   lines.push('  - impact: Blast radius analysis');
+  lines.push('  - plan_change: Bounded-confidence change contract generation');
+  lines.push('  - verify_change: Post-change contract verification');
   lines.push('  - detect_changes: Git-diff impact analysis');
   lines.push('  - rename: Multi-file coordinated rename');
   lines.push('  - cypher: Raw graph queries');

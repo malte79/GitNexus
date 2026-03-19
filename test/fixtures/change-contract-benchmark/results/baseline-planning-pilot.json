@@ -1,0 +1,106 @@
+{
+  "artifact_type": "planning_baseline_pilot",
+  "scope": "first three planning tasks from the pinned corpus",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/baseline",
+  "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+  "runtime_signature": "manual-cli-pilot-baseline-v1",
+  "notes": [
+    "This is a real measured pilot slice, not the final benchmark run artifact.",
+    "Time measurements come from local CLI command timing in the clean baseline worktree.",
+    "orientation_tokens_before_first_edit and full trustworthiness scoring are not captured here because this pilot did not run through a live agent-session token counter.",
+    "Use this pilot to calibrate adjudication before filling results/baseline.json."
+  ],
+  "task_observations": [
+    {
+      "task_id": "planning-repo-manager-split",
+      "role": "planning",
+      "baseline_flow": [
+        "node dist/cli/index.js query \"Split repo state evaluation away from runtime coordination in repo-manager\" --owners",
+        "node dist/cli/index.js context getRepoState --file-path src/storage/repo-manager.ts"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 0.904,
+        "total_task_time_seconds": 1.11
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/storage/repo-manager.ts",
+          "src/server/service-runtime.ts"
+        ],
+        "missed_gold_surfaces": [],
+        "wrong_surface_hits": [
+          "src/core/ingestion/pipeline-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": true,
+      "rework_count": 0,
+      "notes": [
+        "The initial query already surfaced the two gold edit surfaces.",
+        "A follow-up context call was still needed to understand call edges and blast radius."
+      ]
+    },
+    {
+      "task_id": "planning-local-backend-ranking",
+      "role": "planning",
+      "baseline_flow": [
+        "node dist/cli/index.js summary --subsystems",
+        "node dist/cli/index.js query \"Reduce authority concentration in Local Backend ranking and graph recovery\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.251,
+        "total_task_time_seconds": 1.251
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/mcp/local/local-backend-search-ranking-support.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/mcp/local/local-backend-graph-support.ts"
+        ],
+        "wrong_surface_hits": [],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query found the ranking owner but did not surface the paired graph-recovery owner required by the corpus gold.",
+        "This task would require additional exploration beyond the initial baseline command chain."
+      ]
+    },
+    {
+      "task_id": "planning-ingestion-call-surface",
+      "role": "planning",
+      "baseline_flow": [
+        "node dist/cli/index.js summary --subsystems",
+        "node dist/cli/index.js query \"Reduce truth-family concentration around call resolution in ingestion\" --owners"
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.243,
+        "total_task_time_seconds": 1.243
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/core/ingestion/call-processor.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/core/ingestion/symbol-table.ts"
+        ],
+        "wrong_surface_hits": [],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The baseline query anchored correctly on call-processor but missed the symbol-table companion surface that the task gold requires.",
+        "The task would need at least one more exploration step before planning could be considered complete."
+      ]
+    }
+  ]
+}

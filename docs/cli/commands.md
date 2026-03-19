@@ -11,6 +11,8 @@ The CLI is split into two planes:
   - `gnexus query`
   - `gnexus context`
   - `gnexus impact`
+  - `gnexus plan-change`
+  - `gnexus verify-change`
   - `gnexus detect-changes`
   - `gnexus cypher`
   - `gnexus rename`
@@ -44,12 +46,14 @@ Contract:
 - read-only
 - prints Markdown only
 - explains what gnexus is and the split between everyday analysis commands and `manage` lifecycle commands
+- teaches a practical command-selection flow so users know when to start with `plan-change`, when to use `query --owners`, when to drill into `context` or `impact`, when to use `detect-changes`, and when to run `verify-change`
 - documents the normal remediation path when the service is unavailable or stale:
   - `gnexus manage start`
   - `gnexus manage index`
   - `gnexus manage restart`
 - includes a short example workflow for normal CLI use
 - includes brief use cases and example calls for each supported structural command type
+- includes at least one cross-cutting workflow, one narrow-symbol workflow, and one QA/security-oriented workflow
 - documents owner-biased discovery with `gnexus query --owners`, concise subsystem summary with `gnexus summary --subsystems`, and the explicit detailed alternate `gnexus summary --subsystems-detailed`
 - does not mention retired product names, `gnexus://` resources, API endpoints, MCP, or transport internals in the default help output
 
@@ -60,6 +64,8 @@ The top-level structural commands are:
 - `gnexus query`
 - `gnexus context`
 - `gnexus impact`
+- `gnexus plan-change`
+- `gnexus verify-change`
 - `gnexus detect-changes`
 - `gnexus cypher`
 - `gnexus rename`
@@ -92,6 +98,26 @@ Shared contract:
 - `gnexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
 - `gnexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
 - `gnexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
+- `gnexus plan-change` is the bounded-confidence planning surface for agents
+- `gnexus plan-change` is the preferred starting point for broad, cross-cutting, multi-file, QA-oriented, or security-oriented work that needs one shared edit-and-test contract
+- `gnexus plan-change` must return:
+  - one explicit `confidence_posture: bounded`
+  - evidence buckets for `grounded`, `strong_inference`, and `hypothesis`
+  - `required_edit_surfaces`
+  - `likely_dependent_surfaces`
+  - `recommended_tests`
+  - `risk_notes`
+  - `unknowns`
+- `gnexus plan-change` must not claim full codebase understanding or flatten all evidence into one unlabeled recommendation set
+- `gnexus verify-change` is the bounded-confidence verification surface for agents
+- `gnexus verify-change` is the follow-through command after editing or before handoff, not the replacement for initial planning
+- `gnexus verify-change` must preserve these mismatch categories:
+  - `missing_grounded_surfaces`
+  - `unreviewed_inferred_surfaces`
+  - `out_of_contract_touched_surfaces`
+  - `missing_recommended_tests`
+  - `contract_insufficiency`
+- `gnexus verify-change` must not silently collapse contract defects into implementation misses
 - `gnexus summary --subsystems` is the concise subsystem view for daily use
 - concise subsystem rows prefer architecturally representative owners and hotspots, and may omit weakly grounded or helper-level labels rather than forcing them into an unrelated subsystem
 - concise subsystem rows evaluate a wider candidate set before truncation and rank by representative quality, so broad or weakly grounded buckets do not crowd out stronger subsystem rows just because they were discovered earlier
@@ -203,3 +229,20 @@ If a command is run:
 - from inside a worktree, that worktree boundary applies
 
 No command may silently target a parent repo when a nearer git root exists.
+
+## Change-Contract Acceptance Bar
+
+Epic 20 closed on the reduced six-task orientation benchmark, not the original full telemetry study.
+
+The preserved shipping evidence requires:
+
+- no regression in initial-plan correctness on the pinned slice
+- no regression in QA or security expected-test coverage on the pinned slice
+- a strictly better candidate success count than baseline on that slice
+- lower wall-clock time and lower tool-call count on the tasks where both baseline and candidate reach a viable initial plan
+
+That reduced-bar evidence is preserved in:
+
+- [/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/orientation-shipping-slice.json](/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/orientation-shipping-slice.json)
+
+The deeper benchmark harness remains available for future studies, but it is not the current ship blocker.

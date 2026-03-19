@@ -1,0 +1,210 @@
+{
+  "corpus_version": 1,
+  "description": "Pinned multi-role benchmark corpus for bounded-confidence change contracts.",
+  "tasks": [
+    {
+      "id": "planning-repo-manager-split",
+      "role": "planning",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are planning a multi-file refactor in gnexus.",
+      "task_statement": "Split repo state evaluation away from runtime coordination in repo-manager.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct edit surface is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/storage/repo-manager.ts", "src/server/service-runtime.ts"],
+        "wrong_surface_boundaries": ["src/core/ingestion", "src/core/search"],
+        "expected_tests": ["npm test", "npm run test:integration"],
+        "success_criteria": ["repo-state logic is isolated", "service-runtime coordination still works"]
+      }
+    },
+    {
+      "id": "planning-local-backend-ranking",
+      "role": "planning",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are planning a Local Backend refactor in gnexus.",
+      "task_statement": "Reduce authority concentration in Local Backend ranking and graph recovery.",
+      "agent_runtime": { "client": "claude", "model_family": "claude-3.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct edit surface is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/mcp/local/local-backend-search-ranking-support.ts", "src/mcp/local/local-backend-graph-support.ts"],
+        "wrong_surface_boundaries": ["src/storage", "src/core/ingestion/workers"],
+        "expected_tests": ["npm test"],
+        "success_criteria": ["ranking authority is split", "graph recovery remains coherent"]
+      }
+    },
+    {
+      "id": "planning-ingestion-call-surface",
+      "role": "planning",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are planning an ingestion-engine refactor in gnexus.",
+      "task_statement": "Reduce truth-family concentration around call resolution in ingestion.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct edit surface is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/core/ingestion/call-processor.ts", "src/core/ingestion/symbol-table.ts"],
+        "wrong_surface_boundaries": ["src/server", "src/mcp/resources.ts"],
+        "expected_tests": ["npm test", "npm run test:integration"],
+        "success_criteria": ["call-resolution authority is narrowed", "same-file symbol correctness is preserved"]
+      }
+    },
+    {
+      "id": "engineering-new-cli-surface",
+      "role": "engineering",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are implementing a new gnexus CLI command.",
+      "task_statement": "Add a new top-level analysis command that routes through the MCP HTTP runtime.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct edit surface is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/cli/index.ts", "src/cli/mcp-command-client.ts"],
+        "wrong_surface_boundaries": ["src/core/ingestion", "src/storage/repo-manager.ts"],
+        "expected_tests": ["npm test"],
+        "success_criteria": ["command is in the use plane", "runtime still routes through MCP"]
+      }
+    },
+    {
+      "id": "engineering-new-mcp-tool",
+      "role": "engineering",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are implementing a new gnexus MCP tool.",
+      "task_statement": "Add a new agent-facing tool that reuses existing Local Backend analysis seams.",
+      "agent_runtime": { "client": "claude", "model_family": "claude-3.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct edit surface is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/mcp/tools.ts", "src/mcp/server.ts", "src/mcp/local/local-backend-analysis-support.ts"],
+        "wrong_surface_boundaries": ["src/core/kuzu", "src/server/service-runtime.ts"],
+        "expected_tests": ["npm test", "npm run test:integration"],
+        "success_criteria": ["tool is listed", "tool dispatch is bound to Local Backend"]
+      }
+    },
+    {
+      "id": "engineering-structural-guard",
+      "role": "engineering",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are hardening a gnexus structural refactor.",
+      "task_statement": "Add a structure test that prevents Local Backend analysis from regrowing into a monolith.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct edit surface is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["test/unit/local-backend-structure.test.ts", "src/mcp/local/local-backend-analysis-support.ts"],
+        "wrong_surface_boundaries": ["src/core/ingestion", "src/storage"],
+        "expected_tests": ["npm test"],
+        "success_criteria": ["thin seam stays enforced", "new owners are explicitly required"]
+      }
+    },
+    {
+      "id": "qa-runtime-rename-regression",
+      "role": "qa",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are designing regression coverage for a runtime rename in gnexus.",
+      "task_statement": "Identify the highest-value regression checks for command, state-dir, and runtime identity rename work.",
+      "agent_runtime": { "client": "claude", "model_family": "claude-3.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct test target is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/cli/index.ts", "src/storage/repo-manager.ts", "src/server/service-runtime.ts"],
+        "wrong_surface_boundaries": ["src/core/ingestion/tree-sitter-queries.ts", "src/core/search"],
+        "expected_tests": ["npm test", "npm run test:integration", "gnexus manage status"],
+        "success_criteria": ["identity tests cover CLI", "state dir and health payload are verified"]
+      }
+    },
+    {
+      "id": "qa-change-contract-tests",
+      "role": "qa",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are designing tests for a bounded-confidence planner surface.",
+      "task_statement": "Identify the regression tests needed for plan-change and verify-change to remain trustworthy.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct test target is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["test/unit/tools.test.ts", "test/unit/cli-commands.test.ts", "test/unit/local-backend-structure.test.ts"],
+        "wrong_surface_boundaries": ["src/core/kuzu", "src/server/mcp-http.ts"],
+        "expected_tests": ["npm test", "node scripts/run-change-contract-benchmark.ts --fixtures test/fixtures/change-contract-benchmark"],
+        "success_criteria": ["tool contract is pinned", "benchmark fixtures are validated"]
+      }
+    },
+    {
+      "id": "qa-flattening-regression",
+      "role": "qa",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are checking regression risk after a repo-root flattening cleanup.",
+      "task_statement": "Identify what should be tested so old nested package paths do not silently linger.",
+      "agent_runtime": { "client": "claude", "model_family": "claude-3.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct test target is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["scripts/run-integration-tests.sh", "src/server/service-runtime.ts", "README.md"],
+        "wrong_surface_boundaries": ["src/core/ingestion/process-processor.ts", "src/mcp/schema-properties.ts"],
+        "expected_tests": ["npm run test:integration", "npm run build"],
+        "success_criteria": ["runtime launches from root dist path", "docs and release commands no longer mention nested package paths"]
+      }
+    },
+    {
+      "id": "security-runtime-boundary-audit",
+      "role": "security",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are reviewing runtime boundary risk in gnexus.",
+      "task_statement": "Identify the security-sensitive boundaries touched by repo-local MCP over HTTP startup and repo matching.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct security boundary is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/cli/mcp-command-client.ts", "src/server/service-runtime.ts", "src/storage/repo-manager.ts"],
+        "wrong_surface_boundaries": ["src/core/ingestion/framework-detection.ts", "src/cli/info.ts"],
+        "expected_tests": ["npm run test:integration", "gnexus manage status"],
+        "success_criteria": ["repo identity checks are covered", "port and runtime metadata trust boundaries are explicit"]
+      }
+    },
+    {
+      "id": "security-change-contract-overconfidence",
+      "role": "security",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are reviewing a new planning surface for security truthfulness.",
+      "task_statement": "Identify how plan-change and verify-change could overclaim certainty or hide contract defects.",
+      "agent_runtime": { "client": "claude", "model_family": "claude-3.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct security boundary is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/mcp/local/local-backend-change-contract-support.ts", "src/mcp/local/local-backend-verify-change-support.ts", "docs/cli/commands.md"],
+        "wrong_surface_boundaries": ["src/core/kuzu/csv-generator.ts", "src/cli/serve.ts"],
+        "expected_tests": ["npm test", "node scripts/run-change-contract-benchmark.ts --fixtures test/fixtures/change-contract-benchmark"],
+        "success_criteria": ["contract insufficiency remains explicit", "evidence buckets are never flattened into one claim"]
+      }
+    },
+    {
+      "id": "security-rename-command-boundary",
+      "role": "security",
+      "repo": "gnexus",
+      "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+      "prompt_shell": "You are reviewing a write-capable gnexus command for security boundaries.",
+      "task_statement": "Identify the security-sensitive boundaries touched by the coordinated rename surface.",
+      "agent_runtime": { "client": "codex", "model_family": "gpt-5.x", "retry_budget": 1 },
+      "freshness_prerequisites": { "indexed_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5", "serving_state": "serving_current", "repo_clean": true },
+      "orientation_boundary": { "start": "before any repo exploration or tool calls", "end": "first correct security boundary is identified" },
+      "gold": {
+        "correct_edit_surfaces": ["src/mcp/local/local-backend-rename-support.ts", "src/cli/rename.ts"],
+        "wrong_surface_boundaries": ["src/core/ingestion", "src/server/mcp-http.ts"],
+        "expected_tests": ["npm test"],
+        "success_criteria": ["dry-run versus apply remains explicit", "text-search expansion stays bounded"]
+      }
+    }
+  ]
+}

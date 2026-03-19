@@ -1,0 +1,196 @@
+{
+  "artifact_type": "orientation_shipping_slice",
+  "scope": "Reduced six-task orientation benchmark used as the Epic 20 ship gate",
+  "baseline_sources": [
+    "/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/baseline-planning-pilot.json",
+    "/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/baseline-engineering-pilot.json",
+    "/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/baseline-qa-security-pilot.json"
+  ],
+  "candidate_source": "/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/candidate-surface-pilot.json",
+  "baseline_worktree": {
+    "path": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/baseline",
+    "repo_commit": "c59f7233cbc691ea630957c4ff5144b3fb438be5",
+    "worktree_clean_reverified_at_closeout": true,
+    "runtime_signature": "manual-cli-pilot-baseline-v1"
+  },
+  "candidate_worktree": {
+    "path": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/candidate",
+    "repo_commit": "a304562ab60f9f07eeeb27366a5d7ad8448d02af",
+    "repo_clean": true,
+    "runtime_signature": "manual-cli-surface-pilot-v4-clean-candidate"
+  },
+  "success_definition": {
+    "initial_plan_correctness": "Complete gold-surface coverage for the task. Expected-test coverage is tracked separately and must not regress for QA or security on the selected slice.",
+    "ship_gate": [
+      "Candidate does not regress initial-plan correctness on the selected slice.",
+      "Candidate does not regress QA or security expected-test coverage on the selected slice.",
+      "Candidate succeeds on more selected tasks than baseline.",
+      "On tasks where both baseline and candidate succeed, candidate uses lower wall-clock time and fewer tool calls."
+    ]
+  },
+  "selected_tasks": [
+    {
+      "task_id": "planning-repo-manager-split",
+      "role": "planning",
+      "baseline": {
+        "success": true,
+        "time_to_first_correct_edit_seconds": 0.904,
+        "time_to_viable_initial_plan_seconds": 1.11,
+        "tool_calls": 2,
+        "expected_test_coverage_complete": false
+      },
+      "candidate": {
+        "success": true,
+        "time_to_viable_initial_plan_seconds": 0.898,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": true
+      }
+    },
+    {
+      "task_id": "planning-local-backend-ranking",
+      "role": "planning",
+      "baseline": {
+        "success": false,
+        "time_to_first_correct_edit_seconds": 1.251,
+        "time_to_viable_initial_plan_seconds": 1.251,
+        "tool_calls": 2,
+        "expected_test_coverage_complete": false
+      },
+      "candidate": {
+        "success": true,
+        "time_to_viable_initial_plan_seconds": 0.828,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": true
+      }
+    },
+    {
+      "task_id": "engineering-new-cli-surface",
+      "role": "engineering",
+      "baseline": {
+        "success": false,
+        "time_to_first_correct_edit_seconds": 0.74,
+        "time_to_viable_initial_plan_seconds": 0.74,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": false
+      },
+      "candidate": {
+        "success": true,
+        "time_to_viable_initial_plan_seconds": 0.838,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": true
+      }
+    },
+    {
+      "task_id": "engineering-new-mcp-tool",
+      "role": "engineering",
+      "baseline": {
+        "success": false,
+        "time_to_first_correct_edit_seconds": 0.724,
+        "time_to_viable_initial_plan_seconds": 0.724,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": false
+      },
+      "candidate": {
+        "success": true,
+        "time_to_viable_initial_plan_seconds": 0.802,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": true
+      }
+    },
+    {
+      "task_id": "qa-runtime-rename-regression",
+      "role": "qa",
+      "baseline": {
+        "success": false,
+        "time_to_first_correct_edit_seconds": 0.723,
+        "time_to_viable_initial_plan_seconds": 0.723,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": false
+      },
+      "candidate": {
+        "success": true,
+        "time_to_viable_initial_plan_seconds": 0.831,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": true
+      }
+    },
+    {
+      "task_id": "security-change-contract-overconfidence",
+      "role": "security",
+      "baseline": {
+        "success": false,
+        "time_to_first_correct_edit_seconds": 0.397,
+        "time_to_viable_initial_plan_seconds": 0.397,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": false
+      },
+      "candidate": {
+        "success": true,
+        "time_to_viable_initial_plan_seconds": 0.631,
+        "tool_calls": 1,
+        "expected_test_coverage_complete": true
+      }
+    }
+  ],
+  "role_breakdown": {
+    "planning": {
+      "baseline_successes": 1,
+      "baseline_total": 2,
+      "candidate_successes": 2,
+      "candidate_total": 2
+    },
+    "engineering": {
+      "baseline_successes": 0,
+      "baseline_total": 2,
+      "candidate_successes": 2,
+      "candidate_total": 2
+    },
+    "qa": {
+      "baseline_successes": 0,
+      "baseline_total": 1,
+      "candidate_successes": 1,
+      "candidate_total": 1
+    },
+    "security": {
+      "baseline_successes": 0,
+      "baseline_total": 1,
+      "candidate_successes": 1,
+      "candidate_total": 1
+    }
+  },
+  "summary": {
+    "baseline_successes": 1,
+    "baseline_total": 6,
+    "candidate_successes": 6,
+    "candidate_total": 6,
+    "qa_expected_test_coverage_regressed": false,
+    "security_expected_test_coverage_regressed": false,
+    "shared_success_tasks": [
+      "planning-repo-manager-split"
+    ],
+    "shared_success_time_comparison": {
+      "baseline_median_seconds": 1.11,
+      "candidate_median_seconds": 0.898,
+      "candidate_faster_by_seconds": 0.212,
+      "candidate_faster_by_percent": 19.1
+    },
+    "shared_success_tool_call_comparison": {
+      "baseline_median_tool_calls": 2,
+      "candidate_median_tool_calls": 1,
+      "candidate_saved_tool_calls": 1
+    }
+  },
+  "ship_verdict": {
+    "initial_plan_correctness_regressed": false,
+    "qa_or_security_expected_test_coverage_regressed": false,
+    "candidate_succeeds_on_more_tasks_than_baseline": true,
+    "candidate_faster_on_shared_success_tasks": true,
+    "candidate_uses_fewer_tools_on_shared_success_tasks": true,
+    "earned": true
+  },
+  "notes": [
+    "This reduced benchmark intentionally measures orientation usefulness, not full-agent productivity.",
+    "Baseline pilot artifacts predate the final reduced bar and do not embed repo_clean; clean benchmark worktree status was re-verified before closeout.",
+    "The selected slice spans planning, engineering, QA, and security without requiring full token telemetry to close the epic."
+  ]
+}

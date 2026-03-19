@@ -140,6 +140,69 @@ describe('LocalBackend.callTool', () => {
     expect(result).toHaveProperty('processes');
   });
 
+  it('dispatches plan_change through the analysis seam', async () => {
+    (executeParameterized as any).mockResolvedValue([]);
+    (executeQuery as any).mockResolvedValue([]);
+
+    const result = await backend.callTool('plan_change', { goal: 'split repo state evaluation from runtime coordination' });
+    expect(result).toMatchObject({
+      goal: 'split repo state evaluation from runtime coordination',
+      confidence_posture: 'bounded',
+    });
+    expect(Array.isArray(result.required_edit_surfaces)).toBe(true);
+    expect(Array.isArray(result.likely_dependent_surfaces)).toBe(true);
+  });
+
+  it('dispatches verify_change and preserves out-of-contract classification for unrelated sibling files', async () => {
+    const result = await backend.callTool('verify_change', {
+      contract_json: JSON.stringify({
+        goal: 'rename runtime boundary',
+        confidence_posture: 'bounded',
+        evidence_buckets: {
+          grounded: 'Direct graph or search evidence.',
+          strong_inference: 'Short structural inference.',
+          hypothesis: 'Plausible but unproven lead.',
+        },
+        primary_anchor: null,
+        required_edit_surfaces: [
+          {
+            file_path: 'src/storage/repo-manager.ts',
+            symbol_name: 'getRepoState',
+            reason: 'Primary owner',
+            source: 'query',
+            evidence: 'grounded',
+          },
+        ],
+        likely_dependent_surfaces: [],
+        recommended_tests: [],
+        risk_notes: [],
+        supporting_processes: [],
+        affected_modules: [],
+        unknowns: [],
+      }),
+      changed_files: ['src/storage/repo-manager.ts', 'src/storage/git.ts'],
+    });
+
+    expect(result.status).toBe('attention');
+    expect(result.mismatches.contract_insufficiency).toEqual([]);
+    expect(result.mismatches.out_of_contract_touched_surfaces[0].file_path).toBe('src/storage/git.ts');
+  });
+
+  it('returns a structured error for incomplete contract_json instead of throwing', async () => {
+    const result = await backend.callTool('verify_change', {
+      contract_json: JSON.stringify({
+        goal: 'rename runtime boundary',
+        required_edit_surfaces: [],
+        likely_dependent_surfaces: [],
+      }),
+      changed_files: ['src/storage/repo-manager.ts'],
+    });
+
+    expect(result).toEqual({
+      error: 'contract_json is missing required change-contract fields: recommended_tests, affected_modules, supporting_processes, risk_notes, unknowns',
+    });
+  });
+
   it('keeps explore alias backward-compatible for symbol lookups without an explicit type', async () => {
     const contextSpy = vi.spyOn(backend as any, 'context').mockResolvedValue({
       status: 'found',

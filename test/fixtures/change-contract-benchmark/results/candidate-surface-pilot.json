@@ -1,0 +1,272 @@
+{
+  "artifact_type": "candidate_surface_pilot",
+  "scope": "all 12 pinned corpus tasks using clean candidate worktree plan-change output",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/candidate",
+  "repo_commit": "a304562ab60f9f07eeeb27366a5d7ad8448d02af",
+  "repo_clean": true,
+  "runtime_signature": "manual-cli-surface-pilot-v4-clean-candidate",
+  "notes": [
+    "This is a real current-candidate pilot artifact captured from the clean candidate benchmark worktree, not the final benchmark run artifact.",
+    "It records direct plan-change outputs from the clean candidate dist build and judges them against the pinned gold surfaces and expected tests.",
+    "Success in this artifact requires both complete gold-surface coverage and complete expected-test coverage for the task.",
+    "It does not substitute for baseline.json/candidate.json because it does not carry the full benchmark-run schema or agent-session token/trustworthiness fields."
+  ],
+  "task_observations": [
+    {
+      "task_id": "planning-repo-manager-split",
+      "role": "planning",
+      "timing_seconds": 0.898,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/storage/repo-manager.ts",
+        "src/server/service-runtime.ts",
+        "src/mcp/local/local-backend-runtime-support.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/repo-manager.test.ts",
+        "test/integration/service-runtime.test.ts",
+        "test/unit/status-command.test.ts",
+        "test/unit/index-command.test.ts",
+        "npm test",
+        "npm run test:integration"
+      ]
+    },
+    {
+      "task_id": "planning-local-backend-ranking",
+      "role": "planning",
+      "timing_seconds": 0.828,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/mcp/local/local-backend-graph-support.ts",
+        "src/mcp/local/local-backend-search-ranking-support.ts"
+      ],
+      "recommended_tests": [
+        "npm test",
+        "Query → IsRojoMappedResult",
+        "Query → IsBroadSearchQuery",
+        "Query → GetBroadQueryFileSignals",
+        "RankSearchResults → IsBroadSearchQuery"
+      ]
+    },
+    {
+      "task_id": "planning-ingestion-call-surface",
+      "role": "planning",
+      "timing_seconds": 0.759,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/core/ingestion/call-processor.ts",
+        "src/core/ingestion/symbol-table.ts",
+        "src/core/ingestion/utils.ts"
+      ],
+      "recommended_tests": [
+        "npm test",
+        "npm run test:integration",
+        "test/integration/pipeline.test.ts",
+        "test/unit/call-processor.test.ts",
+        "test/unit/symbol-table.test.ts",
+        "test/unit/utils.test.ts"
+      ]
+    },
+    {
+      "task_id": "engineering-new-cli-surface",
+      "role": "engineering",
+      "timing_seconds": 0.838,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/cli/mcp-command-client.ts",
+        "src/cli/index.ts",
+        "src/server/mcp-http.ts",
+        "src/mcp/local/local-backend-change-evidence-support.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/mcp-command-client.test.ts",
+        "test/unit/cli-commands.test.ts",
+        "npm test"
+      ]
+    },
+    {
+      "task_id": "engineering-new-mcp-tool",
+      "role": "engineering",
+      "timing_seconds": 0.802,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/mcp/local/local-backend-analysis-support.ts",
+        "src/mcp/tools.ts",
+        "src/mcp/server.ts",
+        "src/mcp/local/local-backend-search-enrichment-support.ts",
+        "src/mcp/local/local-backend-change-evidence-support.ts",
+        "src/mcp/local/local-backend-runtime-support.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/tools.test.ts",
+        "npm test",
+        "npm run test:integration",
+        "test/unit/server.test.ts",
+        "Query → IsRojoMappedResult",
+        "Query → IsBroadSearchQuery"
+      ]
+    },
+    {
+      "task_id": "engineering-structural-guard",
+      "role": "engineering",
+      "timing_seconds": 0.873,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "test/unit/local-backend-structure.test.ts",
+        "src/mcp/local/local-backend-analysis-support.ts",
+        "src/mcp/local/local-backend-common.ts",
+        "src/mcp/local/local-backend-graph-support.ts",
+        "src/mcp/local/local-backend-change-evidence-support.ts",
+        "src/mcp/local/local-backend-runtime-support.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/security.test.ts",
+        "test/unit/local-backend-structure.test.ts",
+        "npm test",
+        "RankSearchResults → IsTestFilePath",
+        "RankSearchResults → IsBroadSearchQuery",
+        "RankSearchResults → WithTimeout"
+      ]
+    },
+    {
+      "task_id": "qa-runtime-rename-regression",
+      "role": "qa",
+      "timing_seconds": 0.831,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/cli/index.ts",
+        "src/storage/repo-manager.ts",
+        "src/server/service-runtime.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/repo-manager.test.ts",
+        "test/integration/service-runtime.test.ts",
+        "test/unit/cli-commands.test.ts",
+        "npm test",
+        "gnexus manage status",
+        "npm run test:integration"
+      ]
+    },
+    {
+      "task_id": "qa-change-contract-tests",
+      "role": "qa",
+      "timing_seconds": 0.758,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "test/unit/local-backend-structure.test.ts",
+        "docs/cli/commands.md",
+        "test/unit/tools.test.ts",
+        "test/unit/cli-commands.test.ts",
+        "src/mcp/local/local-backend-verify-change-support.ts"
+      ],
+      "recommended_tests": [
+        "npm test",
+        "test/unit/tools.test.ts",
+        "test/unit/cli-commands.test.ts",
+        "node scripts/run-change-contract-benchmark.ts --fixtures test/fixtures/change-contract-benchmark",
+        "test/unit/local-backend-structure.test.ts"
+      ]
+    },
+    {
+      "task_id": "qa-flattening-regression",
+      "role": "qa",
+      "timing_seconds": 0.859,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "scripts/run-integration-tests.sh",
+        "src/server/service-runtime.ts",
+        "README.md",
+        "src/storage/repo-manager.ts",
+        "src/storage/git.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/repo-manager.test.ts",
+        "test/unit/init-command.test.ts",
+        "test/unit/index-command.test.ts",
+        "test/integration/service-runtime.test.ts",
+        "npm run test:integration",
+        "npm run build"
+      ]
+    },
+    {
+      "task_id": "security-runtime-boundary-audit",
+      "role": "security",
+      "timing_seconds": 0.89,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/cli/mcp-command-client.ts",
+        "src/server/service-runtime.ts",
+        "src/storage/repo-manager.ts",
+        "src/mcp/local/local-backend-runtime-support.ts",
+        "src/mcp/local/local-backend-search-ranking-support.ts"
+      ],
+      "recommended_tests": [
+        "test/unit/mcp-command-client.test.ts",
+        "npm run test:integration",
+        "gnexus manage status",
+        "test/integration/service-runtime.test.ts",
+        "test/unit/repo-manager.test.ts"
+      ]
+    },
+    {
+      "task_id": "security-change-contract-overconfidence",
+      "role": "security",
+      "timing_seconds": 0.631,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "docs/cli/commands.md",
+        "src/mcp/local/local-backend-change-contract-support.ts",
+        "src/mcp/local/local-backend-verify-change-support.ts"
+      ],
+      "recommended_tests": [
+        "npm test",
+        "node scripts/run-change-contract-benchmark.ts --fixtures test/fixtures/change-contract-benchmark"
+      ]
+    },
+    {
+      "task_id": "security-rename-command-boundary",
+      "role": "security",
+      "timing_seconds": 0.726,
+      "success": true,
+      "missing_gold_surfaces": [],
+      "missing_expected_tests": [],
+      "required_edit_surfaces": [
+        "src/server/service-runtime.ts",
+        "src/cli/mcp-command-client.ts",
+        "src/cli/rename.ts",
+        "src/mcp/local/local-backend-rename-support.ts",
+        "src/mcp/local/local-backend-graph-support.ts"
+      ],
+      "recommended_tests": [
+        "npm test",
+        "test/integration/service-runtime.test.ts",
+        "test/unit/mcp-command-client.test.ts",
+        "RestartCommand → IsWorkingTreeDirty",
+        "RestartCommand → GetCurrentBranch",
+        "RestartCommand → IsMatchingHealth"
+      ]
+    }
+  ]
+}

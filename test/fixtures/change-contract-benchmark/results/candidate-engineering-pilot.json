@@ -1,0 +1,111 @@
+{
+  "artifact_type": "engineering_candidate_pilot",
+  "scope": "three engineering tasks from the pinned corpus",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/candidate",
+  "repo_commit": "000ead1",
+  "runtime_signature": "manual-cli-pilot-candidate-v1",
+  "notes": [
+    "This is a real measured pilot slice, not the final benchmark run artifact.",
+    "These observations come from candidate plan-change flows only.",
+    "The slice is intentionally strict about gold-surface coverage: partial hits do not count as success."
+  ],
+  "task_observations": [
+    {
+      "task_id": "engineering-new-cli-surface",
+      "role": "engineering",
+      "candidate_flow": [
+        "node dist/cli/index.js plan-change \"Add a new top-level analysis command that routes through the MCP HTTP runtime\""
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.236,
+        "total_task_time_seconds": 1.236
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [
+          "src/cli/mcp-command-client.ts"
+        ],
+        "missed_gold_surfaces": [
+          "src/cli/index.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/server/mcp-http.ts",
+          "src/mcp/local/local-backend-runtime-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The contract improved the packaging of adjacent CLI information but still missed the CLI command-registration seam in src/cli/index.ts.",
+        "This remains insufficient for implementation-ready planning."
+      ]
+    },
+    {
+      "task_id": "engineering-new-mcp-tool",
+      "role": "engineering",
+      "candidate_flow": [
+        "node dist/cli/index.js plan-change \"Add a new agent-facing tool that reuses existing Local Backend analysis seams\""
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.287,
+        "total_task_time_seconds": 1.287
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "src/mcp/tools.ts",
+          "src/mcp/server.ts",
+          "src/mcp/local/local-backend-analysis-support.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-search-lookup-support.ts",
+          "src/core/ingestion/symbol-table.ts",
+          "src/mcp/local/local-backend-summary-presentation-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The candidate contract drifted into symbol-lookup and summary internals instead of the actual MCP tool-registration seams.",
+        "This is a miss on one of the most important engineering use cases in the corpus."
+      ]
+    },
+    {
+      "task_id": "engineering-structural-guard",
+      "role": "engineering",
+      "candidate_flow": [
+        "node dist/cli/index.js plan-change \"Add a structure test that prevents Local Backend analysis from regrowing into a monolith\""
+      ],
+      "timing": {
+        "time_to_first_correct_edit_seconds": 1.361,
+        "total_task_time_seconds": 1.361
+      },
+      "gold_adjudication": {
+        "correct_surfaces_found": [],
+        "missed_gold_surfaces": [
+          "test/unit/local-backend-structure.test.ts",
+          "src/mcp/local/local-backend-analysis-support.ts"
+        ],
+        "wrong_surface_hits": [
+          "src/mcp/local/local-backend-search-lookup-support.ts",
+          "src/mcp/local/local-backend-common.ts",
+          "src/mcp/local/local-backend-graph-support.ts"
+        ],
+        "recommended_tests_found": [],
+        "recommended_test_recall": 0,
+        "recommended_test_precision": 0
+      },
+      "success": false,
+      "rework_count": 1,
+      "notes": [
+        "The candidate contract did not find the target test seam or the analysis seam.",
+        "It instead clustered around lookup and ranking-related Local internals, so this task also remains unready for implementation."
+      ]
+    }
+  ]
+}
