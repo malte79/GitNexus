@@ -1,13 +1,13 @@
 {
   "artifact_type": "candidate_surface_pilot",
-  "scope": "all 12 pinned corpus tasks using current dist plan-change output",
-  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1",
-  "repo_commit": "53b829a025e0ba0dc73b208a57ebb0b049204328",
-  "repo_clean": false,
-  "runtime_signature": "manual-cli-surface-pilot-v3",
+  "scope": "all 12 pinned corpus tasks using clean candidate worktree plan-change output",
+  "source_worktree": "/Users/alex/Projects/GitNexusFork-agent-1/.bench-worktrees/candidate",
+  "repo_commit": "a304562ab60f9f07eeeb27366a5d7ad8448d02af",
+  "repo_clean": true,
+  "runtime_signature": "manual-cli-surface-pilot-v4-clean-candidate",
   "notes": [
-    "This is a real current-candidate pilot artifact, not the final benchmark run artifact.",
-    "It records direct plan-change outputs from the current dist build and judges them against the pinned gold surfaces and expected tests.",
+    "This is a real current-candidate pilot artifact captured from the clean candidate benchmark worktree, not the final benchmark run artifact.",
+    "It records direct plan-change outputs from the clean candidate dist build and judges them against the pinned gold surfaces and expected tests.",
     "Success in this artifact requires both complete gold-surface coverage and complete expected-test coverage for the task.",
     "It does not substitute for baseline.json/candidate.json because it does not carry the full benchmark-run schema or agent-session token/trustworthiness fields."
   ],
@@ -15,7 +15,7 @@
     {
       "task_id": "planning-repo-manager-split",
       "role": "planning",
-      "timing_seconds": 0.871,
+      "timing_seconds": 0.898,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -25,8 +25,8 @@
         "src/mcp/local/local-backend-runtime-support.ts"
       ],
       "recommended_tests": [
-        "test/integration/service-runtime.test.ts",
         "test/unit/repo-manager.test.ts",
+        "test/integration/service-runtime.test.ts",
         "test/unit/status-command.test.ts",
         "test/unit/index-command.test.ts",
         "npm test",
@@ -36,7 +36,7 @@
     {
       "task_id": "planning-local-backend-ranking",
       "role": "planning",
-      "timing_seconds": 0.875,
+      "timing_seconds": 0.828,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -55,7 +55,7 @@
     {
       "task_id": "planning-ingestion-call-surface",
       "role": "planning",
-      "timing_seconds": 0.793,
+      "timing_seconds": 0.759,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -76,7 +76,7 @@
     {
       "task_id": "engineering-new-cli-surface",
       "role": "engineering",
-      "timing_seconds": 0.809,
+      "timing_seconds": 0.838,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -95,7 +95,7 @@
     {
       "task_id": "engineering-new-mcp-tool",
       "role": "engineering",
-      "timing_seconds": 0.807,
+      "timing_seconds": 0.802,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -119,7 +119,7 @@
     {
       "task_id": "engineering-structural-guard",
       "role": "engineering",
-      "timing_seconds": 0.823,
+      "timing_seconds": 0.873,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -143,7 +143,7 @@
     {
       "task_id": "qa-runtime-rename-regression",
       "role": "qa",
-      "timing_seconds": 0.852,
+      "timing_seconds": 0.831,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -153,8 +153,8 @@
         "src/server/service-runtime.ts"
       ],
       "recommended_tests": [
-        "test/integration/service-runtime.test.ts",
         "test/unit/repo-manager.test.ts",
+        "test/integration/service-runtime.test.ts",
         "test/unit/cli-commands.test.ts",
         "npm test",
         "gnexus manage status",
@@ -164,7 +164,7 @@
     {
       "task_id": "qa-change-contract-tests",
       "role": "qa",
-      "timing_seconds": 0.769,
+      "timing_seconds": 0.758,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -186,7 +186,7 @@
     {
       "task_id": "qa-flattening-regression",
       "role": "qa",
-      "timing_seconds": 0.874,
+      "timing_seconds": 0.859,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -195,14 +195,13 @@
         "src/server/service-runtime.ts",
         "README.md",
         "src/storage/repo-manager.ts",
-        "src/mcp/local/local-backend-graph-support.ts",
-        "src/mcp/local/local-backend-verify-change-support.ts"
+        "src/storage/git.ts"
       ],
       "recommended_tests": [
         "test/unit/repo-manager.test.ts",
-        "test/integration/service-runtime.test.ts",
         "test/unit/init-command.test.ts",
         "test/unit/index-command.test.ts",
+        "test/integration/service-runtime.test.ts",
         "npm run test:integration",
         "npm run build"
       ]
@@ -210,7 +209,7 @@
     {
       "task_id": "security-runtime-boundary-audit",
       "role": "security",
-      "timing_seconds": 0.868,
+      "timing_seconds": 0.89,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -218,8 +217,8 @@
         "src/cli/mcp-command-client.ts",
         "src/server/service-runtime.ts",
         "src/storage/repo-manager.ts",
-        "src/mcp/local/local-backend-search-ranking-support.ts",
-        "src/mcp/local/local-backend-runtime-support.ts"
+        "src/mcp/local/local-backend-runtime-support.ts",
+        "src/mcp/local/local-backend-search-ranking-support.ts"
       ],
       "recommended_tests": [
         "test/unit/mcp-command-client.test.ts",
@@ -232,7 +231,7 @@
     {
       "task_id": "security-change-contract-overconfidence",
       "role": "security",
-      "timing_seconds": 0.633,
+      "timing_seconds": 0.631,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
@@ -249,7 +248,7 @@
     {
       "task_id": "security-rename-command-boundary",
       "role": "security",
-      "timing_seconds": 0.67,
+      "timing_seconds": 0.726,
       "success": true,
       "missing_gold_surfaces": [],
       "missing_expected_tests": [],
