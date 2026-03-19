@@ -129,4 +129,40 @@ Returns processes ranked by relevance for the bound repo.`,
       required: ['direction'],
     },
   },
+  {
+    name: 'plan_change',
+    description: `Build a bounded-confidence change contract for a requested goal, with grounded edit surfaces, likely dependent surfaces, recommended tests, and explicit uncertainty buckets.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'Plain-language change goal to plan against' },
+        task_context: { type: 'string', description: 'What the agent is trying to accomplish with the change' },
+        max_surfaces: { type: 'number', description: 'Max required or likely edit surfaces to return (default: 6)', default: 6 },
+      },
+      required: ['goal'],
+    },
+  },
+  {
+    name: 'verify_change',
+    description: `Verify a completed or claimed change against a bounded-confidence change contract and call out contract insufficiency separately from implementation misses.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'Plain-language change goal to verify against when no prior contract JSON is supplied' },
+        task_context: { type: 'string', description: 'What the agent was trying to accomplish with the change' },
+        contract_json: { type: 'string', description: 'Serialized change contract produced by a prior plan_change call' },
+        scope: {
+          type: 'string',
+          description: 'What git diff state to inspect when changed_files is omitted',
+          enum: ['unstaged', 'staged', 'all', 'compare'],
+          default: 'unstaged',
+        },
+        base_ref: { type: 'string', description: 'Branch or commit for compare scope' },
+        changed_files: { type: 'array', items: { type: 'string' }, description: 'Explicit changed files to verify instead of reading git diff state' },
+        reported_test_targets: { type: 'array', items: { type: 'string' }, description: 'Tests or process names actually exercised during validation' },
+        max_surfaces: { type: 'number', description: 'Max required or likely edit surfaces to return when regenerating a contract', default: 6 },
+      },
+      required: [],
+    },
+  },
 ];

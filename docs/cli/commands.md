@@ -11,6 +11,8 @@ The CLI is split into two planes:
   - `gnexus query`
   - `gnexus context`
   - `gnexus impact`
+  - `gnexus plan-change`
+  - `gnexus verify-change`
   - `gnexus detect-changes`
   - `gnexus cypher`
   - `gnexus rename`
@@ -60,6 +62,8 @@ The top-level structural commands are:
 - `gnexus query`
 - `gnexus context`
 - `gnexus impact`
+- `gnexus plan-change`
+- `gnexus verify-change`
 - `gnexus detect-changes`
 - `gnexus cypher`
 - `gnexus rename`
@@ -92,6 +96,24 @@ Shared contract:
 - `gnexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
 - `gnexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
 - `gnexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
+- `gnexus plan-change` is the bounded-confidence planning surface for agents
+- `gnexus plan-change` must return:
+  - one explicit `confidence_posture: bounded`
+  - evidence buckets for `grounded`, `strong_inference`, and `hypothesis`
+  - `required_edit_surfaces`
+  - `likely_dependent_surfaces`
+  - `recommended_tests`
+  - `risk_notes`
+  - `unknowns`
+- `gnexus plan-change` must not claim full codebase understanding or flatten all evidence into one unlabeled recommendation set
+- `gnexus verify-change` is the bounded-confidence verification surface for agents
+- `gnexus verify-change` must preserve these mismatch categories:
+  - `missing_grounded_surfaces`
+  - `unreviewed_inferred_surfaces`
+  - `out_of_contract_touched_surfaces`
+  - `missing_recommended_tests`
+  - `contract_insufficiency`
+- `gnexus verify-change` must not silently collapse contract defects into implementation misses
 - `gnexus summary --subsystems` is the concise subsystem view for daily use
 - concise subsystem rows prefer architecturally representative owners and hotspots, and may omit weakly grounded or helper-level labels rather than forcing them into an unrelated subsystem
 - concise subsystem rows evaluate a wider candidate set before truncation and rank by representative quality, so broad or weakly grounded buckets do not crowd out stronger subsystem rows just because they were discovered earlier
@@ -203,3 +225,15 @@ If a command is run:
 - from inside a worktree, that worktree boundary applies
 
 No command may silently target a parent repo when a nearer git root exists.
+
+## Change-Contract Acceptance Bar
+
+The bounded-confidence planning surface is only worth shipping if the pinned benchmark corpus proves:
+
+- no decrease in final task success rate
+- at least a `20%` median reduction in time to first correct edit on multi-file tasks
+- at least a `25%` median reduction in orientation-token consumption
+- at least a `30%` reduction in wrong-surface exploration
+- no regression in QA or security test-target recall
+
+Those measurements must compare equivalent prompt shells, runtime config, repo freshness prerequisites, and orientation-phase boundaries.

@@ -115,6 +115,7 @@ Background mode now adds a bounded convenience layer on top of that manual model
 ## Scope And Priorities
 
 - The tool is explicitly meant to be a backend utility for AI agents to understand and navigate codebases faster and with less brute-force searching
+- A first-class bounded-confidence change-contract surface is now part of active product direction because it can reduce agent orientation work without pretending to fully understand the codebase
 - Narrowing who and what is supported is acceptable if it helps achieve that cleanly
 - The work should proceed one step at a time rather than trying to land repo-local state, HTTP MCP, refresh semantics, and broader rebranding all at once
 

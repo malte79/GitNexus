@@ -18,6 +18,35 @@ export interface LocalBackendAnalysisHost {
   getNodeKind(row: { id?: string; uid?: string; nodeId?: string; type?: string; kind?: string }, fallback?: string): string;
   humanizeSummaryLabel(label: string): string;
   isLowSignalSubsystemLabel(label: string): boolean;
+  querySearch(
+    repo: RepoHandle,
+    params: {
+      query: string;
+      task_context?: string;
+      goal?: string;
+      owners?: boolean;
+      limit?: number;
+      max_symbols?: number;
+      include_content?: boolean;
+    },
+  ): Promise<any>;
+  detectChanges(
+    repo: RepoHandle,
+    params: { scope?: string; base_ref?: string },
+  ): Promise<any>;
+  analyzeImpact(
+    repo: RepoHandle,
+    params: {
+      target?: string;
+      uid?: string;
+      file_path?: string;
+      direction: 'upstream' | 'downstream';
+      maxDepth?: number;
+      relationTypes?: string[];
+      includeTests?: boolean;
+      minConfidence?: number;
+    },
+  ): Promise<any>;
   lookupNamedSymbols(
     repo: RepoHandle,
     params: { name: string; file_path?: string; include_content?: boolean },

@@ -41,10 +41,16 @@ function getNextStepHint(toolName: string, args: Record<string, any> | undefined
       return `\n\n---\n**Next:** If planning changes, use impact({target: "${args?.name || '<name>'}", direction: "upstream"}) to check blast radius. To see execution flows, READ gnexus://processes.`;
 
     case 'impact':
-      return `\n\n---\n**Next:** Review d=1 items first (WILL BREAK). To check affected execution flows, READ gnexus://processes.`;
+      return `\n\n---\n**Next:** Use plan_change({goal: "describe the intended change"}) to turn this blast radius into a bounded change contract.`;
+
+    case 'plan_change':
+      return `\n\n---\n**Next:** Use verify_change({goal: "${args?.goal || '<goal>'}"}) after editing to compare the real change set against this contract.`;
+
+    case 'verify_change':
+      return `\n\n---\n**Next:** Review missing grounded surfaces first. If contract_insufficiency is non-empty, regenerate plan_change() before widening the edit set.`;
 
     case 'detect_changes':
-      return `\n\n---\n**Next:** Review affected processes. Use context() on high-risk changed symbols. READ gnexus://process/{name} for full execution traces.`;
+      return `\n\n---\n**Next:** Use verify_change({goal: "<goal>"}) to compare this change set against a bounded change contract.`;
 
     case 'rename':
       return `\n\n---\n**Next:** Run detect_changes() to verify no unexpected side effects from the rename.`;

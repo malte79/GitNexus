@@ -6,6 +6,8 @@ const localBackendPath = path.resolve(import.meta.dirname, '../../src/mcp/local/
 const overviewSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-overview-support.ts');
 const searchSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-search-support.ts');
 const analysisSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-analysis-support.ts');
+const changeContractSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-change-contract-support.ts');
+const verifyChangeSupportPath = path.resolve(import.meta.dirname, '../../src/mcp/local/local-backend-verify-change-support.ts');
 
 describe('LocalBackend structure', () => {
   it('keeps the public seam thin and delegated', () => {
@@ -56,8 +58,23 @@ describe('LocalBackend structure', () => {
     expect(source).toContain("import { LocalBackendDetectChangesSupport } from './local-backend-detect-changes-support.js';");
     expect(source).toContain("import { LocalBackendRenameSupport } from './local-backend-rename-support.js';");
     expect(source).toContain("import { LocalBackendImpactSupport } from './local-backend-impact-support.js';");
+    expect(source).toContain("import { LocalBackendChangeContractSupport } from './local-backend-change-contract-support.js';");
+    expect(source).toContain("import { LocalBackendVerifyChangeSupport } from './local-backend-verify-change-support.js';");
     expect(source).not.toContain('executeQuery(');
     expect(source).not.toContain('executeParameterized(');
     expect(source).not.toContain('MATCH (');
+  });
+
+  it('keeps change-contract owners focused on contract assembly and verification', () => {
+    const planSource = fs.readFileSync(changeContractSupportPath, 'utf-8');
+    const verifySource = fs.readFileSync(verifyChangeSupportPath, 'utf-8');
+
+    expect(planSource).not.toContain('MATCH (');
+    expect(planSource).not.toContain('executeQuery(');
+    expect(planSource).not.toContain('executeParameterized(');
+    expect(verifySource).not.toContain('MATCH (');
+    expect(verifySource).not.toContain('executeQuery(');
+    expect(verifySource).not.toContain('executeParameterized(');
+    expect(verifySource).toContain('contract_insufficiency');
   });
 });

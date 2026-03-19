@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { GITNEXUS_TOOLS } from '../../src/mcp/tools.js';
 
 describe('GITNEXUS_TOOLS', () => {
-  it('exports exactly 7 tools', () => {
-    expect(GITNEXUS_TOOLS).toHaveLength(7);
+  it('exports exactly 9 tools', () => {
+    expect(GITNEXUS_TOOLS).toHaveLength(9);
   });
 
   it('contains the expected bound-repo tool names', () => {
@@ -16,6 +16,8 @@ describe('GITNEXUS_TOOLS', () => {
         'rename',
         'impact',
         'summary',
+        'plan_change',
+        'verify_change',
       ]),
     );
   });
@@ -57,5 +59,18 @@ describe('GITNEXUS_TOOLS', () => {
   it('rename tool requires new_name', () => {
     const renameTool = GITNEXUS_TOOLS.find(t => t.name === 'rename')!;
     expect(renameTool.inputSchema.required).toContain('new_name');
+  });
+
+  it('plan_change tool requires goal', () => {
+    const planTool = GITNEXUS_TOOLS.find(t => t.name === 'plan_change')!;
+    expect(planTool.inputSchema.required).toContain('goal');
+    expect(planTool.inputSchema.properties.task_context).toBeDefined();
+  });
+
+  it('verify_change tool supports contract_json and explicit changed files', () => {
+    const verifyTool = GITNEXUS_TOOLS.find(t => t.name === 'verify_change')!;
+    expect(verifyTool.inputSchema.properties.contract_json).toBeDefined();
+    expect(verifyTool.inputSchema.properties.changed_files).toBeDefined();
+    expect(verifyTool.inputSchema.properties.reported_test_targets).toBeDefined();
   });
 });

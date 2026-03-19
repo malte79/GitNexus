@@ -111,6 +111,25 @@ export function buildProgram(): Command {
     .action(createLazyAction(() => import('./impact.js'), 'impactCommand'));
 
   program
+    .command('plan-change [goal...]')
+    .description('Build a bounded-confidence change contract for a requested goal')
+    .option('--task-context <text>', 'What you are trying to accomplish with this change')
+    .option('--max-surfaces <number>', 'Max required or likely edit surfaces to return', (value) => Number.parseInt(value, 10))
+    .action(createLazyAction(() => import('./plan-change.js'), 'planChangeCommand'));
+
+  program
+    .command('verify-change [goal...]')
+    .description('Verify a completed change against a bounded-confidence change contract')
+    .option('--contract-file <path>', 'JSON file produced by a prior plan-change run')
+    .option('--task-context <text>', 'What you were trying to accomplish with this change')
+    .option('--scope <scope>', 'unstaged, staged, all, or compare')
+    .option('--base-ref <ref>', 'Branch or commit for compare scope')
+    .option('--changed-file <path...>', 'Explicit changed files to verify instead of reading git diff state')
+    .option('--reported-test-target <target...>', 'Tests or processes that were actually exercised')
+    .option('--max-surfaces <number>', 'Max required or likely edit surfaces to return when regenerating the contract', (value) => Number.parseInt(value, 10))
+    .action(createLazyAction(() => import('./verify-change.js'), 'verifyChangeCommand'));
+
+  program
     .command('detect-changes')
     .description('Analyze local git changes and affected execution flows in the bound repo')
     .option('--scope <scope>', 'unstaged, staged, all, or compare')

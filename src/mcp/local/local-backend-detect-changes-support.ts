@@ -41,6 +41,7 @@ export class LocalBackendDetectChangesSupport {
     if (changedFiles.length === 0) {
       return {
         summary: { changed_count: 0, affected_count: 0, risk_level: 'none', message: 'No changes detected.' },
+        changed_files: [],
         changed_symbols: [],
         affected_processes: [],
       };
@@ -103,6 +104,7 @@ export class LocalBackendDetectChangesSupport {
         changed_files: changedFiles.length,
         risk_level: risk,
       },
+      changed_files: changedFiles.map((file) => file.replace(/\\/g, '/')),
       changed_symbols: changedSymbols,
       affected_processes: Array.from(affectedProcesses.values()),
     };

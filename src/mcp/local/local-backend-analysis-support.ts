@@ -9,6 +9,8 @@ import { LocalBackendContextSupport } from './local-backend-context-support.js';
 import { LocalBackendDetectChangesSupport } from './local-backend-detect-changes-support.js';
 import { LocalBackendRenameSupport } from './local-backend-rename-support.js';
 import { LocalBackendImpactSupport } from './local-backend-impact-support.js';
+import { LocalBackendChangeContractSupport } from './local-backend-change-contract-support.js';
+import { LocalBackendVerifyChangeSupport } from './local-backend-verify-change-support.js';
 
 export class LocalBackendAnalysisSupport {
   private readonly shapeSupport: LocalBackendShapeSupport;
@@ -16,6 +18,8 @@ export class LocalBackendAnalysisSupport {
   private readonly detectChangesSupport: LocalBackendDetectChangesSupport;
   private readonly renameSupport: LocalBackendRenameSupport;
   private readonly impactSupport: LocalBackendImpactSupport;
+  private readonly changeContractSupport: LocalBackendChangeContractSupport;
+  private readonly verifyChangeSupport: LocalBackendVerifyChangeSupport;
 
   constructor(host: LocalBackendAnalysisHost) {
     this.shapeSupport = new LocalBackendShapeSupport(host);
@@ -23,6 +27,8 @@ export class LocalBackendAnalysisSupport {
     this.detectChangesSupport = new LocalBackendDetectChangesSupport(host);
     this.renameSupport = new LocalBackendRenameSupport(host, this.context.bind(this));
     this.impactSupport = new LocalBackendImpactSupport(host, this.shapeSupport, this.context.bind(this));
+    this.changeContractSupport = new LocalBackendChangeContractSupport(host);
+    this.verifyChangeSupport = new LocalBackendVerifyChangeSupport(host);
   }
 
   async getShapeSignals(repo: RepoHandle, filePath: string | undefined): Promise<ShapeSignals> {
@@ -58,5 +64,26 @@ export class LocalBackendAnalysisSupport {
     minConfidence?: number;
   }): Promise<any> {
     return this.impactSupport.impact(repo, params);
+  }
+
+  async planChange(repo: RepoHandle, params: {
+    goal?: string;
+    task_context?: string;
+    max_surfaces?: number;
+  }): Promise<any> {
+    return this.changeContractSupport.planChange(repo, params);
+  }
+
+  async verifyChange(repo: RepoHandle, params: {
+    goal?: string;
+    task_context?: string;
+    contract_json?: string;
+    scope?: string;
+    base_ref?: string;
+    changed_files?: string[];
+    reported_test_targets?: string[];
+    max_surfaces?: number;
+  }): Promise<any> {
+    return this.verifyChangeSupport.verifyChange(repo, params);
   }
 }

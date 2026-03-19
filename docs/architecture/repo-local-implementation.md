@@ -27,6 +27,10 @@ This document maps the locked gnexus runtime contract onto the current repo-loca
 | repo-local context support | [local-backend-context-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-context-support.ts) | symbol lookup closeout, member-based context expansion, and context coverage reporting |
 | repo-local impact support | [local-backend-impact-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-impact-support.ts) | direct traversal impact analysis, propagated module/process shaping, and machine-readable risk reporting |
 | repo-local change-detection support | [local-backend-detect-changes-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-detect-changes-support.ts) | git diff scope handling, changed-symbol recovery, and affected-process shaping |
+| repo-local change-contract types | [local-backend-change-contract-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-change-contract-types.ts) | bounded-confidence change-contract output shapes, evidence buckets, and verification mismatch schema |
+| repo-local change-evidence support | [local-backend-change-evidence-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-change-evidence-support.ts) | reuse-first evidence collection from query, impact, owner overlap, and test adjacency |
+| repo-local change-contract support | [local-backend-change-contract-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-change-contract-support.ts) | pre-change contract assembly for `plan-change` |
+| repo-local verify-change support | [local-backend-verify-change-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-verify-change-support.ts) | post-change mismatch classification and contract-insufficiency detection |
 | repo-local rename support | [local-backend-rename-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-rename-support.ts) | rename dry-run/apply planning, grounded reference edits, and bounded text-search expansion |
 | repo-local shared backend primitives | [local-backend-common.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-common.ts), [local-backend-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-types.ts) | shared repo-local constants, logging helpers, and internal MCP/backend types |
 | agent-facing tool schema | [tools.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/tools.ts) | single-repo tool contracts with no repo routing |
@@ -60,6 +64,8 @@ The current CLI surface is intentionally split:
   - `gnexus query`
   - `gnexus context`
   - `gnexus impact`
+  - `gnexus plan-change`
+  - `gnexus verify-change`
   - `gnexus detect-changes`
   - `gnexus cypher`
   - `gnexus rename`
@@ -94,11 +100,13 @@ The bound MCP tool surface is now:
 - `detect_changes`
 - `rename`
 - `cypher`
+- `plan_change`
+- `verify_change`
 
 Implementation posture:
 
 - `LocalBackend` is now a thin repo-local coordinator rather than the prior god-module. It owns tool dispatch, repo binding, and a small number of compatibility-facing helper methods that tests and resources call intentionally.
-- The repo-local backend stack is split into fifteen internal owners:
+- The repo-local backend stack is split into focused internal owners:
   - repo-bound runtime and freshness handling live in [local-backend-runtime-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-runtime-support.ts)
   - shared graph utility and owner/member recovery live in [local-backend-graph-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-graph-support.ts)
   - the search/query public seam lives in [local-backend-search-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-search-support.ts)
@@ -110,12 +118,16 @@ Implementation posture:
   - concise subsystem presentation and representative scoring live in [local-backend-summary-presentation-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-summary-presentation-support.ts)
   - subsystem graph queries, cluster aggregation, and direct cluster/process detail queries live in [local-backend-summary-query-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-summary-query-support.ts)
   - overview assembly and top-symbol shaping live in [local-backend-overview-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-overview-support.ts)
-  - the analysis public seam lives in [local-backend-analysis-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-analysis-support.ts)
-  - overload-shape and extraction-seam analysis live in [local-backend-shape-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-shape-support.ts)
-  - symbol context expansion and coverage reporting live in [local-backend-context-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-context-support.ts)
-  - impact traversal and blast-radius shaping live in [local-backend-impact-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-impact-support.ts)
-  - git diff and affected-process shaping live in [local-backend-detect-changes-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-detect-changes-support.ts)
-  - rename planning and bounded edit application live in [local-backend-rename-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-rename-support.ts)
+- the analysis public seam lives in [local-backend-analysis-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-analysis-support.ts)
+- overload-shape and extraction-seam analysis live in [local-backend-shape-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-shape-support.ts)
+- symbol context expansion and coverage reporting live in [local-backend-context-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-context-support.ts)
+- impact traversal and blast-radius shaping live in [local-backend-impact-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-impact-support.ts)
+- git diff and affected-process shaping live in [local-backend-detect-changes-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-detect-changes-support.ts)
+- bounded-confidence contract shapes live in [local-backend-change-contract-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-change-contract-types.ts)
+- reuse-first contract evidence collection lives in [local-backend-change-evidence-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-change-evidence-support.ts)
+- pre-change contract assembly lives in [local-backend-change-contract-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-change-contract-support.ts)
+- post-change mismatch classification and contract-insufficiency checks live in [local-backend-verify-change-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-verify-change-support.ts)
+- rename planning and bounded edit application live in [local-backend-rename-support.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-rename-support.ts)
 - Support modules bind to each other directly through explicit host interfaces where needed; the coordinator is no longer a broad internal facade or the practical routing sink for summary, detail-query, and Cypher authority.
 - shared repo-local backend constants and internal types live in [local-backend-common.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-common.ts) and [local-backend-types.ts](/Users/alex/Projects/GitNexusFork-agent-1/src/mcp/local/local-backend-types.ts); they do not introduce a second public MCP or CLI contract
 - `query` remains BM25-plus-graph retrieval with deterministic ranking adjustments
@@ -130,6 +142,9 @@ Implementation posture:
 - `context` now explicitly distinguishes weak Luau returned-table wrappers from richer exported modules so thin wrapper modules do not look like hollow failures
 - when a weak Luau wrapper explicitly delegates into a named local table, `context` may surface that backing table's grounded members as structural context without pretending those members are exported directly by the wrapper
 - `impact` prefers direct graph traversal, but may expand through contained members or grounded file-level definitions for file targets and report partial confidence when container-symbol coverage is incomplete
+- `plan-change` is the bounded-confidence planning surface built from existing query, impact, owner, and test-adjacency evidence rather than a parallel planner runtime
+- `plan-change` must separate `grounded`, `strong_inference`, and `hypothesis` evidence explicitly for every substantive recommendation
+- `verify-change` compares a real or claimed change set against one contract and preserves `contract_insufficiency` separately from implementation misses
 - `impact` may surface `affected_areas` from direct file-level callers when process or community memberships are not grounded enough to populate `affected_processes` or `affected_modules`
 - `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`
 - `impact` now exposes machine-readable `risk_dimensions`, `risk_split`, and `shape.file` so operators can separate change risk, local refactor pressure, and raw overload shape on one surface
