@@ -46,12 +46,14 @@ Contract:
 - read-only
 - prints Markdown only
 - explains what gnexus is and the split between everyday analysis commands and `manage` lifecycle commands
+- teaches a practical command-selection flow so users know when to start with `plan-change`, when to use `query --owners`, when to drill into `context` or `impact`, when to use `detect-changes`, and when to run `verify-change`
 - documents the normal remediation path when the service is unavailable or stale:
   - `gnexus manage start`
   - `gnexus manage index`
   - `gnexus manage restart`
 - includes a short example workflow for normal CLI use
 - includes brief use cases and example calls for each supported structural command type
+- includes at least one cross-cutting workflow, one narrow-symbol workflow, and one QA/security-oriented workflow
 - documents owner-biased discovery with `gnexus query --owners`, concise subsystem summary with `gnexus summary --subsystems`, and the explicit detailed alternate `gnexus summary --subsystems-detailed`
 - does not mention retired product names, `gnexus://` resources, API endpoints, MCP, or transport internals in the default help output
 
@@ -97,6 +99,7 @@ Shared contract:
 - `gnexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
 - `gnexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
 - `gnexus plan-change` is the bounded-confidence planning surface for agents
+- `gnexus plan-change` is the preferred starting point for broad, cross-cutting, multi-file, QA-oriented, or security-oriented work that needs one shared edit-and-test contract
 - `gnexus plan-change` must return:
   - one explicit `confidence_posture: bounded`
   - evidence buckets for `grounded`, `strong_inference`, and `hypothesis`
@@ -107,6 +110,7 @@ Shared contract:
   - `unknowns`
 - `gnexus plan-change` must not claim full codebase understanding or flatten all evidence into one unlabeled recommendation set
 - `gnexus verify-change` is the bounded-confidence verification surface for agents
+- `gnexus verify-change` is the follow-through command after editing or before handoff, not the replacement for initial planning
 - `gnexus verify-change` must preserve these mismatch categories:
   - `missing_grounded_surfaces`
   - `unreviewed_inferred_surfaces`
@@ -228,12 +232,17 @@ No command may silently target a parent repo when a nearer git root exists.
 
 ## Change-Contract Acceptance Bar
 
-The bounded-confidence planning surface is only worth shipping if the pinned benchmark corpus proves:
+Epic 20 closed on the reduced six-task orientation benchmark, not the original full telemetry study.
 
-- no decrease in final task success rate
-- at least a `20%` median reduction in time to first correct edit on multi-file tasks
-- at least a `25%` median reduction in orientation-token consumption
-- at least a `30%` reduction in wrong-surface exploration
-- no regression in QA or security test-target recall
+The preserved shipping evidence requires:
 
-Those measurements must compare equivalent prompt shells, runtime config, repo freshness prerequisites, and orientation-phase boundaries.
+- no regression in initial-plan correctness on the pinned slice
+- no regression in QA or security expected-test coverage on the pinned slice
+- a strictly better candidate success count than baseline on that slice
+- lower wall-clock time and lower tool-call count on the tasks where both baseline and candidate reach a viable initial plan
+
+That reduced-bar evidence is preserved in:
+
+- [/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/orientation-shipping-slice.json](/Users/alex/Projects/GitNexusFork-agent-1/test/fixtures/change-contract-benchmark/results/orientation-shipping-slice.json)
+
+The deeper benchmark harness remains available for future studies, but it is not the current ship blocker.

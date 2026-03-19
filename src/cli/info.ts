@@ -6,6 +6,17 @@ gnexus is the repo-local CLI for structural analysis, indexing, and service life
 Use the top-level \`gnexus\` commands for everyday analysis work.
 Use \`gnexus manage ...\` when you need to initialize a repo, refresh the index, check status, or recover the service.
 
+## Start Here
+
+Use this default decision rule:
+
+- start with \`gnexus plan-change\` when the task is multi-file, cross-cutting, ambiguous, or you need one shared plan for planning, engineering, QA, or security work
+- use \`gnexus query --owners\` when you first need to discover the likely production owners of a subsystem or behavior
+- use \`gnexus context\` when you already have a symbol and want its callers, callees, or file anchor
+- use \`gnexus impact\` before editing when you need blast-radius and risk guidance
+- use \`gnexus verify-change\` after editing or before handoff to check whether the real change matched the original contract
+- use \`gnexus detect-changes\` when you want to review the effect of an existing local diff rather than plan from scratch
+
 ## Everyday Commands
 
 - \`gnexus query\`: broad discovery for files, symbols, and subsystem entrypoints
@@ -44,6 +55,37 @@ gnexus query "bridge http lifecycle status start stop studio automation" --owner
 gnexus context CommandBridgeHandler --file typed/bridge/http
 gnexus impact ProtocolRouter --direction upstream --max-depth 4
 gnexus plan-change "split repo state evaluation away from runtime coordination"
+gnexus verify-change "split repo state evaluation away from runtime coordination" --reported-test-target "npm test"
+\`\`\`
+
+## Recommended Workflows
+
+### Cross-Cutting Change
+
+Use when the task spans multiple files, owners, or test surfaces.
+
+\`\`\`bash
+gnexus plan-change "replace polling-based repo freshness checks with a single coordinator"
+gnexus verify-change "replace polling-based repo freshness checks with a single coordinator" --reported-test-target "npm test"
+\`\`\`
+
+### Narrow Symbol Investigation
+
+Use when you already know the rough area and want to inspect one symbol deeply.
+
+\`\`\`bash
+gnexus query auth token refresh --owners
+gnexus context RefreshTokenService
+gnexus impact RefreshTokenService --direction upstream
+\`\`\`
+
+### QA Or Security Review
+
+Use when you want the likely edit surfaces plus the tests or boundaries that should be exercised.
+
+\`\`\`bash
+gnexus plan-change "identify the highest-value regression checks for repo-local runtime identity rename"
+gnexus plan-change "audit the security-sensitive boundaries around repo-local service startup and repo matching"
 \`\`\`
 
 ## Recovery
@@ -112,17 +154,20 @@ Good for:
 - turning a vague change request into concrete edit surfaces
 - separating grounded dependencies from likely follow-up surfaces
 - giving planning, QA, and security agents one shared contract to work from
+- starting cross-cutting work before you open a pile of files manually
 
 Examples:
 
 \`\`\`bash
 gnexus plan-change "split repo state evaluation away from runtime coordination"
 gnexus plan-change "add a benchmark harness for bounded-confidence planning" --task-context "epic 20 implementation"
+gnexus plan-change "identify the highest-value regression checks for repo-local runtime identity rename"
 \`\`\`
 
 Notes:
 - \`plan-change\` is intentionally bounded-confidence, not a claim of full codebase understanding
 - every substantive suggestion is labeled as \`grounded\`, \`strong_inference\`, or \`hypothesis\`
+- prefer \`plan-change\` over ad hoc \`query\` chaining when the request is broad enough that you expect multiple files, tests, or role handoffs
 
 ### \`verify-change\`
 
@@ -130,6 +175,7 @@ Good for:
 - checking whether a change actually touched the contract’s required surfaces
 - distinguishing contract defects from implementation misses
 - confirming that recommended tests were actually exercised
+- validating a handoff before another agent, reviewer, QA pass, or security pass picks it up
 
 Examples:
 
@@ -138,12 +184,17 @@ gnexus verify-change "split repo state evaluation away from runtime coordination
 gnexus verify-change --contract-file ./contract.json --reported-test-target "npm test"
 \`\`\`
 
+Notes:
+- use \`verify-change\` after edits, not as a replacement for \`plan-change\`
+- \`--contract-file\` is the handoff path when one agent creates the contract and another agent checks the resulting change
+
 ### \`detect-changes\`
 
 Good for:
 - pre-commit review
 - tracing changed symbols into affected execution flows
 - checking whether a local edit touched a sensitive area
+- understanding an existing diff when you did not start from a contract
 
 Examples:
 
