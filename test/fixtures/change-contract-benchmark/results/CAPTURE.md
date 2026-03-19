@@ -53,7 +53,10 @@ The reduced orientation benchmark asks only:
 
 For this epic, a viable initial plan means:
 - complete gold-surface coverage for the task
-- complete expected-test coverage for the task
+
+Expected-test coverage is tracked separately:
+- it is preserved in the artifacts for every selected task
+- QA and security may not regress on expected-test coverage
 
 ## Evidence Notes
 

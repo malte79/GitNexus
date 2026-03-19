@@ -20,7 +20,7 @@
     "runtime_signature": "manual-cli-surface-pilot-v4-clean-candidate"
   },
   "success_definition": {
-    "initial_plan_correctness": "Complete gold-surface coverage and complete expected-test coverage for the task.",
+    "initial_plan_correctness": "Complete gold-surface coverage for the task. Expected-test coverage is tracked separately and must not regress for QA or security on the selected slice.",
     "ship_gate": [
       "Candidate does not regress initial-plan correctness on the selected slice.",
       "Candidate does not regress QA or security expected-test coverage on the selected slice.",

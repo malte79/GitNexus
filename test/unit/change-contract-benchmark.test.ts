@@ -150,4 +150,35 @@ describe('change-contract benchmark corpus', () => {
     expect(comparison.thresholds.trustworthiness_ok).toBe(true);
     expect(comparison.thresholds.ship_verdict).toBe(true);
   });
+
+  it('does not ship when a role never reaches a successful candidate run', () => {
+    const corpus = loadBenchmarkCorpus('test/fixtures/change-contract-benchmark/gnexus-agent-benchmark.json');
+    const baseline = makeRun(corpus, { mode: 'baseline' });
+    const candidate = makeRun(corpus, { mode: 'change_contract' });
+
+    for (const result of baseline.task_results) {
+      result.metrics.time_to_first_correct_edit_seconds = 100;
+      result.metrics.total_task_time_seconds = 200;
+      result.metrics.orientation_tokens_before_first_edit = 1000;
+      result.metrics.wrong_surface_count = 10;
+    }
+    for (const result of candidate.task_results) {
+      result.metrics.time_to_first_correct_edit_seconds = 70;
+      result.metrics.total_task_time_seconds = 150;
+      result.metrics.orientation_tokens_before_first_edit = 700;
+      result.metrics.wrong_surface_count = 6;
+    }
+
+    for (const result of baseline.task_results.filter((task) => task.role === 'security')) {
+      result.success = false;
+    }
+    for (const result of candidate.task_results.filter((task) => task.role === 'security')) {
+      result.success = false;
+    }
+
+    const comparison = compareBenchmarkRuns(corpus, baseline, candidate);
+    expect(comparison.role_breakdowns.security.candidate_successes).toBe(0);
+    expect(comparison.thresholds.final_task_success_ok).toBe(false);
+    expect(comparison.thresholds.ship_verdict).toBe(false);
+  });
 });

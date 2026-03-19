@@ -188,6 +188,21 @@ describe('LocalBackend.callTool', () => {
     expect(result.mismatches.out_of_contract_touched_surfaces[0].file_path).toBe('src/storage/git.ts');
   });
 
+  it('returns a structured error for incomplete contract_json instead of throwing', async () => {
+    const result = await backend.callTool('verify_change', {
+      contract_json: JSON.stringify({
+        goal: 'rename runtime boundary',
+        required_edit_surfaces: [],
+        likely_dependent_surfaces: [],
+      }),
+      changed_files: ['src/storage/repo-manager.ts'],
+    });
+
+    expect(result).toEqual({
+      error: 'contract_json is missing required change-contract fields: recommended_tests, affected_modules, supporting_processes, risk_notes, unknowns',
+    });
+  });
+
   it('keeps explore alias backward-compatible for symbol lookups without an explicit type', async () => {
     const contextSpy = vi.spyOn(backend as any, 'context').mockResolvedValue({
       status: 'found',

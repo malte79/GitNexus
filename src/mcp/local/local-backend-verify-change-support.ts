@@ -128,8 +128,18 @@ export class LocalBackendVerifyChangeSupport {
     if (params.contract_json?.trim()) {
       try {
         const parsed = JSON.parse(params.contract_json) as ChangeContract;
-        if (!parsed.goal || !Array.isArray(parsed.required_edit_surfaces) || !Array.isArray(parsed.likely_dependent_surfaces)) {
-          return { error: 'contract_json is missing required change-contract fields.' };
+        const missingFields = [
+          !parsed.goal ? 'goal' : null,
+          !Array.isArray(parsed.required_edit_surfaces) ? 'required_edit_surfaces' : null,
+          !Array.isArray(parsed.likely_dependent_surfaces) ? 'likely_dependent_surfaces' : null,
+          !Array.isArray(parsed.recommended_tests) ? 'recommended_tests' : null,
+          !Array.isArray(parsed.affected_modules) ? 'affected_modules' : null,
+          !Array.isArray(parsed.supporting_processes) ? 'supporting_processes' : null,
+          !Array.isArray(parsed.risk_notes) ? 'risk_notes' : null,
+          !Array.isArray(parsed.unknowns) ? 'unknowns' : null,
+        ].filter(Boolean);
+        if (missingFields.length > 0) {
+          return { error: `contract_json is missing required change-contract fields: ${missingFields.join(', ')}` };
         }
         return parsed;
       } catch (error) {

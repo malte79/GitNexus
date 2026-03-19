@@ -100,6 +100,7 @@ export interface BenchmarkComparison {
   role_breakdowns: Record<BenchmarkRole, {
     baseline_successes: number;
     candidate_successes: number;
+    shared_successes: number;
     median_time_to_first_correct_edit_delta: number;
     median_total_task_time_delta: number;
     median_orientation_token_delta: number;
@@ -312,6 +313,7 @@ export function compareBenchmarkRuns(
   const roleBreakdowns = Object.fromEntries(BENCHMARK_ROLES.map((role) => [role, {
     baseline_successes: 0,
     candidate_successes: 0,
+    shared_successes: 0,
     median_time_to_first_correct_edit_delta: 0,
     median_total_task_time_delta: 0,
     median_orientation_token_delta: 0,
@@ -361,28 +363,35 @@ export function compareBenchmarkRuns(
       }
     }
 
+    const sharedSuccessPairs = baselineTasks
+      .map((baselineTask, index) => ({ baselineTask, candidateTask: candidateTasks[index] }))
+      .filter(({ baselineTask, candidateTask }) => baselineTask.success && candidateTask.success);
+    const sharedBaselineTasks = sharedSuccessPairs.map(({ baselineTask }) => baselineTask);
+    const sharedCandidateTasks = sharedSuccessPairs.map(({ candidateTask }) => candidateTask);
+
     roleBreakdowns[role] = {
       baseline_successes: baselineTasks.filter((task) => task.success).length,
       candidate_successes: candidateTasks.filter((task) => task.success).length,
+      shared_successes: sharedSuccessPairs.length,
       median_time_to_first_correct_edit_delta: percentageReduction(
-        median(baselineTasks.map((task) => task.metrics.time_to_first_correct_edit_seconds)),
-        median(candidateTasks.map((task) => task.metrics.time_to_first_correct_edit_seconds)),
+        median(sharedBaselineTasks.map((task) => task.metrics.time_to_first_correct_edit_seconds)),
+        median(sharedCandidateTasks.map((task) => task.metrics.time_to_first_correct_edit_seconds)),
       ),
       median_total_task_time_delta: percentageReduction(
-        median(baselineTasks.map((task) => task.metrics.total_task_time_seconds)),
-        median(candidateTasks.map((task) => task.metrics.total_task_time_seconds)),
+        median(sharedBaselineTasks.map((task) => task.metrics.total_task_time_seconds)),
+        median(sharedCandidateTasks.map((task) => task.metrics.total_task_time_seconds)),
       ),
       median_orientation_token_delta: percentageReduction(
-        median(baselineTasks.map((task) => task.metrics.orientation_tokens_before_first_edit)),
-        median(candidateTasks.map((task) => task.metrics.orientation_tokens_before_first_edit)),
+        median(sharedBaselineTasks.map((task) => task.metrics.orientation_tokens_before_first_edit)),
+        median(sharedCandidateTasks.map((task) => task.metrics.orientation_tokens_before_first_edit)),
       ),
       wrong_surface_delta: percentageReduction(
-        median(baselineTasks.map((task) => task.metrics.wrong_surface_count)),
-        median(candidateTasks.map((task) => task.metrics.wrong_surface_count)),
+        median(sharedBaselineTasks.map((task) => task.metrics.wrong_surface_count)),
+        median(sharedCandidateTasks.map((task) => task.metrics.wrong_surface_count)),
       ),
       rework_delta: percentageReduction(
-        median(baselineTasks.map((task) => task.metrics.rework_count)),
-        median(candidateTasks.map((task) => task.metrics.rework_count)),
+        median(sharedBaselineTasks.map((task) => task.metrics.rework_count)),
+        median(sharedCandidateTasks.map((task) => task.metrics.rework_count)),
       ),
       recommended_test_recall_delta:
         median(candidateTasks.map((task) => task.metrics.recommended_test_recall))
@@ -417,11 +426,19 @@ export function compareBenchmarkRuns(
   );
 
   const finalTaskSuccessOk = BENCHMARK_ROLES.every((role) =>
-    roleBreakdowns[role].candidate_successes >= roleBreakdowns[role].baseline_successes,
+    roleBreakdowns[role].candidate_successes >= roleBreakdowns[role].baseline_successes
+    && roleBreakdowns[role].candidate_successes > 0,
   );
-  const timeToFirstCorrectEditOk = median(Object.values(roleBreakdowns).map((entry) => entry.median_time_to_first_correct_edit_delta)) >= 20;
-  const orientationTokensOk = median(Object.values(roleBreakdowns).map((entry) => entry.median_orientation_token_delta)) >= 25;
-  const wrongSurfaceOk = median(Object.values(roleBreakdowns).map((entry) => entry.wrong_surface_delta)) >= 30;
+  const comparableRoles = Object.values(roleBreakdowns).filter((entry) => entry.shared_successes > 0);
+  const timeToFirstCorrectEditOk =
+    comparableRoles.length > 0
+    && median(comparableRoles.map((entry) => entry.median_time_to_first_correct_edit_delta)) >= 20;
+  const orientationTokensOk =
+    comparableRoles.length > 0
+    && median(comparableRoles.map((entry) => entry.median_orientation_token_delta)) >= 25;
+  const wrongSurfaceOk =
+    comparableRoles.length > 0
+    && median(comparableRoles.map((entry) => entry.wrong_surface_delta)) >= 30;
   const qaSecurityRecallOk = ['qa', 'security'].every((role) => roleBreakdowns[role as BenchmarkRole].recommended_test_recall_delta >= 0);
 
   return {
