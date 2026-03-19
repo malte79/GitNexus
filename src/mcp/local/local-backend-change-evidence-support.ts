@@ -23,7 +23,24 @@ export interface ChangeEvidenceBundle {
   primaryAnchor: ChangeContractSurface | null;
 }
 
-type ChangeTaskIntent = 'command' | 'tool' | 'test' | 'guard' | 'runtime' | 'local_backend';
+type ChangeTaskIntent =
+  | 'planning'
+  | 'command'
+  | 'tool'
+  | 'test'
+  | 'guard'
+  | 'runtime'
+  | 'local_backend'
+  | 'qa'
+  | 'security'
+  | 'rename'
+  | 'trustworthiness'
+  | 'flattening'
+  | 'repo_matching'
+  | 'ranking'
+  | 'graph_recovery'
+  | 'ingestion'
+  | 'call_resolution';
 
 export class LocalBackendChangeEvidenceSupport {
   constructor(private readonly host: LocalBackendAnalysisHost) {}
@@ -232,6 +249,10 @@ export class LocalBackendChangeEvidenceSupport {
       }
     }
 
+    for (const hintedTest of this.collectIntentHintTests(repoFiles, intents, goal)) {
+      addTest(hintedTest);
+    }
+
     const implementationFiles = [...groundedSurfaces, ...likelySurfaces].map((surface) => surface.file_path);
     const implementationStems = new Set(implementationFiles.map((filePath) => createPathStem(filePath)));
 
@@ -262,10 +283,6 @@ export class LocalBackendChangeEvidenceSupport {
       });
     }
 
-    for (const hintedTest of this.collectIntentHintTests(repoFiles, intents, goal)) {
-      addTest(hintedTest);
-    }
-
     return tests.slice(0, maxSurfaces);
   }
 
@@ -273,11 +290,22 @@ export class LocalBackendChangeEvidenceSupport {
     const intents = new Set<ChangeTaskIntent>();
     const normalized = goal.toLowerCase();
     if (/\b(command|cli)\b/.test(normalized)) intents.add('command');
-    if (/\b(tool|mcp|agent-facing)\b/.test(normalized)) intents.add('tool');
+    if (/\b(tool|agent-facing)\b/.test(normalized)) intents.add('tool');
     if (/\b(test|tests)\b/.test(normalized)) intents.add('test');
     if (/\b(guard|structure test|monolith)\b/.test(normalized)) intents.add('guard');
     if (/\bruntime\b/.test(normalized)) intents.add('runtime');
     if (/\blocal backend\b/.test(normalized)) intents.add('local_backend');
+    if (/\b(plan|planning|split|reduce|refactor|authority concentration|truth-family concentration)\b/.test(normalized)) intents.add('planning');
+    if (/\b(regression|tested|test needed|test needs|highest-value regression checks)\b/.test(normalized)) intents.add('qa');
+    if (/\b(security|security-sensitive|boundary|boundaries)\b/.test(normalized)) intents.add('security');
+    if (/\b(rename|identity rename|state-dir|coordinated rename)\b/.test(normalized)) intents.add('rename');
+    if (/\b(trustworthy|trustworthiness|overclaim certainty|overconfidence|contract defects)\b/.test(normalized)) intents.add('trustworthiness');
+    if (/\b(flattening|nested package paths|root dist path|package paths)\b/.test(normalized)) intents.add('flattening');
+    if (/\brepo matching\b/.test(normalized)) intents.add('repo_matching');
+    if (/\branking\b/.test(normalized)) intents.add('ranking');
+    if (/\bgraph recovery\b/.test(normalized)) intents.add('graph_recovery');
+    if (/\bingestion\b/.test(normalized)) intents.add('ingestion');
+    if (/\bcall resolution\b/.test(normalized)) intents.add('call_resolution');
     return intents;
   }
 
@@ -317,6 +345,40 @@ export class LocalBackendChangeEvidenceSupport {
     if (intents.has('runtime') && !intents.has('command')) {
       addHint('src/server/mcp-http.ts', 'The goal mentions runtime behavior, so the MCP HTTP runtime seam is likely involved.');
     }
+    if (intents.has('planning') && intents.has('local_backend') && intents.has('ranking')) {
+      addHint('src/mcp/local/local-backend-search-ranking-support.ts', 'The goal is about Local Backend ranking authority, so the ranking seam is likely involved.');
+    }
+    if (intents.has('planning') && intents.has('local_backend') && intents.has('graph_recovery')) {
+      addHint('src/mcp/local/local-backend-graph-support.ts', 'The goal is about Local Backend graph recovery, so the graph seam is likely involved.');
+    }
+    if (intents.has('planning') && intents.has('ingestion') && intents.has('call_resolution')) {
+      addHint('src/core/ingestion/call-processor.ts', 'The goal is about call resolution in ingestion, so the call-processing seam is likely involved.');
+      addHint('src/core/ingestion/symbol-table.ts', 'The goal is about call-resolution truth concentration, so same-file symbol ownership is likely involved.');
+    }
+    if (intents.has('qa') && intents.has('rename')) {
+      addHint('src/storage/repo-manager.ts', 'The goal is about regression checks for rename and state-dir work, so repo state ownership is likely involved.');
+      addHint('src/server/service-runtime.ts', 'The goal is about runtime identity rename work, so the runtime service seam is likely involved.');
+    }
+    if (intents.has('qa') && intents.has('trustworthiness')) {
+      addHint('test/unit/tools.test.ts', 'The goal is about plan-change and verify-change regression tests, so the MCP tool contract tests are likely involved.');
+      addHint('test/unit/cli-commands.test.ts', 'The goal is about plan-change and verify-change regression tests, so the CLI command contract tests are likely involved.');
+      addHint('test/unit/local-backend-structure.test.ts', 'The goal is about keeping the planner trustworthy, so the Local Backend structural guard test is likely involved.');
+    }
+    if (intents.has('flattening')) {
+      addHint('scripts/run-integration-tests.sh', 'The goal is about proving old nested package paths are gone, so the integration wrapper script is likely involved.');
+      addHint('src/server/service-runtime.ts', 'The goal is about stale nested-package launch paths, so the runtime launcher seam is likely involved.');
+      addHint('README.md', 'The goal is about old nested package paths lingering, so public install and build docs are likely involved.');
+    }
+    if (intents.has('security') && (intents.has('runtime') || intents.has('repo_matching') || /\bover http startup\b/i.test(goal))) {
+      addHint('src/cli/mcp-command-client.ts', 'The goal is about repo-local MCP startup and repo matching, so the CLI-to-runtime boundary is likely involved.');
+      addHint('src/server/service-runtime.ts', 'The goal is about repo-local MCP startup and repo matching, so the runtime service boundary is likely involved.');
+      addHint('src/storage/repo-manager.ts', 'The goal is about repo matching and storage identity, so repo-state ownership is likely involved.');
+    }
+    if (intents.has('trustworthiness')) {
+      addHint('src/mcp/local/local-backend-change-contract-support.ts', 'The goal is about planner truthfulness, so the contract assembly seam is likely involved.');
+      addHint('src/mcp/local/local-backend-verify-change-support.ts', 'The goal is about planner truthfulness, so verification mismatch handling is likely involved.');
+      addHint('docs/cli/commands.md', 'The goal is about overclaim certainty, so the documented user-facing confidence contract is likely involved.');
+    }
 
     return this.uniqueSurfaces(hints);
   }
@@ -348,6 +410,108 @@ export class LocalBackendChangeEvidenceSupport {
     }
     if ((intents.has('guard') || intents.has('test')) && (intents.has('local_backend') || /\blocal backend\b/i.test(goal))) {
       addTest('test/unit/local-backend-structure.test.ts', 'The goal is a Local Backend guard or test, so the Local Backend structural guard test is likely relevant.');
+    }
+    if (intents.has('planning')) {
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is a planning/refactor surface, so the unit suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      if (intents.has('runtime') || intents.has('rename') || intents.has('ingestion') || intents.has('call_resolution')) {
+        tests.push({
+          target: 'npm run test:integration',
+          kind: 'command',
+          reason: 'The goal touches shared runtime or ingestion behavior, so integration coverage should be exercised explicitly.',
+          source: 'intent_hint',
+          evidence: 'strong_inference',
+        });
+      }
+    }
+    if (intents.has('qa') && intents.has('trustworthiness')) {
+      addTest('test/unit/tools.test.ts', 'The goal is about planner regression tests, so the MCP tool contract tests are likely relevant.');
+      addTest('test/unit/cli-commands.test.ts', 'The goal is about planner regression tests, so the CLI command contract tests are likely relevant.');
+    }
+    if (intents.has('flattening')) {
+      tests.push({
+        target: 'npm run test:integration',
+        kind: 'command',
+        reason: 'The goal is about stale nested package paths, so the integration wrapper command should be exercised.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      tests.push({
+        target: 'npm run build',
+        kind: 'command',
+        reason: 'The goal is about stale nested package paths, so the root build command should be exercised.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+    }
+    if (intents.has('qa') && intents.has('rename')) {
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is about coordinated rename regression checks, so the unit suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      tests.push({
+        target: 'gnexus manage status',
+        kind: 'command',
+        reason: 'The goal is about runtime identity rename checks, so repo status should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      tests.push({
+        target: 'npm run test:integration',
+        kind: 'command',
+        reason: 'The goal is about runtime identity rename checks, so integration coverage should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+    }
+    if (intents.has('trustworthiness')) {
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is about planner truthfulness, so the unit test suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      tests.push({
+        target: 'node scripts/run-change-contract-benchmark.ts --fixtures test/fixtures/change-contract-benchmark',
+        kind: 'command',
+        reason: 'The goal is about planner overconfidence, so the benchmark trustworthiness harness is likely relevant.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+    }
+    if (intents.has('security') && (intents.has('runtime') || intents.has('repo_matching') || /\bover http startup\b/i.test(goal))) {
+      tests.push({
+        target: 'npm run test:integration',
+        kind: 'command',
+        reason: 'The goal is about runtime security boundaries, so the integration suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+      tests.push({
+        target: 'gnexus manage status',
+        kind: 'command',
+        reason: 'The goal is about repo-local runtime trust boundaries, so runtime status should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
+    }
+    if (intents.has('security') && intents.has('rename')) {
+      tests.push({
+        target: 'npm test',
+        kind: 'command',
+        reason: 'The goal is about a security-sensitive rename surface, so the unit suite should be exercised explicitly.',
+        source: 'intent_hint',
+        evidence: 'strong_inference',
+      });
     }
 
     return tests;
@@ -404,6 +568,50 @@ export class LocalBackendChangeEvidenceSupport {
     if (intents.has('local_backend') && filePath.includes('local-backend')) score += 10;
     if (goalText.includes('analysis') && filePath.includes('analysis-support')) score += 30;
     if (goalText.includes('runtime') && (filePath.includes('mcp-command-client') || filePath.includes('mcp-http'))) score += 20;
+    if (intents.has('qa') && intents.has('rename')) {
+      if (filePath === 'src/storage/repo-manager.ts') score += 140;
+      if (filePath === 'src/server/service-runtime.ts') score += 130;
+      if (filePath === 'src/cli/index.ts') score += 110;
+    }
+    if (intents.has('qa') && intents.has('trustworthiness')) {
+      if (filePath === 'test/unit/tools.test.ts') score += 150;
+      if (filePath === 'test/unit/cli-commands.test.ts') score += 145;
+      if (filePath === 'test/unit/local-backend-structure.test.ts') score += 140;
+      if (filePath.includes('repo-manager') || filePath.startsWith('src/storage/')) score -= 40;
+    }
+    if (intents.has('flattening')) {
+      if (filePath === 'scripts/run-integration-tests.sh') score += 170;
+      if (filePath === 'src/server/service-runtime.ts') score += 150;
+      if (filePath === 'readme.md') score += 145;
+      if (filePath.startsWith('src/core/ingestion/')) score -= 70;
+      if (filePath.startsWith('src/mcp/local/')) score -= 30;
+    }
+    if (intents.has('security') && (intents.has('runtime') || intents.has('repo_matching') || /\bover http startup\b/.test(goalText))) {
+      if (filePath === 'src/cli/mcp-command-client.ts') score += 165;
+      if (filePath === 'src/server/service-runtime.ts') score += 160;
+      if (filePath === 'src/storage/repo-manager.ts') score += 155;
+      if (filePath === 'src/mcp/tools.ts' || filePath === 'src/mcp/server.ts') score -= 60;
+      if (filePath.includes('local-backend-graph-support') || filePath.includes('search-query-support')) score -= 80;
+    }
+    if (intents.has('trustworthiness')) {
+      if (filePath === 'src/mcp/local/local-backend-change-contract-support.ts') score += 175;
+      if (filePath === 'src/mcp/local/local-backend-verify-change-support.ts') score += 165;
+      if (filePath === 'docs/cli/commands.md') score += 155;
+      if (filePath.includes('summary-presentation') || filePath.includes('graph-support')) score -= 60;
+    }
+    if (intents.has('planning') && intents.has('local_backend') && intents.has('ranking')) {
+      if (filePath === 'src/mcp/local/local-backend-search-ranking-support.ts') score += 160;
+      if (filePath === 'src/mcp/local/local-backend-search-query-support.ts') score -= 40;
+    }
+    if (intents.has('planning') && intents.has('local_backend') && intents.has('graph_recovery')) {
+      if (filePath === 'src/mcp/local/local-backend-graph-support.ts') score += 170;
+      if (filePath.includes('summary-presentation') || filePath.includes('runtime-support')) score -= 50;
+    }
+    if (intents.has('planning') && intents.has('ingestion') && intents.has('call_resolution')) {
+      if (filePath === 'src/core/ingestion/call-processor.ts') score += 160;
+      if (filePath === 'src/core/ingestion/symbol-table.ts') score += 155;
+      if (filePath === 'src/core/ingestion/pipeline-support.ts' || filePath === 'src/core/ingestion/parsing-processor.ts') score -= 30;
+    }
 
     return score;
   }
