@@ -108,6 +108,9 @@ Shared contract:
   - `recommended_tests`
   - `risk_notes`
   - `unknowns`
+- for broad behavioral or runtime requests, `gnexus plan-change` may rerank broad owner candidates by repeated prompt-term agreement and subsystem cohesion so a coherent owner cluster can beat an isolated helper or incidental subsystem hit
+- for those same broad requests, `gnexus plan-change` should prefer owner-like anchors such as files, modules, classes, services, controllers, orchestrators, or runtime owners over isolated methods or functions when the evidence is otherwise similar
+- broad-request ranking may demote ancillary surfaces such as playtests, scenarios, sandboxes, or examples when the prompt does not explicitly target them; that demotion must turn off when the prompt is explicitly about one of those ancillary surfaces
 - `gnexus plan-change` must not claim full codebase understanding or flatten all evidence into one unlabeled recommendation set
 - `gnexus verify-change` is the bounded-confidence verification surface for agents
 - `gnexus verify-change` is the follow-through command after editing or before handoff, not the replacement for initial planning

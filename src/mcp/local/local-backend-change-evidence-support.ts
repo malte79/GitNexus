@@ -550,17 +550,23 @@ export class LocalBackendChangeEvidenceSupport {
     intents: Set<ChangeTaskIntent>,
     goal: string,
   ): ChangeContractSurface[] {
+    const broadGoalTerms = this.getBroadGoalTerms(goal);
     return this.uniqueSurfaces(surfaces)
       .map((surface, index) => ({
         surface,
         index,
-        score: this.scoreSurface(surface, intents, goal),
+        score: this.scoreSurface(surface, intents, goal, broadGoalTerms),
       }))
       .sort((left, right) => right.score - left.score || left.index - right.index)
       .map((entry) => entry.surface);
   }
 
-  private scoreSurface(surface: ChangeContractSurface, intents: Set<ChangeTaskIntent>, goal: string): number {
+  private scoreSurface(
+    surface: ChangeContractSurface,
+    intents: Set<ChangeTaskIntent>,
+    goal: string,
+    broadGoalTerms: string[],
+  ): number {
     const filePath = normalizeRepoPath(surface.file_path).toLowerCase();
     const goalText = goal.toLowerCase();
     let score = 0;
@@ -569,6 +575,32 @@ export class LocalBackendChangeEvidenceSupport {
     if (surface.source === 'intent_hint') score += 25;
     if (surface.symbol_uid) score += 5;
     if (surface.symbol_name) score += 5;
+
+    const broadMatch = this.computeBroadGoalMatch(surface, broadGoalTerms);
+    score += broadMatch.matchWeight * 10;
+    score += broadMatch.sourceAgreement * 4;
+    if (broadGoalTerms.length >= 2 && this.isOwnerLikeSurface(surface.kind) && broadMatch.matchCount >= 1) {
+      score += 26;
+    }
+    if (broadGoalTerms.length >= 2 && this.isOwnerLikeSurface(surface.kind) && broadMatch.matchCount >= 2) {
+      score += 24 + ((broadMatch.matchCount - 2) * 6);
+    }
+    if (broadGoalTerms.length >= 2 && this.isFunctionLikeSurface(surface.kind)) {
+      score -= 8;
+    }
+    if (broadGoalTerms.length >= 2 && this.isFunctionLikeSurface(surface.kind) && broadMatch.matchCount <= 1) {
+      score -= 20;
+    }
+    if (broadGoalTerms.length >= 2 && this.isFunctionLikeSurface(surface.kind) && broadMatch.matchCount === 0) {
+      score -= 15;
+    }
+    if (
+      broadGoalTerms.length >= 2 &&
+      /(^|\/)(playtest|scenario|scenarios|sandbox|examples?)(\/|$)/i.test(filePath) &&
+      !this.goalExplicitlyTargetsAncillarySurface(goal)
+    ) {
+      score -= 48;
+    }
 
     if (intents.has('command')) {
       if (filePath === 'src/cli/index.ts') score += 120;
@@ -642,6 +674,102 @@ export class LocalBackendChangeEvidenceSupport {
     }
 
     return score;
+  }
+
+  private getBroadGoalTerms(goal: string): string[] {
+    const stopwords = new Set([
+      'a', 'all', 'allowing', 'along', 'always', 'and', 'at', 'away', 'back', 'be', 'default', 'end', 'for', 'forth',
+      'from', 'in', 'into', 'its', 'make', 'of', 'on', 'or', 'own', 'pause', 'preserving', 'the', 'their', 'times',
+      'to', 'top', 'up', 'with',
+    ]);
+    const sourceTerms = this.tokenizeGoalValue(goal)
+      .filter(Boolean)
+      .flatMap((term) => this.getGoalTokenVariants(term))
+      .filter((term) => term.length >= 4 && !stopwords.has(term));
+    return [...new Set(sourceTerms)];
+  }
+
+  private getGoalTokenVariants(term: string): string[] {
+    const normalized = term.trim().toLowerCase();
+    if (!normalized) return [];
+    const variants = new Set<string>([normalized]);
+    if (normalized.endsWith('ies') && normalized.length > 4) {
+      variants.add(`${normalized.slice(0, -3)}y`);
+    }
+    if (normalized.endsWith('es') && normalized.length > 4) {
+      variants.add(normalized.slice(0, -2));
+    }
+    if (normalized.endsWith('s') && normalized.length > 3) {
+      variants.add(normalized.slice(0, -1));
+    }
+    return [...variants].filter(Boolean);
+  }
+
+  private computeBroadGoalMatch(
+    surface: ChangeContractSurface,
+    broadGoalTerms: string[],
+  ): { matchCount: number; matchWeight: number; sourceAgreement: number } {
+    if (broadGoalTerms.length === 0) {
+      return { matchCount: 0, matchWeight: 0, sourceAgreement: 0 };
+    }
+
+    const tokenSources = [
+      surface.symbol_name || '',
+      surface.kind || '',
+      surface.module || '',
+      normalizeRepoPath(surface.file_path),
+    ]
+      .filter(Boolean)
+      .map((value) => new Set(
+        this.tokenizeGoalValue(value)
+          .filter(Boolean)
+          .flatMap((token) => this.getGoalTokenVariants(token)),
+      ));
+
+    let matchCount = 0;
+    let sourceAgreement = 0;
+    for (const term of broadGoalTerms) {
+      const matches = tokenSources.filter((tokens) => tokens.has(term)).length;
+      if (matches > 0) {
+        matchCount += 1;
+        sourceAgreement += Math.max(0, matches - 1);
+      }
+    }
+
+    return {
+      matchCount,
+      matchWeight: matchCount,
+      sourceAgreement,
+    };
+  }
+
+  private isOwnerLikeSurface(kind?: string): boolean {
+    return kind === 'Module' || kind === 'Class' || kind === 'File';
+  }
+
+  private isFunctionLikeSurface(kind?: string): boolean {
+    return kind === 'Method' || kind === 'Function';
+  }
+
+  private tokenizeGoalValue(value: string): string[] {
+    return value
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .toLowerCase()
+      .replace(/[_./-]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  private goalExplicitlyTargetsAncillarySurface(goal: string): boolean {
+    return this.tokenizeGoalValue(goal).some((token) => (
+      token === 'playtest' ||
+      token === 'scenario' ||
+      token === 'scenarios' ||
+      token === 'sandbox' ||
+      token === 'example' ||
+      token === 'examples'
+    ));
   }
 
   private collectRiskNotes(
