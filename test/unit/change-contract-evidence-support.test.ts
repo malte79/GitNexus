@@ -4,10 +4,17 @@ vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(() => [
     'README.md',
     'docs/cli/commands.md',
+    'docs/process/testing.md',
+    'docs/systems/lighting.md',
     'scripts/run-integration-tests.sh',
     'src/cli/index.ts',
     'src/cli/mcp-command-client.ts',
     'src/cli/rename.ts',
+    'src/server/Game/DeathLaserController.lua',
+    'src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua',
+    'src/server/Game/DeathLaserRuntime/ControllerRuntime.lua',
+    'src/server/Game/DeathLaserRuntime/DiscoveryRuntime.lua',
+    'src/server/Game/DeathLaserRuntime/StateSnapshotRuntime.lua',
     'src/mcp/tools.ts',
     'src/mcp/server.ts',
     'src/mcp/local/local-backend-analysis-support.ts',
@@ -26,6 +33,7 @@ vi.mock('node:child_process', () => ({
     'src/core/ingestion/call-processor.ts',
     'src/core/ingestion/symbol-table.ts',
     'test/unit/cli-commands.test.ts',
+    'test/unit/death_laser_ambient_motion_runtime_spec.luau',
     'test/unit/tools.test.ts',
     'test/unit/local-backend-structure.test.ts',
     'test/unit/mcp-command-client.test.ts',
@@ -47,7 +55,24 @@ function createHost() {
     getNodeKind: vi.fn(),
     humanizeSummaryLabel: vi.fn(),
     isLowSignalSubsystemLabel: vi.fn(),
-    querySearch: vi.fn(async (_repo: any, params: { query: string }) => {
+    querySearch: vi.fn(async (_repo: any, params: { query: string; include_content?: boolean }) => {
+      if (params.include_content && params.query.includes('always-on death-laser ambient patrol')) {
+        return {
+          process_symbols: [],
+          definitions: [
+            {
+              name: 'lighting.md',
+              type: 'File',
+              filePath: 'docs/systems/lighting.md',
+            },
+            {
+              name: 'testing.md',
+              type: 'File',
+              filePath: 'docs/process/testing.md',
+            },
+          ],
+        };
+      }
       if (params.query.includes('top-level analysis command')) {
         return {
           process_symbols: [
@@ -133,6 +158,25 @@ function createHost() {
               name: 'parsing-processor.ts',
               type: 'File',
               filePath: 'src/core/ingestion/parsing-processor.ts',
+            },
+          ],
+        };
+      }
+      if (params.query.includes('well-connected concentrated local backend owner change')) {
+        return {
+          process_symbols: [
+            {
+              id: 'Class:src/mcp/local/local-backend-change-evidence-support.ts:LocalBackendChangeEvidenceSupport:44',
+              name: 'LocalBackendChangeEvidenceSupport',
+              type: 'Class',
+              filePath: 'src/mcp/local/local-backend-change-evidence-support.ts',
+            },
+          ],
+          definitions: [
+            {
+              name: 'local-backend-change-contract-support.ts',
+              type: 'File',
+              filePath: 'src/mcp/local/local-backend-change-contract-support.ts',
             },
           ],
         };
@@ -302,6 +346,36 @@ function createHost() {
           processes: [{ id: 'proc_laser_playtest' }],
         };
       }
+      if (params.query.includes('always-on death-laser ambient patrol')) {
+        return {
+          process_symbols: [
+            {
+              id: 'Module:src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua',
+              name: 'AmbientMotionRuntime',
+              type: 'Module',
+              filePath: 'src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua',
+            },
+          ],
+          definitions: [
+            {
+              name: 'DeathLaserController',
+              type: 'Module',
+              filePath: 'src/server/Game/DeathLaserController.lua',
+            },
+            {
+              name: 'ControllerRuntime',
+              type: 'Module',
+              filePath: 'src/server/Game/DeathLaserRuntime/ControllerRuntime.lua',
+            },
+            {
+              name: 'DiscoveryRuntime',
+              type: 'Module',
+              filePath: 'src/server/Game/DeathLaserRuntime/DiscoveryRuntime.lua',
+            },
+          ],
+          processes: [{ id: 'proc_ambient_motion' }],
+        };
+      }
       return {
         process_symbols: [],
         definitions: [
@@ -319,18 +393,97 @@ function createHost() {
       };
     }),
     detectChanges: vi.fn(),
-    analyzeImpact: vi.fn().mockResolvedValue({
-      byDepth: {},
-      affected_processes: [],
-      affected_modules: [],
-      coverage: {
-        confidence: 'partial',
-        note: 'Impact coverage is partial for this synthetic test.',
-      },
-      risk: 'medium',
-      risk_split: {
-        summary_line: 'change risk: medium; local refactor pressure: high',
-      },
+    analyzeImpact: vi.fn().mockImplementation(async (_repo: any, params: { target?: string }) => {
+      if (params.target === 'AmbientMotionRuntime') {
+        return {
+          byDepth: {},
+          affected_processes: [],
+          affected_modules: [{ name: 'Unit', impact: 'direct', hits: 1 }],
+          coverage: {
+            confidence: 'partial',
+            note: 'No affected symbols were found through direct graph traversal. For container-style symbols, impact coverage may still be incomplete even after expanding through contained members.',
+          },
+          risk: 'unknown',
+          risk_split: {
+            summary_line: 'change risk: medium; local refactor pressure: critical',
+          },
+          shape: {
+            file: {
+              line_count: 280,
+              function_count: 9,
+              largest_members: [
+                { name: 'startTraverse', kind: 'Function', startLine: 120, endLine: 182, line_count: 63 },
+                { name: 'startFromCurrentPosition', kind: 'Function', startLine: 184, endLine: 240, line_count: 57 },
+                { name: 'issueMove', kind: 'Function', startLine: 90, endLine: 118, line_count: 29 },
+              ],
+              average_lines_per_function: 31.1,
+              hotspot_share: 0.53,
+              concentration: 'critical',
+              grounded_extraction_seams: [],
+            },
+          },
+          risk_dimensions: {
+            internal_concentration: 'critical',
+          },
+        };
+      }
+      if (params.target === 'LocalBackendChangeEvidenceSupport') {
+        return {
+          impactedCount: 2,
+          byDepth: {
+            1: [
+              {
+                id: 'Method:src/mcp/local/local-backend-change-contract-support.ts:planChange:15',
+                name: 'planChange',
+                type: 'Method',
+                filePath: 'src/mcp/local/local-backend-change-contract-support.ts',
+              },
+            ],
+          },
+          affected_processes: [],
+          affected_modules: [{ name: 'Local', impact: 'direct', hits: 1 }],
+          coverage: {
+            confidence: 'partial',
+            note: 'Impact includes relationships gathered through contained members for this symbol.',
+            signals: {
+              higher_level_propagation: 'high',
+            },
+          },
+          risk: 'medium',
+          risk_split: {
+            summary_line: 'change risk: medium; local refactor pressure: high',
+          },
+          shape: {
+            file: {
+              line_count: 1350,
+              function_count: 37,
+              largest_members: [
+                { name: 'collectEvidence', kind: 'Method', startLine: 47, endLine: 155, line_count: 109 },
+              ],
+              average_lines_per_function: 36.5,
+              hotspot_share: 0.41,
+              concentration: 'high',
+              grounded_extraction_seams: [],
+            },
+          },
+          risk_dimensions: {
+            internal_concentration: 'high',
+          },
+        };
+      }
+      return {
+        byDepth: {},
+        affected_processes: [],
+        affected_modules: [],
+        coverage: {
+          confidence: 'partial',
+          note: 'Impact coverage is partial for this synthetic test.',
+        },
+        risk: 'medium',
+        risk_split: {
+          summary_line: 'change risk: medium; local refactor pressure: high',
+        },
+      };
     }),
     lookupNamedSymbols: vi.fn(),
     getPrimaryModuleSymbols: vi.fn(),
@@ -538,5 +691,56 @@ describe('LocalBackendChangeContractSupport engineering intent hints', () => {
     expect('primary_anchor' in result && result.primary_anchor?.file_path).toBe(
       'src/server/Playtest/Scenarios/LaserMinigameV1.lua',
     );
+  });
+
+  it('surfaces concentrated runtime companions, luau specs, docs, and hotspot hints for ambient patrol goals', async () => {
+    const host = createHost();
+    const support = new LocalBackendChangeContractSupport(host as any);
+    const result = await support.planChange(repo, {
+      goal: 'extend the always-on death-laser ambient patrol so each of the four lasers independently picks a random patrol speed from a bounded range, holds that speed for a random 10 to 60 seconds, and transitions to each new speed with a smooth 1-second acceleration/deceleration while preserving the existing rail path, end pause, and authored orientation',
+    });
+
+    expect('primary_anchor' in result && result.primary_anchor?.file_path).toBe(
+      'src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua',
+    );
+    expect('likely_dependent_surfaces' in result && result.likely_dependent_surfaces.map((surface) => surface.file_path)).toEqual(
+      expect.arrayContaining([
+        'src/server/Game/DeathLaserRuntime/StateSnapshotRuntime.lua',
+        'docs/systems/lighting.md',
+        'docs/process/testing.md',
+      ]),
+    );
+    expect('likely_dependent_surfaces' in result && result.likely_dependent_surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          file_path: 'src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua',
+          symbol_name: 'startTraverse',
+        }),
+      ]),
+    );
+    expect('recommended_tests' in result && result.recommended_tests.map((test) => test.target)).toContain(
+      'test/unit/death_laser_ambient_motion_runtime_spec.luau',
+    );
+    expect('risk_notes' in result && result.risk_notes.map((note) => note.summary).join(' ')).toContain(
+      'startTraverse',
+    );
+    const includeContentCalls = host.querySearch.mock.calls.filter(([, params]: [any, { include_content?: boolean }]) => (
+      Boolean(params.include_content)
+    ));
+    expect(includeContentCalls).toHaveLength(1);
+  });
+
+  it('does not trigger concentrated companion recovery when higher-level propagation is already grounded', async () => {
+    const host = createHost();
+    const support = new LocalBackendChangeContractSupport(host as any);
+
+    await support.planChange(repo, {
+      goal: 'well-connected concentrated local backend owner change',
+    });
+
+    const includeContentCalls = host.querySearch.mock.calls.filter(([, params]: [any, { include_content?: boolean }]) => (
+      Boolean(params.include_content)
+    ));
+    expect(includeContentCalls).toHaveLength(0);
   });
 });

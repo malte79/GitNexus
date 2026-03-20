@@ -146,9 +146,11 @@ Implementation posture:
 - `plan-change` must separate `grounded`, `strong_inference`, and `hypothesis` evidence explicitly for every substantive recommendation
 - for broad behavioral or runtime goals, `plan-change` now reranks grounded surfaces using repeated prompt-term agreement, source agreement across path or symbol sources, and owner-like-versus-helper shape so coherent subsystem owners can outrank isolated helper hits
 - that broad-goal reranking may demote ancillary paths such as playtests, scenarios, sandboxes, or examples when the prompt is not explicitly about those surfaces; explicit ancillary-target prompts disable that demotion
+- when a concentrated owner is recovered but direct propagation remains sparse, `plan-change` may reuse tracked-file adjacency and content-grounded search to surface nearby proof or debug companions, Luau spec or test files, documentation companions, and same-file hotspot members through the existing contract fields instead of widening the response schema
 - `verify-change` compares a real or claimed change set against one contract and preserves `contract_insufficiency` separately from implementation misses
 - `impact` may surface `affected_areas` from direct file-level callers when process or community memberships are not grounded enough to populate `affected_processes` or `affected_modules`
 - `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`
 - `impact` now exposes machine-readable `risk_dimensions`, `risk_split`, and `shape.file` so operators can separate change risk, local refactor pressure, and raw overload shape on one surface
+- when direct traversal is sparse for a concentrated owner, `impact` may keep higher-level blast-radius fields empty while using `coverage.note` and `shape.file.largest_members` to surface bounded same-file hotspot guidance rather than inventing process or module propagation
 - `cypher` stays read-only and now adds friendlier recovery guidance for near misses such as `type(r)` and property misses such as `File.lineCount`
 - Cypher schema and property discoverability are exposed through `gnexus://schema`, `gnexus://properties`, and `gnexus://properties/{nodeType}`

@@ -98,6 +98,7 @@ Shared contract:
 - `gnexus impact` exposes machine-readable `risk_dimensions` for centrality, coupling breadth, internal concentration, lifecycle complexity, and boundary ambiguity
 - `gnexus impact` also exposes `risk_split` so operators can distinguish change risk from local refactor pressure without inferring it manually from raw shape details
 - `gnexus impact` exposes `shape.file` for overload analysis, including line count, function count, largest members, hotspot share, and grounded extraction seams when available
+- when direct traversal is sparse for a concentrated owner, `gnexus impact` may keep `impactedCount`, `affected_processes`, and `affected_modules` truthful while using `coverage.note` and `shape.file.largest_members` to call out the strongest same-file hotspot seams instead of pretending higher-level blast radius was grounded
 - `gnexus plan-change` is the bounded-confidence planning surface for agents
 - `gnexus plan-change` is the preferred starting point for broad, cross-cutting, multi-file, QA-oriented, or security-oriented work that needs one shared edit-and-test contract
 - `gnexus plan-change` must return:
@@ -111,6 +112,7 @@ Shared contract:
 - for broad behavioral or runtime requests, `gnexus plan-change` may rerank broad owner candidates by repeated prompt-term agreement and subsystem cohesion so a coherent owner cluster can beat an isolated helper or incidental subsystem hit
 - for those same broad requests, `gnexus plan-change` should prefer owner-like anchors such as files, modules, classes, services, controllers, orchestrators, or runtime owners over isolated methods or functions when the evidence is otherwise similar
 - broad-request ranking may demote ancillary surfaces such as playtests, scenarios, sandboxes, or examples when the prompt does not explicitly target them; that demotion must turn off when the prompt is explicitly about one of those ancillary surfaces
+- when a concentrated owner file is recovered but higher-level propagation remains sparse, `gnexus plan-change` may still surface nearby proof or debug companions, same-family specs including Luau `.spec.luau` or `.test.luau` files, content-grounded docs, and hotspot same-file members through the existing `likely_dependent_surfaces`, `recommended_tests`, and `risk_notes` fields
 - `gnexus plan-change` must not claim full codebase understanding or flatten all evidence into one unlabeled recommendation set
 - `gnexus verify-change` is the bounded-confidence verification surface for agents
 - `gnexus verify-change` is the follow-through command after editing or before handoff, not the replacement for initial planning

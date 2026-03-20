@@ -62,6 +62,7 @@ import { LocalBackend, CYPHER_WRITE_RE, isWriteQuery, VALID_RELATION_TYPES } fro
 import { getRepoState, loadRepo, resolveRepoBoundary } from '../../src/storage/repo-manager.js';
 import { initKuzu, executeQuery, executeParameterized, isKuzuReady, closeKuzu } from '../../src/mcp/core/kuzu-adapter.js';
 import { searchFTSFromKuzu } from '../../src/core/search/bm25-index.js';
+import { LocalBackendShapeSupport } from '../../src/mcp/local/local-backend-shape-support.js';
 
 const MOCK_REPO = {
   repoPath: '/tmp/test-project',
@@ -1543,6 +1544,63 @@ describe('LocalBackend.callTool', () => {
     expect(result.coverage.note).toContain('grounded owners and hot anchors');
     expect(result.affected_modules).not.toEqual([]);
     expect(result.coverage.signals.higher_level_propagation).toBe('medium');
+  });
+
+  it('adds concentrated hotspot guidance when upstream propagation is sparse for a container owner', async () => {
+    const shapeSpy = vi.spyOn(LocalBackendShapeSupport.prototype, 'getShapeSignals').mockResolvedValue({
+      file: {
+        line_count: 280,
+        function_count: 9,
+        largest_members: [
+          { name: 'startTraverse', kind: 'Function', startLine: 120, endLine: 182, line_count: 63 },
+          { name: 'startFromCurrentPosition', kind: 'Function', startLine: 184, endLine: 240, line_count: 57 },
+        ],
+        average_lines_per_function: 31.1,
+        hotspot_share: 0.53,
+        concentration: 'critical',
+        grounded_extraction_seams: [],
+      },
+    });
+    (executeParameterized as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (n) WHERE n.name = $symName')) {
+        return [{ id: 'mod:AmbientMotionRuntime', name: 'AmbientMotionRuntime', type: 'Module', filePath: 'src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua', startLine: 1, endLine: 280 }];
+      }
+      if (cypher.includes("MATCH (n {id: $symId})-[r:CodeRelation {type: 'CONTAINS'}]->(child)")) {
+        return [
+          { id: 'func:startTraverse', name: 'startTraverse', type: 'Function', filePath: 'src/server/Game/DeathLaserRuntime/AmbientMotionRuntime.lua', startLine: 120, endLine: 182 },
+        ];
+      }
+      return [];
+    });
+    (executeQuery as any).mockImplementation(async (_repoId: string, cypher: string) => {
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)') && cypher.includes("'mod:AmbientMotionRuntime'")) {
+        return [];
+      }
+      if (cypher.includes('MATCH (caller)-[r:CodeRelation]->(n)') && cypher.includes("'func:startTraverse'")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (s)-[r:CodeRelation {type: 'STEP_IN_PROCESS'}]->(p:Process)")) {
+        return [];
+      }
+      if (cypher.includes("MATCH (s)-[:CodeRelation {type: 'MEMBER_OF'}]->(c:Community)")) {
+        return [];
+      }
+      return [];
+    });
+
+    try {
+      const result = await backend.callTool('impact', {
+        target: 'AmbientMotionRuntime',
+        direction: 'upstream',
+      });
+
+      expect(result.impactedCount).toBe(0);
+      expect(result.coverage.note).toContain('startTraverse');
+      expect(result.coverage.note).toContain('startFromCurrentPosition');
+      expect(result.coverage.note).toContain('Local implementation pressure is concentrated');
+    } finally {
+      shapeSpy.mockRestore();
+    }
   });
 
   it('supports impact disambiguation by file path', async () => {

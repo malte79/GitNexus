@@ -124,7 +124,11 @@ export function isTestLikePath(filePath: string): boolean {
     normalized.endsWith('_test.py') ||
     normalized.endsWith('_spec.rb') ||
     normalized.endsWith('.spec.lua') ||
-    normalized.endsWith('.test.lua')
+    normalized.endsWith('.test.lua') ||
+    normalized.endsWith('.spec.luau') ||
+    normalized.endsWith('.test.luau') ||
+    normalized.endsWith('_spec.luau') ||
+    normalized.endsWith('_test.luau')
   );
 }
 

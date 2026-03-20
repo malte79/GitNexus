@@ -35,11 +35,15 @@ Choose checks from changed surfaces:
 4) If only documentation or planning files changed:
 - report that no mechanical gates were required
 
+5) If planner, ranking, search, or impact hot paths changed and a real repro exists:
+- include one focused live-repro or runtime-facing command when practical, and report the observed outcome separately from unit tests
+
 ## Execution Rules
 
 - Use bounded runs for long commands when practical.
 - If an environment-dependent check cannot run, report it explicitly as blocked with a reason.
 - Do not hide failures; report non-zero exits plainly.
+- Do not treat green unit tests as sufficient evidence for heuristic hot-path changes when a known live repro is available.
 
 ## Output Contract
 

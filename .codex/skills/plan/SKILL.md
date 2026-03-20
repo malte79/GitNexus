@@ -25,6 +25,11 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - Plan must not widen public behavior or contracts beyond the objective.
 - If the plan adds mutable runtime state, caches, or registries, it must name the owner, invalidation or reset path, and tests that prove lifecycle correctness.
 - If behavior changes, the plan must name companion docs, tests, schema, config, or version updates explicitly.
+- For heuristic, ranking, scoring, or planner-shaping work, the plan must state:
+  - the exact trigger condition,
+  - the exact non-trigger condition,
+  - the nearby negative case that must not regress,
+  - any request-path performance constraint.
 - Every item in `Open Questions` must include a clear `Recommended answer`.
 - If there are no true open questions, output `Open Questions` as `None.`
 
@@ -61,6 +66,14 @@ If gnexus is stale or unavailable, say so explicitly and continue with direct fi
 11. `Rollback Strategy`
 12. `Open Questions`
 
+## Heuristic Planning Rule
+
+When the objective changes ranking, planning, search scoring, impact shaping, or other heuristics:
+- write the trigger and non-trigger predicates explicitly in `Boundary Checks` or `Exact Coding Instructions`,
+- require one positive regression and one adjacent negative regression in `Validation Plan`,
+- reject solutions that depend on unbounded synchronous filesystem scans or full-repo corpus walks on the request path unless the plan explicitly justifies them as unavoidable,
+- prefer the narrowest predicate that matches the real bug over a broad proxy such as file size, concentration, or token overlap alone.
+
 ## Validation Plan (Minimum)
 
 Use targeted checks first:
@@ -77,6 +90,7 @@ Use targeted checks first:
 - Use `context` to confirm the primary seam before writing the `Reuse Inventory`.
 - If the plan creates a new subsystem or major surface, name the ownership skeleton explicitly in `Boundary Checks` and `Exact Coding Instructions`.
 - If gnexus output and direct file reads disagree, the plan must call that out explicitly instead of picking one silently.
+- If the task is a repro-driven heuristic bug, the plan should preserve the exact repro command and state whether the failure starts in search ranking, planner shaping, impact shaping, or another upstream layer.
 
 ## Open Questions Output Rule
 
