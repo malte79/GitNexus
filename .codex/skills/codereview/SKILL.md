@@ -40,6 +40,12 @@ Advanced reliability and operational risks:
 - non-deterministic or fail-open timeout or retry behavior,
 - observability contract gaps,
 - resource lifecycle leaks.
+- For heuristic, ranking, planning, or impact-shaping diffs, treat the following as first-class review checks:
+  - missing or overly broad activation predicates,
+  - missing non-trigger or negative-path guards,
+  - generic evidence buckets suppressing the intended fix,
+  - request-path regressions caused by unbounded sync I/O or repo-wide scans,
+  - tests that prove only the positive case and omit the nearby non-target case.
 
 Any `P0`/`P1`/`P2` finding is blocking.
 
@@ -94,12 +100,25 @@ Optional extended scope:
 - look for tests changed in the same diff that were updated only to match output churn rather than to assert the intended invariant,
 - look for docs, schema, config, or version surfaces that should change with the behavior change but were left stale.
 - when the diff claims or implies a refactor, check whether authority was actually removed from the old center of gravity or merely decorated with extra helpers; if the old module still acts as the practical routing/orchestration sink, emit a blocking structural finding.
+- when the diff adds or changes heuristics, ask explicitly:
+  - what turns this heuristic on,
+  - what turns it off,
+  - whether that condition matches the real bug instead of a proxy,
+  - whether request-path work stayed bounded.
 
 5. Evaluate unified rubric:
 - structural and ownership checks
 - advanced reliability, security, performance, and observability checks
 
 6. Emit severity-scored findings with exact `file:line`.
+
+## Heuristic Review Guidance
+
+For ranking, planning, search, or impact heuristics:
+- prefer findings that name the missing invariant directly, not just the symptom,
+- check for one positive regression and one adjacent negative regression,
+- treat "works for the repro but broadens to every concentrated or high-signal case" as a blocking review risk,
+- treat repo-wide synchronous file reads or unbounded corpus scans on request paths as performance findings by default unless the path is clearly offline or cached.
 
 ## Output Contract
 

@@ -40,7 +40,16 @@ Run a deterministic read-only orientation pass.
 - `git rev-parse --abbrev-ref HEAD`
 - `git status --short --branch`
 
-6. Report
+6. If the task is a repro-driven bugfix for planning, ranking, search, or impact behavior:
+- capture the exact repro command when available
+- record the currently observed wrong output or gap
+- classify where the failure seems to start:
+  - search ranking
+  - planner shaping
+  - impact shaping
+  - verification or another downstream stage
+
+7. Report
 - environment checks
 - gnexus freshness and top subsystem view
 - current branch and worktree state

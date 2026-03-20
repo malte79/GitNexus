@@ -171,6 +171,10 @@ export class LocalBackendImpactSupport {
       directFileImpacts.map((item: any) => item.filePath),
     );
     const shapeSignals = await this.shapeSupport.getShapeSignals(repo, sym.filePath);
+    const hotspotNames = shapeSignals.file.largest_members.slice(0, 3).map((member) => member.name).filter(Boolean);
+    const concentratedHotspotNote = hotspotNames.length > 0 && ['high', 'critical'].includes(shapeSignals.file.concentration)
+      ? ` Local implementation pressure is concentrated in ${hotspotNames.join(', ')} within ${path.basename(sym.filePath || '') || 'the current file'}.`
+      : '';
     const directFileImpactNames = [...new Set(directFileImpacts.map((item: any) => path.basename(item.filePath)))].slice(0, 4);
     if (propagationSource === 'none' && directFileImpacts.length > 0) {
       const ownerSymbols = await this.host.getOwnerSymbolsForFiles(repo, directFileImpacts.map((item: any) => item.filePath));
@@ -432,12 +436,12 @@ export class LocalBackendImpactSupport {
               : memberSource === 'file_defines'
                 ? 'Direct container edges were not available for this symbol, so impact expansion used grounded file-level definitions to recover likely members. Coverage is improved, but still partial.'
                 : impacted.length === 0 && (memberRows.length > 0 || ['Class', 'Module', 'File'].includes(symType))
-                  ? 'No affected symbols were found through direct graph traversal. For container-style symbols, impact coverage may still be incomplete even after expanding through contained members.'
+                  ? `No affected symbols were found through direct graph traversal. For container-style symbols, impact coverage may still be incomplete even after expanding through contained members.${concentratedHotspotNote}`
                   : directCount > 0 && processCount === 0 && moduleCount === 0 && directFileImpactNames.length > 0
                     ? `Direct impact is currently landing on file-level callers (${directFileImpactNames.join(', ')}), and the strongest affected areas are ${affectedAreas.map((area) => area.name).join(', ')}. The graph still does not attach grounded process or module memberships to those direct callers, so structural blast radius remains partial.`
                     : memberRows.length > 0
-                      ? 'Impact includes relationships gathered through contained members for this symbol.'
-                      : 'Impact is grounded in direct graph traversal for this symbol.',
+                      ? `Impact includes relationships gathered through contained members for this symbol.${concentratedHotspotNote}`
+                      : `Impact is grounded in direct graph traversal for this symbol.${concentratedHotspotNote}`,
         signals: {
           member_coverage: memberSignal,
           incoming_edges: incomingSignal,

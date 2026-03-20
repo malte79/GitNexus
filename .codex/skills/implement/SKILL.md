@@ -26,6 +26,11 @@ Execution mode is skill-driven only. This is not a shell command entrypoint.
 - New mutable runtime state, caches, or registries are allowed only when the plan requires them and the implementation also adds clear ownership, reset or invalidation semantics, and focused tests.
 - Behavior changes that affect docs, schema, config, or version policy must be updated in the same implementation pass, not deferred.
 - If work is tracked in an epic file, completed units must have their checkbox state updated to match delivered work.
+- For heuristic, ranking, scoring, or planner-shaping changes:
+  - reproduce the live or reported failure before editing when feasible,
+  - define one explicit activation condition and one explicit non-trigger condition before writing code,
+  - do not use a loose proxy when the real failing predicate is knowable,
+  - do not add unbounded synchronous repo scans on the request path.
 
 ## Required Pre-Read
 
@@ -48,10 +53,14 @@ If gnexus is stale or unavailable, report that before falling back to direct fil
 2. Assimilate owning surfaces before edits with gnexus plus direct file reads.
 3. If the work creates a new subsystem or major surface, confirm the ownership skeleton and the structural guard before writing production code.
 4. Bind to existing seams first.
-5. Implement in bounded passes.
-6. Run targeted validation after meaningful passes.
-7. Use `gnexus detect-changes` after meaningful edits when it will clarify blast radius or validate the touched seam.
-8. Stop if scope creep or unresolved blockers appear.
+5. For heuristic, ranking, or planner changes, encode the trigger in a named helper or clearly bounded condition rather than scattering inline proxies.
+6. For heuristic, ranking, or planner changes, add both:
+  - one positive regression for the intended case,
+  - one adjacent negative regression proving the heuristic stays off when it should.
+7. Implement in bounded passes.
+8. Run targeted validation after meaningful passes.
+9. Use `gnexus detect-changes` after meaningful edits when it will clarify blast radius or validate the touched seam.
+10. Stop if scope creep or unresolved blockers appear.
 
 ## Verification Requirements
 
@@ -61,6 +70,8 @@ Run relevant checks and report outcomes:
   - `npm run test:integration`
 - when broad confidence is needed:
   - `npm run test:all`
+- when heuristic, ranking, planning, or impact behavior changed and a live repro exists:
+  - rerun the real repro before declaring the issue fixed
 
 ## Reporting Contract
 
@@ -84,3 +95,4 @@ Run relevant checks and report outcomes:
 - When a new subsystem or major surface is created, use `detect-changes` before closeout if it will confirm the intended public seam and owner split.
 - After edits, prefer `detect-changes` as the structural diff summary when it adds signal.
 - If gnexus results contradict the implementation reality seen in files or tests, report that mismatch explicitly.
+- If a heuristic fix improves the synthetic/unit case but not the live repro, stop and report that explicitly instead of widening heuristics further.

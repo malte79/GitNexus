@@ -102,9 +102,22 @@ export class LocalBackendChangeEvidenceSupport {
       includeTests: true,
     });
 
-    const likelySurfaces = this.collectLikelySurfaces(impact, groundedSurfaces, params.max_surfaces);
+    const concentratedCompanions = await this.collectConcentratedLikelyCompanions(
+      repo,
+      trackedFiles,
+      primaryAnchor,
+      groundedSurfaces,
+      impact,
+      params.goal,
+      params.max_surfaces,
+    );
+    const likelySurfaces = this.uniqueSurfaces([
+      ...this.collectLikelySurfaces(impact, groundedSurfaces, params.max_surfaces),
+      ...concentratedCompanions,
+    ]).slice(0, params.max_surfaces);
     const recommendedTests = this.collectRecommendedTests(
       trackedFiles,
+      primaryAnchor,
       groundedSurfaces,
       likelySurfaces,
       impact,
@@ -219,6 +232,7 @@ export class LocalBackendChangeEvidenceSupport {
 
   private collectRecommendedTests(
     repoFiles: string[],
+    primaryAnchor: ChangeContractSurface,
     groundedSurfaces: ChangeContractSurface[],
     likelySurfaces: ChangeContractSurface[],
     impact: any,
@@ -253,6 +267,17 @@ export class LocalBackendChangeEvidenceSupport {
       addTest(hintedTest);
     }
 
+    for (const companionTest of this.collectConcentratedCompanionTests(
+      repoFiles,
+      primaryAnchor,
+      impact,
+      goal,
+      groundedSurfaces,
+      likelySurfaces,
+    )) {
+      addTest(companionTest);
+    }
+
     const implementationFiles = [...groundedSurfaces, ...likelySurfaces].map((surface) => surface.file_path);
     const implementationStems = new Set(implementationFiles.map((filePath) => createPathStem(filePath)));
 
@@ -284,6 +309,147 @@ export class LocalBackendChangeEvidenceSupport {
     }
 
     return tests.slice(0, maxSurfaces);
+  }
+
+  private async collectConcentratedLikelyCompanions(
+    repo: RepoHandle,
+    repoFiles: string[],
+    primaryAnchor: ChangeContractSurface,
+    groundedSurfaces: ChangeContractSurface[],
+    impact: any,
+    goal: string,
+    maxSurfaces: number,
+  ): Promise<ChangeContractSurface[]> {
+    if (!this.shouldRecoverConcentratedCompanions(impact)) {
+      return [];
+    }
+
+    const familyTerms = this.getCompanionFamilyTerms(primaryAnchor, goal);
+    const anchorPath = normalizeRepoPath(primaryAnchor.file_path);
+    const anchorDir = path.posix.dirname(anchorPath);
+    const anchorParentDir = path.posix.dirname(anchorDir);
+    const existing = new Set(groundedSurfaces.map((surface) => createSurfaceKey(surface)));
+    const nearbyCompanions: Array<{ surface: ChangeContractSurface; score: number }> = [];
+    const hotspotCompanions: Array<{ surface: ChangeContractSurface; score: number }> = [];
+    const addCompanion = (
+      surface: ChangeContractSurface,
+      score: number,
+      bucket: 'nearby' | 'hotspot' = 'nearby',
+    ) => {
+      const normalizedSurface = {
+        ...surface,
+        file_path: normalizeRepoPath(surface.file_path),
+      };
+      const key = createSurfaceKey(normalizedSurface);
+      if (existing.has(key)) return;
+      existing.add(key);
+      (bucket === 'hotspot' ? hotspotCompanions : nearbyCompanions).push({ surface: normalizedSurface, score });
+    };
+
+    for (const filePath of repoFiles) {
+      const normalized = normalizeRepoPath(filePath);
+      if (
+        normalized === anchorPath ||
+        this.isDocLikePath(normalized) ||
+        isTestLikePath(normalized)
+      ) {
+        continue;
+      }
+      const score = this.scoreConcentratedCompanionPath(
+        normalized,
+        anchorPath,
+        anchorDir,
+        anchorParentDir,
+        familyTerms,
+      );
+      if (score < 70) continue;
+
+      addCompanion({
+        file_path: normalized,
+        reason: this.describeConcentratedCompanionReason(normalized, anchorPath),
+        source: 'owner_overlap',
+        evidence: 'strong_inference',
+      }, score);
+    }
+
+    for (const hotspot of impact?.shape?.file?.largest_members?.slice(0, 2) || []) {
+      if (!hotspot?.name) continue;
+      addCompanion({
+        file_path: anchorPath,
+        symbol_name: hotspot.name,
+        kind: hotspot.kind,
+        reason: `Shape analysis shows ${hotspot.name} as a concentrated same-file hotspot within the primary owner.`,
+        source: 'impact',
+        evidence: 'grounded',
+      }, 140 + (hotspot.line_count || 0), 'hotspot');
+    }
+
+    const docCompanions = await this.collectConcentratedDocCompanions(
+      repo,
+      repoFiles,
+      primaryAnchor,
+      groundedSurfaces,
+      goal,
+      familyTerms,
+      maxSurfaces,
+    );
+
+    const rankedNearby = nearbyCompanions
+      .sort((left, right) => right.score - left.score || left.surface.file_path.localeCompare(right.surface.file_path))
+      .map((entry) => entry.surface);
+    const rankedHotspots = hotspotCompanions
+      .sort((left, right) => right.score - left.score || left.surface.file_path.localeCompare(right.surface.file_path))
+      .map((entry) => entry.surface)
+      .slice(0, 1);
+
+    return this.uniqueSurfaces([
+      ...docCompanions,
+      ...rankedHotspots,
+      ...rankedNearby,
+    ])
+      .slice(0, maxSurfaces);
+  }
+
+  private collectConcentratedCompanionTests(
+    repoFiles: string[],
+    primaryAnchor: ChangeContractSurface,
+    impact: any,
+    goal: string,
+    groundedSurfaces: ChangeContractSurface[],
+    likelySurfaces: ChangeContractSurface[],
+  ): ChangeContractTestTarget[] {
+    if (!this.shouldRecoverConcentratedCompanions(impact)) {
+      return [];
+    }
+
+    const familyTerms = this.getCompanionFamilyTerms(primaryAnchor, goal);
+    const knownPaths = new Set(
+      [...groundedSurfaces, ...likelySurfaces].map((surface) => normalizeRepoPath(surface.file_path)),
+    );
+    return repoFiles
+      .filter((filePath) => isTestLikePath(filePath))
+      .map((filePath) => {
+        const normalized = normalizeRepoPath(filePath);
+        let score = this.countFileTermOverlap(normalized, familyTerms) * 18;
+        if (/\b(spec|test|testing)\b/i.test(this.tokenizeGoalValue(normalized).join(' '))) {
+          score += 12;
+        }
+        if ([...knownPaths].some((knownPath) => this.countSharedFamilyTerms(normalized, knownPath) >= 2)) {
+          score += 10;
+        }
+        return { normalized, score };
+      })
+      .filter((candidate) => candidate.score >= 40)
+      .sort((left, right) => right.score - left.score || left.normalized.localeCompare(right.normalized))
+      .slice(0, 3)
+      .map((candidate) => ({
+        target: candidate.normalized,
+        kind: 'file' as const,
+        file_path: candidate.normalized,
+        reason: 'This tracked spec or test file shares the same concentrated subsystem terms as the primary owner.',
+        source: 'owner_overlap' as const,
+        evidence: 'strong_inference' as const,
+      }));
   }
 
   private detectTaskIntents(goal: string): Set<ChangeTaskIntent> {
@@ -772,6 +938,281 @@ export class LocalBackendChangeEvidenceSupport {
     ));
   }
 
+  private isConcentratedOwnerImpact(impact: any): boolean {
+    const concentration = String(impact?.shape?.file?.concentration || impact?.risk_dimensions?.internal_concentration || '').toLowerCase();
+    return concentration === 'high' || concentration === 'critical';
+  }
+
+  private shouldRecoverConcentratedCompanions(impact: any): boolean {
+    if (!this.isConcentratedOwnerImpact(impact)) {
+      return false;
+    }
+
+    const impactedCount = typeof impact?.impactedCount === 'number'
+      ? impact.impactedCount
+      : this.countImpactedSymbols(impact?.byDepth);
+    if (impactedCount === 0) {
+      return true;
+    }
+
+    const propagationSignal = String(impact?.coverage?.signals?.higher_level_propagation || '').toLowerCase();
+    const confidence = String(impact?.coverage?.confidence || '').toLowerCase();
+    return propagationSignal === 'low' || (propagationSignal === 'medium' && confidence === 'partial');
+  }
+
+  private countImpactedSymbols(byDepth: unknown): number {
+    if (!byDepth || typeof byDepth !== 'object') {
+      return 0;
+    }
+
+    return Object.values(byDepth as Record<string, unknown>)
+      .reduce<number>((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0);
+  }
+
+  private getCompanionFamilyTerms(primaryAnchor: ChangeContractSurface, goal: string): string[] {
+    const generic = new Set([
+      'client',
+      'clients',
+      'code',
+      'common',
+      'component',
+      'components',
+      'controller',
+      'controllers',
+      'docs',
+      'doc',
+      'file',
+      'files',
+      'game',
+      'module',
+      'modules',
+      'process',
+      'server',
+      'service',
+      'services',
+      'shared',
+      'spec',
+      'src',
+      'system',
+      'systems',
+      'test',
+      'tests',
+      'unit',
+    ]);
+    const combined = [
+      ...this.getBroadGoalTerms(goal),
+      ...this.tokenizeGoalValue(primaryAnchor.symbol_name || ''),
+      ...this.tokenizeGoalValue(primaryAnchor.file_path),
+    ]
+      .filter((term) => term.length >= 4 && !generic.has(term))
+      .flatMap((term) => this.getGoalTokenVariants(term));
+    return [...new Set(combined)];
+  }
+
+  private scoreConcentratedCompanionPath(
+    filePath: string,
+    anchorPath: string,
+    anchorDir: string,
+    anchorParentDir: string,
+    familyTerms: string[],
+  ): number {
+    let score = this.countFileTermOverlap(filePath, familyTerms) * 16;
+    const fileTokens = new Set(this.tokenizeGoalValue(filePath));
+    const candidateDir = path.posix.dirname(filePath);
+    if (candidateDir === anchorDir) {
+      score += 24;
+    } else if (candidateDir.startsWith(`${anchorDir}/`) || anchorDir.startsWith(`${candidateDir}/`)) {
+      score += 16;
+    } else if (
+      candidateDir === anchorParentDir ||
+      candidateDir.startsWith(`${anchorParentDir}/`) ||
+      anchorParentDir.startsWith(`${candidateDir}/`)
+    ) {
+      score += 10;
+    }
+    if (path.extname(filePath) === path.extname(anchorPath)) {
+      score += 6;
+    }
+    if (['state', 'snapshot', 'debug', 'proof', 'profile'].some((token) => fileTokens.has(token))) {
+      score += 90;
+    }
+    if (['runtime', 'controller', 'command', 'discovery', 'adapter', 'service'].some((token) => fileTokens.has(token))) {
+      score += 8;
+    }
+    return score;
+  }
+
+  private describeConcentratedCompanionReason(filePath: string, anchorPath: string): string {
+    if (/(^|\/|_)(state|snapshot)(\/|_|\.|$)/i.test(filePath)) {
+      return 'This nearby state or snapshot surface likely carries proof or debug state for the concentrated primary owner.';
+    }
+    if (path.posix.dirname(filePath) === path.posix.dirname(anchorPath)) {
+      return 'This nearby owner sits beside the concentrated primary file and is a likely companion seam for bounded implementation work.';
+    }
+    return 'This nearby owner shares the same concentrated subsystem family as the primary anchor and is a plausible companion seam.';
+  }
+
+  private async collectConcentratedDocCompanions(
+    repo: RepoHandle,
+    repoFiles: string[],
+    primaryAnchor: ChangeContractSurface,
+    groundedSurfaces: ChangeContractSurface[],
+    goal: string,
+    familyTerms: string[],
+    maxSurfaces: number,
+  ): Promise<ChangeContractSurface[]> {
+    const scored = new Map<string, { surface: ChangeContractSurface; score: number }>();
+    const addDoc = (surface: ChangeContractSurface, score: number) => {
+      const normalized = normalizeRepoPath(surface.file_path);
+      const existing = scored.get(normalized);
+      if (!existing || existing.score < score) {
+        scored.set(normalized, {
+          surface: {
+            ...surface,
+            file_path: normalized,
+            reason: 'A documentation surface overlaps the concentrated owner and goal terms.',
+            source: surface.source,
+            evidence: surface.evidence,
+          },
+          score,
+        });
+      }
+    };
+
+    try {
+      const queryResult = await this.host.querySearch(repo, {
+        query: `${goal} ${primaryAnchor.symbol_name || createPathStem(primaryAnchor.file_path)}`.trim(),
+        goal,
+        owners: true,
+        include_content: true,
+        limit: Math.max(4, Math.min(maxSurfaces, 6)),
+        max_symbols: Math.max(6, maxSurfaces * 2),
+      });
+      for (const surface of this.collectGroundedSurfaces(queryResult, maxSurfaces * 2)
+        .filter((surface) => this.isDocLikePath(surface.file_path))
+      ) {
+        addDoc({
+          ...surface,
+          reason: 'A content-grounded documentation match overlaps the concentrated owner and goal terms.',
+          source: 'query',
+          evidence: 'grounded',
+        }, 220 + (this.countFileTermOverlap(surface.file_path, familyTerms) * 12));
+      }
+    } catch {
+      // fall through to tracked-doc scan
+    }
+
+    const docCandidates = repoFiles.filter((filePath) => this.isDocLikePath(filePath));
+    const hasConcentratedTests = repoFiles.some((filePath) => (
+      isTestLikePath(filePath) && this.countFileTermOverlap(filePath, familyTerms) >= 1
+    ));
+    for (const filePath of docCandidates) {
+      const pathHits = this.countFileTermOverlap(filePath, familyTerms);
+      const score =
+        (pathHits * 8) +
+        this.getDocRoleBoost(filePath, hasConcentratedTests) -
+        this.getGenericDocPenalty(filePath);
+      if (score < 32) continue;
+      addDoc({
+        file_path: filePath,
+        reason: 'A tracked documentation file aligns with the concentrated owner family and likely lockstep review surfaces.',
+        source: 'owner_overlap',
+        evidence: 'strong_inference',
+      }, 120 + score);
+    }
+
+    const ranked = [...scored.values()]
+      .sort((left, right) => right.score - left.score || left.surface.file_path.localeCompare(right.surface.file_path));
+    const selected: ChangeContractSurface[] = [];
+    const takeFirst = (predicate: (surface: ChangeContractSurface) => boolean) => {
+      const entry = ranked.find((candidate) => (
+        predicate(candidate.surface) &&
+        !selected.some((surface) => surface.file_path === candidate.surface.file_path)
+      ));
+      if (entry) selected.push(entry.surface);
+    };
+
+    takeFirst((surface) => normalizeRepoPath(surface.file_path).toLowerCase() === 'docs/process/testing.md');
+    takeFirst((surface) => normalizeRepoPath(surface.file_path).toLowerCase().startsWith('docs/systems/'));
+
+    for (const entry of ranked) {
+      if (selected.some((surface) => surface.file_path === entry.surface.file_path)) continue;
+      selected.push(entry.surface);
+      if (selected.length >= 2) break;
+    }
+
+    return selected.slice(0, 2);
+  }
+
+  private isDocLikePath(filePath: string): boolean {
+    const normalized = normalizeRepoPath(filePath).toLowerCase();
+    return normalized === 'readme.md' || normalized.startsWith('docs/') || normalized.endsWith('.md');
+  }
+
+  private countFileTermOverlap(filePath: string, familyTerms: string[]): number {
+    if (familyTerms.length === 0) return 0;
+    const tokens = new Set(
+      this.tokenizeGoalValue(filePath)
+        .filter(Boolean)
+        .flatMap((token) => this.getGoalTokenVariants(token)),
+    );
+    return familyTerms.filter((term) => tokens.has(term)).length;
+  }
+
+  private countSharedFamilyTerms(leftFilePath: string, rightFilePath: string): number {
+    const leftTokens = new Set(
+      this.tokenizeGoalValue(leftFilePath)
+        .filter(Boolean)
+        .flatMap((token) => this.getGoalTokenVariants(token)),
+    );
+    const rightTokens = new Set(
+      this.tokenizeGoalValue(rightFilePath)
+        .filter(Boolean)
+        .flatMap((token) => this.getGoalTokenVariants(token)),
+    );
+    let shared = 0;
+    for (const token of leftTokens) {
+      if (rightTokens.has(token)) {
+        shared += 1;
+      }
+    }
+    return shared;
+  }
+
+  private getDocRoleBoost(filePath: string, hasConcentratedTests: boolean): number {
+    const normalized = normalizeRepoPath(filePath).toLowerCase();
+    let boost = 0;
+    if (normalized.startsWith('docs/systems/')) {
+      boost += 16;
+    }
+    if (normalized.startsWith('docs/process/') && hasConcentratedTests) {
+      boost += 44;
+    }
+    if (normalized.endsWith('/testing.md') || normalized === 'docs/process/testing.md') {
+      boost += hasConcentratedTests ? 36 : 12;
+    }
+    return boost;
+  }
+
+  private getGenericDocPenalty(filePath: string): number {
+    const basenameTokens = this.tokenizeGoalValue(path.posix.basename(normalizeRepoPath(filePath)));
+    const weightedGenericTokens = new Map<string, number>([
+      ['archive', 18],
+      ['branch', 18],
+      ['branches', 18],
+      ['cheatsheet', 18],
+      ['config', 18],
+      ['core', 40],
+      ['gdd', 18],
+      ['overview', 18],
+      ['readme', 18],
+      ['reference', 18],
+      ['runtime', 40],
+      ['workflow', 18],
+    ]);
+    return basenameTokens.reduce((total, token) => total + (weightedGenericTokens.get(token) || 0), 0);
+  }
+
   private collectRiskNotes(
     primaryAnchor: ChangeContractSurface,
     impact: any,
@@ -805,6 +1246,20 @@ export class LocalBackendChangeEvidenceSupport {
         reason: 'This contract can still identify likely edit surfaces, but downstream architectural reach remains bounded.',
         source: 'impact',
         evidence: 'hypothesis',
+      });
+    }
+
+    const hotspotNames = (impact?.shape?.file?.largest_members || [])
+      .slice(0, 3)
+      .map((member: any) => member.name)
+      .filter(Boolean);
+    if (this.isConcentratedOwnerImpact(impact) && hotspotNames.length > 0) {
+      notes.push({
+        level: 'medium',
+        summary: `Local implementation pressure is concentrated in ${hotspotNames.join(', ')}.`,
+        reason: 'Shape analysis found the largest same-file members for this concentrated owner, which are likely insertion or proof points for the requested change.',
+        source: 'impact',
+        evidence: 'grounded',
       });
     }
 
