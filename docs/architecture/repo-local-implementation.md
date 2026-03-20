@@ -144,6 +144,8 @@ Implementation posture:
 - `impact` prefers direct graph traversal, but may expand through contained members or grounded file-level definitions for file targets and report partial confidence when container-symbol coverage is incomplete
 - `plan-change` is the bounded-confidence planning surface built from existing query, impact, owner, and test-adjacency evidence rather than a parallel planner runtime
 - `plan-change` must separate `grounded`, `strong_inference`, and `hypothesis` evidence explicitly for every substantive recommendation
+- for broad behavioral or runtime goals, `plan-change` now reranks grounded surfaces using repeated prompt-term agreement, source agreement across path or symbol sources, and owner-like-versus-helper shape so coherent subsystem owners can outrank isolated helper hits
+- that broad-goal reranking may demote ancillary paths such as playtests, scenarios, sandboxes, or examples when the prompt is not explicitly about those surfaces; explicit ancillary-target prompts disable that demotion
 - `verify-change` compares a real or claimed change set against one contract and preserves `contract_insufficiency` separately from implementation misses
 - `impact` may surface `affected_areas` from direct file-level callers when process or community memberships are not grounded enough to populate `affected_processes` or `affected_modules`
 - `impact` now shares the same disambiguation inputs as `context` and `rename`, including `--uid` and `--file-path`

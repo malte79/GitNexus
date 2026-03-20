@@ -15,6 +15,12 @@ vi.mock('node:child_process', () => ({
     'src/mcp/local/local-backend-verify-change-support.ts',
     'src/mcp/local/local-backend-graph-support.ts',
     'src/mcp/local/local-backend-search-ranking-support.ts',
+    'src/server/Playtest/Scenarios/LaserMinigameV1.lua',
+    'src/server/Game/LaserCannonController.lua',
+    'src/server/Game/LaserRuntime/ControllerRuntime.lua',
+    'src/server/Game/LaserRuntime/DiscoveryRuntime.lua',
+    'src/server/Game/LaserRuntime/LocomotionRuntime.lua',
+    'src/server/Minigames/Laser/MainRuntime.lua',
     'src/server/service-runtime.ts',
     'src/storage/repo-manager.ts',
     'src/core/ingestion/call-processor.ts',
@@ -224,6 +230,78 @@ function createHost() {
           ],
         };
       }
+      if (params.query.includes('death lasers continuously slide back and forth along their own rails')) {
+        return {
+          process_symbols: [
+            {
+              id: 'Method:src/server/Minigames/Spotlight/Sweep/Geometry.lua:computePlateTopY:16',
+              name: 'computePlateTopY',
+              type: 'Method',
+              filePath: 'src/server/Minigames/Spotlight/Sweep/Geometry.lua',
+            },
+            {
+              id: 'Function:src/shared/Spotlight/SpotlightFixture.lua:computeBeamTextureLengthForTilesLit:54',
+              name: 'computeBeamTextureLengthForTilesLit',
+              type: 'Function',
+              filePath: 'src/shared/Spotlight/SpotlightFixture.lua',
+            },
+            {
+              id: 'Method:src/server/Minigames/Laser/MainRuntime.lua:start:553',
+              name: 'start',
+              type: 'Method',
+              filePath: 'src/server/Minigames/Laser/MainRuntime.lua',
+            },
+          ],
+          definitions: [
+            {
+              name: 'LaserMinigameV1',
+              type: 'Module',
+              filePath: 'src/server/Playtest/Scenarios/LaserMinigameV1.lua',
+            },
+            {
+              name: 'LaserCannonController',
+              type: 'Module',
+              filePath: 'src/server/Game/LaserCannonController.lua',
+            },
+            {
+              name: 'ControllerRuntime',
+              type: 'Module',
+              filePath: 'src/server/Game/LaserRuntime/ControllerRuntime.lua',
+            },
+            {
+              name: 'DiscoveryRuntime',
+              type: 'Module',
+              filePath: 'src/server/Game/LaserRuntime/DiscoveryRuntime.lua',
+            },
+            {
+              name: 'LocomotionRuntime',
+              type: 'Module',
+              filePath: 'src/server/Game/LaserRuntime/LocomotionRuntime.lua',
+            },
+          ],
+          processes: [{ id: 'proc_laser' }],
+        };
+      }
+      if (params.query.includes('laser playtest scenario timing')) {
+        return {
+          process_symbols: [
+            {
+              id: 'Method:src/server/Game/LaserCannonController.lua:startSweep:88',
+              name: 'startSweep',
+              type: 'Method',
+              filePath: 'src/server/Game/LaserCannonController.lua',
+            },
+          ],
+          definitions: [
+            {
+              name: 'LaserMinigameV1',
+              type: 'Module',
+              filePath: 'src/server/Playtest/Scenarios/LaserMinigameV1.lua',
+            },
+          ],
+          processes: [{ id: 'proc_laser_playtest' }],
+        };
+      }
       return {
         process_symbols: [],
         definitions: [
@@ -428,6 +506,37 @@ describe('LocalBackendChangeContractSupport engineering intent hints', () => {
         'npm test',
         'npm run test:integration',
       ]),
+    );
+  });
+
+  it('reranks broad runtime goals away from spotlight methods when stronger laser owners exist', async () => {
+    const support = new LocalBackendChangeContractSupport(createHost());
+    const result = await support.planChange(repo, {
+      goal: 'make all four death lasers continuously slide back and forth along their own rails at all times with a default 8-second traverse, 1-second decel at the end, 1-second pause, and 1-second accel away from the end, preserving authored orientation and allowing minigame beam state to layer on top',
+    });
+
+    expect('primary_anchor' in result && result.primary_anchor?.file_path).toBe('src/server/Game/LaserCannonController.lua');
+    expect('required_edit_surfaces' in result && result.required_edit_surfaces[0]?.file_path).toBe('src/server/Game/LaserCannonController.lua');
+    expect('required_edit_surfaces' in result && result.required_edit_surfaces.map((surface) => surface.file_path)).toEqual(
+      expect.arrayContaining([
+        'src/server/Game/LaserCannonController.lua',
+        'src/server/Game/LaserRuntime/ControllerRuntime.lua',
+        'src/server/Game/LaserRuntime/DiscoveryRuntime.lua',
+      ]),
+    );
+    expect('required_edit_surfaces' in result && result.required_edit_surfaces[0]?.file_path).not.toBe(
+      'src/server/Playtest/Scenarios/LaserMinigameV1.lua',
+    );
+  });
+
+  it('does not demote scenario anchors when the goal explicitly targets a playtest scenario', async () => {
+    const support = new LocalBackendChangeContractSupport(createHost());
+    const result = await support.planChange(repo, {
+      goal: 'adjust the laser playtest scenario timing to match the new countdown',
+    });
+
+    expect('primary_anchor' in result && result.primary_anchor?.file_path).toBe(
+      'src/server/Playtest/Scenarios/LaserMinigameV1.lua',
     );
   });
 });

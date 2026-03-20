@@ -70,6 +70,22 @@ export class LocalBackendSearchRankingSupport {
     return 0;
   }
 
+  private queryExplicitlyTargetsAncillarySurface(searchQuery: string): boolean {
+    return /\b(playtest|scenario|scenarios|sandbox|example|examples)\b/.test(
+      this.lookup.normalizeSearchText(searchQuery),
+    );
+  }
+
+  getBroadAncillaryPathPenalty(filePath: string, searchQuery: string, ownersMode = false): number {
+    if (!/(^|\/)(playtest|scenario|scenarios|sandbox|examples?)(\/|$)/i.test(filePath)) {
+      return 0;
+    }
+    if (this.queryExplicitlyTargetsAncillarySurface(searchQuery)) {
+      return 0;
+    }
+    return ownersMode ? 18 : 10;
+  }
+
   getBroadQueryActionPenalty(resultType: string, name: string, searchQuery: string, ownersMode = false): number {
     if (!ownersMode && !this.isSubsystemDiscoveryQuery(searchQuery)) {
       return 0;
@@ -191,9 +207,49 @@ export class LocalBackendSearchRankingSupport {
       });
   }
 
+  private getBroadMatchVariants(term: string): string[] {
+    const normalized = this.lookup.normalizeSearchText(term);
+    if (!normalized) return [];
+    const variants = new Set<string>([normalized]);
+    if (normalized.endsWith('ies') && normalized.length > 4) {
+      variants.add(`${normalized.slice(0, -3)}y`);
+    }
+    if (normalized.endsWith('es') && normalized.length > 4) {
+      variants.add(normalized.slice(0, -2));
+    }
+    if (normalized.endsWith('s') && normalized.length > 3) {
+      variants.add(normalized.slice(0, -1));
+    }
+    return [...variants].filter(Boolean);
+  }
+
+  private getBroadCandidateSourceTokens(result: {
+    name: string;
+    filePath: string;
+    moduleSymbol?: string;
+    dataModelPath?: string;
+  }): Array<Set<string>> {
+    const sources = [
+      result.name,
+      path.basename(result.filePath || ''),
+      result.filePath || '',
+      result.moduleSymbol || '',
+      result.dataModelPath || '',
+    ];
+
+    return sources
+      .filter(Boolean)
+      .map((value) => new Set(
+        this.lookup.normalizeSearchText(value)
+          .split(' ')
+          .filter(Boolean)
+          .flatMap((token) => this.getBroadMatchVariants(token)),
+      ));
+  }
+
   computeBroadQueryTermScore(
     searchQuery: string,
-    result: { name: string; filePath: string; type: string; moduleSymbol?: string; description?: string },
+    result: { name: string; filePath: string; type: string; moduleSymbol?: string; description?: string; dataModelPath?: string },
     ownersMode = false,
   ): { boost: number; penalty: number } {
     const weightedTerms = this.getBroadQueryWeightedTerms(searchQuery, ownersMode);
@@ -201,29 +257,35 @@ export class LocalBackendSearchRankingSupport {
       return { boost: 0, penalty: 0 };
     }
 
-    const candidateTokens = new Set(
-      [
-        result.name,
-        path.basename(result.filePath || ''),
-        result.filePath || '',
-        result.moduleSymbol || '',
-      ]
-        .map((value) => this.lookup.normalizeSearchText(value))
-        .flatMap((value) => value.split(' '))
-        .filter(Boolean),
-    );
-    const overlapWeight = weightedTerms.reduce((total, entry) => (
-      candidateTokens.has(entry.term) ? total + entry.weight : total
-    ), 0);
+    const candidateSourceTokens = this.getBroadCandidateSourceTokens(result);
+    const termMatches = weightedTerms.map((entry) => {
+      const variants = this.getBroadMatchVariants(entry.term);
+      const matchingSources = candidateSourceTokens.filter((tokens) => variants.some((variant) => tokens.has(variant))).length;
+      return {
+        ...entry,
+        matchingSources,
+      };
+    });
+    const matchedTerms = termMatches.filter((entry) => entry.matchingSources > 0);
+    const overlapWeight = matchedTerms.reduce((total, entry) => total + entry.weight, 0);
     const signalTerms = weightedTerms.filter((entry) => entry.weight >= 0.9).length;
     const highSignalTerms = weightedTerms.filter((entry) => entry.weight >= 1.1);
-    const matchedHighSignalTerms = highSignalTerms.filter((entry) => candidateTokens.has(entry.term)).length;
+    const matchedHighSignalTerms = termMatches.filter((entry) => entry.weight >= 1.1 && entry.matchingSources > 0).length;
     const anchorMultiplier = this.host.isOwnerLikeSymbolKind(result.type)
       ? (ownersMode ? 1.5 : 1.2)
       : result.type === 'Method' || result.type === 'Function'
         ? (ownersMode ? 0.4 : 0.7)
         : 0.9;
-    const boost = overlapWeight * anchorMultiplier;
+    const sourceAgreementBoost = ownersMode
+      ? matchedTerms.reduce((total, entry) => total + ((entry.matchingSources - 1) * 0.9), 0)
+      : 0;
+    const ownerAgreementBoost = ownersMode && this.host.isOwnerLikeSymbolKind(result.type) && matchedHighSignalTerms >= 2
+      ? 3.5 + ((matchedHighSignalTerms - 2) * 1.5)
+      : 0;
+    const broadMethodPenalty = ownersMode && (result.type === 'Method' || result.type === 'Function') && matchedHighSignalTerms <= 1
+      ? 4.5
+      : 0;
+    const boost = (overlapWeight * anchorMultiplier) + sourceAgreementBoost + ownerAgreementBoost;
     let penalty = signalTerms >= 2 && overlapWeight < 0.9
       ? (['Method', 'Function'].includes(result.type) ? (ownersMode ? 4 : 3) : 1.75)
       : 0;
@@ -232,6 +294,7 @@ export class LocalBackendSearchRankingSupport {
     } else if (highSignalTerms.length >= 2 && matchedHighSignalTerms === 1) {
       penalty += ['Method', 'Function'].includes(result.type) ? (ownersMode ? 2.5 : 1.5) : 2.5;
     }
+    penalty += broadMethodPenalty;
     return { boost, penalty };
   }
 
@@ -455,6 +518,9 @@ export class LocalBackendSearchRankingSupport {
         !this.host.isOwnerLikeSymbolKind(resultType)
         ? (ownersMode ? 5.5 : 3.5)
         : 0;
+      const ancillaryPathPenalty = subsystemDiscovery
+        ? this.getBroadAncillaryPathPenalty(result.filePath, searchQuery, ownersMode)
+        : 0;
       const ownerShapePenalty = subsystemDiscovery
         ? this.getBroadOwnerShapePenalty(resultType, result.name, result.filePath, ownersMode, enrichment.anchorFiles)
         : 0;
@@ -469,7 +535,7 @@ export class LocalBackendSearchRankingSupport {
         dataModelPath: rojoTarget?.dataModelPath,
         moduleSymbol,
         description: result.description,
-      }, ownersMode) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty - sameFileAnchorPenalty - weakWrapperPenalty - ownerShapePenalty;
+      }, ownersMode) + rojoMappingBoost + productionBoost + primarySourceBoost + anchorTypeBoost + graphSignalBoost + broadTermBoost - testPenalty - secondaryPenalty - nonCodePenalty - actionPenalty - broadTermPenalty - sameFileAnchorPenalty - ancillaryPathPenalty - weakWrapperPenalty - ownerShapePenalty;
 
       return {
         nodeId: result.nodeId,
